@@ -1,0 +1,37 @@
+# --- web ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.10
+
+# --- db ---
+sqlalchemy[asyncio]==2.0.35
+psycopg[binary]==3.2.3
+alembic==1.13.3
+
+# --- cache / queue / lock ---
+redis==5.1.1
+
+# --- object store ---
+minio==7.2.9
+
+# --- vector store ---
+qdrant-client==1.12.0
+
+# --- ml (safety gate + embeddings + BM25 hybrid retrieval) ---
+torch==2.4.1            # CPU is fine for embedder + reranker
+transformers==4.45.2
+sentence-transformers==3.1.1   # bge-m3 embedder + bge-reranker-v2-m3
+huggingface-hub==0.25.2
+rank-bm25==0.2.2        # BM25 sparse retrieval for hybrid RRF fusion
+numpy==1.26.4           # required by rank-bm25 and embedder
+
+# --- security ---
+argon2-cffi==23.1.0
+cryptography==43.0.1     # AES-256-GCM for PHI fields
+PyJWT==2.9.0
+
+# --- utils ---
+python-dotenv==1.0.1
+httpx==0.27.2

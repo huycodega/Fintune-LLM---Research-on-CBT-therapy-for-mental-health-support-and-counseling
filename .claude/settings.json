@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/AI PROJECT/**)",
+      "PowerShell(Head-Object -n 20)",
+      "Read(//c/Program Files/Git/bin/**)",
+      "Read(//c/Program Files/**)",
+      "PowerShell(New-Item -ItemType File -Path \"d:\\\\AI PROJECT\\\\cbt_v4\\\\.env.example\" -Force)"
+    ]
+  }
+}

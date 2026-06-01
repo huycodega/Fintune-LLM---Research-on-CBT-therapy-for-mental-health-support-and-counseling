@@ -1,0 +1,159 @@
+# ============================================================
+# CBT Assistant v4 — Production-like local stack
+# ============================================================
+#   postgres : 5432   schema + AES-encrypted PHI
+#   redis    : 6379   rate-limit, circuit breaker, session lock
+#   minio    : 9000   models, SOAP PDFs, audit archive, DPO data
+#                       (console on :9001)
+#   backend  : 8000   FastAPI app  (embedded Qdrant local mode reads
+#                       ./models/cbt_rag_final — built by rag-data-fixed.ipynb)
+#   user-web : 5173   (run separately with npm run dev)
+#   admin-web: 5174   (run separately with npm run dev)
+# ============================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cbt_postgres
+    environment:
+      POSTGRES_USER: cbt
+      POSTGRES_PASSWORD: cbt_dev_pw
+      POSTGRES_DB: cbt
+    ports: ["5432:5432"]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cbt -d cbt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cbt_redis
+    command: redis-server --save 60 1 --loglevel warning
+    ports: ["6379:6379"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: cbt_minio
+    environment:
+      MINIO_ROOT_USER: cbt_minio
+      MINIO_ROOT_PASSWORD: cbt_minio_dev_pw
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cbt_backend
+    depends_on:
+      postgres:  { condition: service_healthy }
+      redis:     { condition: service_healthy }
+      minio:     { condition: service_healthy }
+    environment:
+      # --- service endpoints (in-network DNS) ---
+      DATABASE_URL: postgresql+psycopg://cbt:cbt_dev_pw@postgres:5432/cbt
+      REDIS_URL:    redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: cbt_minio
+      MINIO_SECRET_KEY: cbt_minio_dev_pw
+
+      # --- Qdrant local file mode (no container) ---
+      # Structure: models/cbt_rag_final/qdrant_storage/ (Qdrant DB)
+      #            models/cbt_rag_final/rag_outputs/    (BM25 pickles + JSONL)
+      QDRANT_LOCAL_PATH: /app/models/cbt_rag_final/qdrant_storage
+      BM25_RAG1_PATH: /app/models/cbt_rag_final/rag_outputs/bm25_rag1.pkl
+      BM25_RAG2_PATH: /app/models/cbt_rag_final/rag_outputs/bm25_rag2.pkl
+
+      # --- models ---
+      # Primary CBT responder: cbt-llama-3.1-8b (Llama-3.1-8B + LoRA)
+      HF_MODEL_REPO: "Huysun29/cbt-llama-3.1-8b"
+      HF_BASE_MODEL: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+      # Safety/crisis gate: cbt-qwen-7b (QWen2.5-7B + LoRA)
+      SAFETY_HF_MODEL_REPO: "Huysun29/cbt-qwen-7b"
+      SAFETY_HF_BASE_MODEL: "Qwen/Qwen2.5-7B-Instruct"
+
+      MOCK_LLM: "${MOCK_LLM:-true}"                         # flip false when Modal ready
+      MODAL_LLM_ENDPOINT: "${MODAL_LLM_ENDPOINT:-}"
+      MODAL_HEALTH_ENDPOINT: "${MODAL_HEALTH_ENDPOINT:-}"
+      MODAL_SAFETY_ENDPOINT: "${MODAL_SAFETY_ENDPOINT:-}"
+      MODAL_SAFETY_HEALTH_ENDPOINT: "${MODAL_SAFETY_HEALTH_ENDPOINT:-}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+
+      # --- security ---
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-prod-please}"
+      PHI_AES_KEY_B64: "${PHI_AES_KEY_B64:-}"  # 32-byte b64; generated on first boot if empty
+    ports: ["8000:8000"]
+    volumes:
+      - ./backend:/app
+      # IMPORTANT: models/ is RW (not :ro) because Qdrant local mode
+      # writes WAL + session_memory upserts back to disk.
+      - ./models:/app/models
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cbt_prometheus
+    depends_on: [backend]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cbt_grafana
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: cbt_admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports: ["3000:3000"]
+
+  cron:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cbt_cron
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      DATABASE_URL: postgresql+psycopg://cbt:cbt_dev_pw@postgres:5432/cbt
+      REDIS_URL:    redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: cbt_minio
+      MINIO_SECRET_KEY: cbt_minio_dev_pw
+      # Cron service does NOT touch Qdrant. No QDRANT_LOCAL_PATH needed.
+      PHI_AES_KEY_B64: "${PHI_AES_KEY_B64:-}"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-prod-please}"
+      DPO_EXPORT_INTERVAL_HOURS: "${DPO_EXPORT_INTERVAL_HOURS:-24}"
+    command: python -m app.cron
+    volumes:
+      - ./backend:/app
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

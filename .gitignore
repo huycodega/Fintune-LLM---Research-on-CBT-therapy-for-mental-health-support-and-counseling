@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Docker volumes (không push data)
+models/cbt_rag_final/qdrant_storage/
+models/cbt_rag_final/rag_outputs/bm25_rag1.pkl
+models/cbt_rag_final/rag_outputs/bm25_rag2.pkl
+models/cbt_rag_final/rag_outputs/rag1_chunks.jsonl
+models/cbt_rag_final/rag_outputs/rag2_chunks.jsonl
+models/safety_gate_multitask.pt
+
+# Logs
+*.log
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Alembic (giữ migrations nhưng bỏ cache)
+backend/app/__pycache__/
+backend/app/**/__pycache__/
