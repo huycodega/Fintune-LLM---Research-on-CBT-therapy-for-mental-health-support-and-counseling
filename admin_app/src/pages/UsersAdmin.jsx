@@ -134,9 +134,17 @@ export default function UsersAdmin({ onLogout, onNav }) {
   const [mock, setMock] = useState(false);
   const [toast, setToast] = useState("");
   const [indStyle, setIndStyle] = useState(null);
+  const [clinicians, setClinicians] = useState(MOCK_CLINICIANS);
   const tabsRef = useRef(null);
 
   function flash(m) { setToast(m); setTimeout(() => setToast(""), 2600); }
+
+  // Real clinician list for the assign dropdown (falls back to mock).
+  useEffect(() => {
+    api.clinicians().then((r) => {
+      if (r.clinicians?.length) setClinicians(r.clinicians);
+    }).catch(() => { /* keep mock */ });
+  }, []);
 
   function mockFilter() {
     let list = MOCK_USERS.slice();
@@ -211,7 +219,7 @@ export default function UsersAdmin({ onLogout, onNav }) {
   }
   function assignClinician(clinicianId) {
     if (!detail || !clinicianId) return;
-    const clin = MOCK_CLINICIANS.find((c) => c.id === clinicianId);
+    const clin = clinicians.find((c) => c.id === clinicianId);
     run(() => api.assignClinician(detail.id, { clinician_id: clinicianId }),
       () => { setDetail((d) => ({ ...d, assigned_clinician: clin })); setUsers((us) => us.map((u) => u.id === detail.id ? { ...u, assigned_clinician: clin } : u)); },
       `Assigned to ${clin?.name || "clinician"}`);

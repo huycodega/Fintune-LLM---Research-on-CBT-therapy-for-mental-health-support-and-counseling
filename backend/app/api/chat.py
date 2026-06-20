@@ -28,6 +28,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
+    moderation_store,
 )
 
 
@@ -178,11 +179,16 @@ def chat(body: ChatIn, request: Request,
         severity=triage["severity"],
         confidence=triage["confidence"],
     )
+    # New per-message source of truth. Legacy sessions remain dual-written
+    # during the compatibility window.
+    user_message = moderation_store.record_user_message(
+        db, convo, u, text, level)
 
     # ---- L0: Emergency — NO AI ----
     if level == "L0":
         sess = models.Session(**base, status="crisis", analysis={})
         db.add(sess); db.flush()
+        moderation_store.enqueue(db, convo, user_message, level)
         audit_mod.audit(db, action="triage_L0_crisis", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id,
                          detail=triage)
@@ -207,6 +213,7 @@ def chat(body: ChatIn, request: Request,
         db.add(models.ReviewQueue(
             session_id=sess.id, triage_level=level, priority=1,
             sla_due_at=_sla_for(level)))
+        moderation_store.enqueue(db, convo, user_message, level)
         audit_mod.audit(db, action="triage_L1_no_ai_pushed", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id,
                          detail=triage)
@@ -291,6 +298,9 @@ def chat(body: ChatIn, request: Request,
             final_technique="clarification",
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
+        moderation_store.record_ai_message(
+            db, convo, user_message, question, level, "not_required",
+            confidence=triage.get("confidence"), model_name="cbt-agent")
         audit_mod.audit(db, action="agent_ask_clarification", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id)
         return {
@@ -312,6 +322,7 @@ def chat(body: ChatIn, request: Request,
         db.add(models.ReviewQueue(
             session_id=sess.id, triage_level=level, priority=1,
             sla_due_at=_sla_for("L1")))
+        moderation_store.enqueue(db, convo, user_message, level)
         audit_mod.audit(db, action="agent_escalate_to_clinician", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id,
                          detail={"reason": reason})
@@ -390,6 +401,12 @@ def chat(body: ChatIn, request: Request,
             **base, status="pending_review", analysis=analysis,
             retrieved_ids=retrieved_ids, prompt_hash=p_hash)
         db.add(sess); db.flush()
+        selected = drafts[0] if drafts else None
+        ai_message = None
+        if selected:
+            ai_message = moderation_store.record_ai_message(
+                db, convo, user_message, selected["response"], level, "pending",
+                confidence=triage.get("confidence"), model_name=gen_mode)
         for i, d in enumerate(drafts):
             db.add(models.Draft(
                 session_id=sess.id, idx=i,
@@ -399,10 +416,14 @@ def chat(body: ChatIn, request: Request,
                 well_formed=d["well_formed"],
                 hallucination_score=d["grounding_score"],
                 preflight_pass=d["preflight_pass"],
+                source_user_message_id=user_message.id,
             ))
         db.add(models.ReviewQueue(
             session_id=sess.id, triage_level=level, priority=2,
             sla_due_at=_sla_for(level)))
+        moderation_store.enqueue(
+            db, convo, user_message, level, ai_message=ai_message,
+            kind="ai_review" if ai_message else "user_escalation")
         audit_mod.audit(db, action="triage_L2_draft_pending", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id,
                          detail={"n_drafts": len(drafts)})
@@ -456,6 +477,11 @@ def chat(body: ChatIn, request: Request,
             **base, status="pending_review", analysis=analysis,
             retrieved_ids=retrieved_ids, prompt_hash=p_hash)
         db.add(sess); db.flush()
+        ai_message = None
+        if chosen:
+            ai_message = moderation_store.record_ai_message(
+                db, convo, user_message, chosen["response"], level, "pending",
+                confidence=triage.get("confidence"), model_name=gen_mode)
         for i, d in enumerate(drafts):
             db.add(models.Draft(
                 session_id=sess.id, idx=i,
@@ -464,10 +490,14 @@ def chat(body: ChatIn, request: Request,
                 well_formed=d["well_formed"],
                 hallucination_score=d["grounding_score"],
                 preflight_pass=d["preflight_pass"],
+                source_user_message_id=user_message.id,
             ))
         db.add(models.ReviewQueue(
             session_id=sess.id, triage_level=level, priority=2,
             sla_due_at=_sla_for(level)))
+        moderation_store.enqueue(
+            db, convo, user_message, level, ai_message=ai_message,
+            kind="ai_review" if ai_message else "user_escalation")
         audit_mod.audit(db, action="triage_L3_held_for_review", actor=user,
                          ip=ip, resource_type="session", resource_id=sess.id,
                          detail={"reasons": gate_fail})
@@ -495,6 +525,9 @@ def chat(body: ChatIn, request: Request,
         completed_at=datetime.now(timezone.utc),
     )
     db.add(sess); db.flush()
+    moderation_store.record_ai_message(
+        db, convo, user_message, chosen["response"], level, "not_required",
+        confidence=triage.get("confidence"), model_name=gen_mode)
     for i, d in enumerate(drafts):
         db.add(models.Draft(
             session_id=sess.id, idx=i,
@@ -504,6 +537,7 @@ def chat(body: ChatIn, request: Request,
             well_formed=d["well_formed"],
             hallucination_score=d["grounding_score"],
             preflight_pass=d["preflight_pass"],
+            source_user_message_id=user_message.id,
         ))
     audit_mod.audit(db, action="triage_L3_auto_sent", actor=user,
                      ip=ip, resource_type="session", resource_id=sess.id,

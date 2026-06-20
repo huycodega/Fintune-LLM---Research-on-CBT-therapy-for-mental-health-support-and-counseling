@@ -18,14 +18,16 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, or_
 
 from app.core import auth, audit as audit_mod
 from app.core.crypto import decrypt_str
-from app.db import models
+from app.db import models, models_admin
 from app.db.session import get_db
 from app.schemas.api import UserStatusIn, UserRoleIn
+from app.services import admin_principals
 
 
 router = APIRouter(prefix="/api/admin")
@@ -34,17 +36,24 @@ router = APIRouter(prefix="/api/admin")
 # ─────────────────────────────────────────────────────────────────────────────
 # Risk helper — derive a single risk badge from a user's data
 # ─────────────────────────────────────────────────────────────────────────────
-def _risk_from(crisis_count: int, pending_count: int,
+def _risk_from(current_risk: Optional[str], pending_count: int,
                phq9_level: Optional[str], gad7_level: Optional[str]) -> str:
-    """high | elevated | moderate | low — drives the coloured pill in the UI."""
+    """Return only the persisted L0-L3 convention used by the admin UI."""
+    if current_risk in ("L0", "L1", "L2", "L3"):
+        return current_risk
     severe = {"moderately_severe", "severe"}
-    if crisis_count > 0:
-        return "high"
     if pending_count > 0 or (phq9_level in severe) or (gad7_level in severe):
-        return "elevated"
+        return "L2"
     if phq9_level == "moderate" or gad7_level == "moderate":
-        return "moderate"
-    return "low"
+        return "L2"
+    return "L3"
+
+
+def _mask_email(email: Optional[str]) -> str:
+    if not email or "@" not in email:
+        return "-"
+    local, domain = email.split("@", 1)
+    return f"{local[:2]}***@{domain}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +63,7 @@ def _risk_from(crisis_count: int, pending_count: int,
 def list_users(
     q: str = Query("", description="search username/email"),
     status: str = Query("", description="active|suspended"),
-    risk: str = Query("", description="high|elevated|moderate|low"),
+    risk: str = Query("", description="L0|L1|L2|L3"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _: dict = Depends(auth.require_admin),
@@ -88,6 +97,8 @@ def list_users(
                                func.lower(models.User.email).like(like)))
     if status in ("active", "suspended"):
         base = base.filter(models.User.status == status)
+    if risk in ("L0", "L1", "L2", "L3"):
+        base = base.filter(models.User.current_risk_level == risk)
 
     total = base.count()
     rows = (base.order_by(sess_agg.c.last_active.desc().nullslast(),
@@ -110,18 +121,32 @@ def list_users(
                    .all()):
             latest_screen[sc.user_id] = sc
 
+    assignments = {}
+    if uids:
+        assigned = (
+            db.query(models_admin.SpecialistAssignment, models_admin.AdminUser)
+            .join(models_admin.AdminUser,
+                  models_admin.AdminUser.id ==
+                  models_admin.SpecialistAssignment.clinician_id)
+            .filter(models_admin.SpecialistAssignment.user_id.in_(uids),
+                    models_admin.SpecialistAssignment.status == "active")
+            .all()
+        )
+        assignments = {
+            row.user_id: {"id": str(clin.id), "name": clin.full_name}
+            for row, clin in assigned
+        }
+
     out = []
     for (u, sessions, crisis, pending, last_active) in rows:
         sc = latest_screen.get(u.id)
         risk_level = _risk_from(
-            int(crisis or 0), int(pending or 0),
+            u.current_risk_level, int(pending or 0),
             sc.phq9_level if sc else None, sc.gad7_level if sc else None)
-        if risk and risk_level != risk:
-            continue
         out.append({
             "id": str(u.id),
             "username": u.username,
-            "email": u.email,
+            "email": _mask_email(u.email),
             "role": u.role,
             "status": u.status,
             "email_verified": u.email_verified,
@@ -134,6 +159,7 @@ def list_users(
             "gad7_level": sc.gad7_level if sc else None,
             "mood_score": sc.mood_score if sc else None,
             "risk": risk_level,
+            "assigned_clinician": assignments.get(u.id),
         })
 
     return {"users": out, "total": total, "page": page,
@@ -161,17 +187,30 @@ def user_detail(uid: str, _: dict = Depends(auth.require_admin),
     crisis_count = sum(1 for s in sessions if s.triage_level in ("L0", "L1"))
     pending_count = sum(1 for s in sessions if s.status == "pending_review")
     latest = screenings[0] if screenings else None
+    assignment = (
+        db.query(models_admin.SpecialistAssignment, models_admin.AdminUser)
+        .join(models_admin.AdminUser,
+              models_admin.AdminUser.id ==
+              models_admin.SpecialistAssignment.clinician_id)
+        .filter(models_admin.SpecialistAssignment.user_id == u.id,
+                models_admin.SpecialistAssignment.status == "active")
+        .first()
+    )
+    clin = assignment[1] if assignment else None
 
     return {
         "id": str(u.id),
         "username": u.username,
-        "email": u.email,
+        "email": _mask_email(u.email),
         "role": u.role,
         "status": u.status,
+        "assigned_clinician": ({"id": str(clin.id),
+                                "name": clin.full_name}
+                               if clin else None),
         "email_verified": u.email_verified,
         "created_at": u.created_at.isoformat() if u.created_at else None,
         "last_login": u.last_login.isoformat() if u.last_login else None,
-        "risk": _risk_from(crisis_count, pending_count,
+        "risk": _risk_from(u.current_risk_level, pending_count,
                            latest.phq9_level if latest else None,
                            latest.gad7_level if latest else None),
         "memory": {
@@ -239,6 +278,69 @@ def set_user_role(uid: str, body: UserRoleIn, request: Request,
                     resource_type="user", resource_id=u.id,
                     detail={"role": body.role})
     return {"ok": True, "id": str(u.id), "role": u.role}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /clinicians — pickable clinicians for assignment
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/clinicians")
+def list_clinicians(_: dict = Depends(auth.require_admin),
+                    db: Session = Depends(get_db)):
+    admin_principals.sync_admin_principals(db)
+    rows = (
+        db.query(models_admin.AdminUser, models_admin.Role)
+        .join(models_admin.Role,
+              models_admin.Role.id == models_admin.AdminUser.role_id)
+        .filter(models_admin.Role.code.in_(("clinician", "admin")),
+                models_admin.AdminUser.status == "active",
+                models_admin.AdminUser.deleted_at.is_(None))
+        .order_by(models_admin.AdminUser.full_name).all()
+    )
+    return {"clinicians": [{"id": str(c.id), "name": c.full_name,
+                            "role": role.code} for c, role in rows]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /users/{uid}/assign-clinician — set the user's active clinician (§4.4)
+# ─────────────────────────────────────────────────────────────────────────────
+class AssignClinicianIn(BaseModel):
+    clinician_id: str
+    note: Optional[str] = ""
+
+
+@router.post("/users/{uid}/assign-clinician")
+def assign_clinician(uid: str, body: AssignClinicianIn, request: Request,
+                     actor: dict = Depends(auth.require_admin),
+                     db: Session = Depends(get_db)):
+    if actor.get("role") != "admin":
+        raise HTTPException(403, "Only admins can assign clinicians")
+    u = db.query(models.User).filter_by(id=uid).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    reviewer = admin_principals.ensure_admin_principal(db, actor)
+    clin = db.query(models_admin.AdminUser).filter_by(
+        id=body.clinician_id, status="active").first()
+    if not clin:
+        raise HTTPException(400, "clinician_id must be an active clinician/admin")
+    clin_role = db.query(models_admin.Role).filter_by(id=clin.role_id).first()
+    if not clin_role or clin_role.code not in ("clinician", "admin"):
+        raise HTTPException(400, "clinician_id must be an active clinician/admin")
+    previous = (db.query(models_admin.SpecialistAssignment)
+                .filter_by(user_id=u.id, status="active")
+                .with_for_update().all())
+    for row in previous:
+        admin_principals.end_assignment(row)
+    db.add(models_admin.SpecialistAssignment(
+        user_id=u.id, clinician_id=clin.id, assigned_by=reviewer.id,
+        note=(body.note or "")[:500], status="active"))
+    audit_mod.audit(db, action="user_assign_clinician", actor=actor,
+                    ip=auth.client_ip(request),
+                    resource_type="user", resource_id=u.id,
+                    detail={"clinician_id": str(clin.id),
+                            "note": (body.note or "")[:500]})
+    return {"ok": True, "id": str(u.id),
+            "assigned_clinician": {"id": str(clin.id),
+                                   "name": clin.full_name}}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -5,6 +5,9 @@ from alembic import context
 
 from app.core.config import settings
 from app.db.models import Base
+# Register the additive admin/moderation models on Base.metadata so Alembic
+# autogenerate sees migration 0006's tables.
+from app.db import models_admin  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

@@ -78,6 +78,7 @@ export const api = {
     req(`/admin/users/${uid}/role`, { method: "POST", body: { role } }),
   assignClinician: (uid, payload) =>
     req(`/admin/users/${uid}/assign-clinician`, { method: "POST", body: payload }),
+  clinicians: () => req("/admin/clinicians"),
 
   // --- AI moderation (ModerationAdmin) — design doc §7 ---
   moderationStats: () => req("/admin/ai-moderation/stats"),

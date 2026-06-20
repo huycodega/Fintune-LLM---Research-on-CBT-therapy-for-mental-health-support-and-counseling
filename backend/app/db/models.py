@@ -51,6 +51,13 @@ class User(Base):
     consent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Additive user-management fields introduced by migration 0006.
+    email_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    email_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
+    current_risk_level: Mapped[Optional[str]] = mapped_column(String(2))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint("role IN ('user','clinician','admin')",
@@ -79,6 +86,9 @@ class Conversation(Base):
         DateTime(timezone=True), server_default=func.now())
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False,
                                            default=False)
+    highest_risk_level: Mapped[Optional[str]] = mapped_column(String(2))
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False,
+                                                default=0)
 
 
 Index("idx_conversations_user", Conversation.user_id,
@@ -210,6 +220,8 @@ class Draft(Base):
     well_formed: Mapped[bool] = mapped_column(Boolean, default=True)
     hallucination_score: Mapped[Optional[float]] = mapped_column(Float)
     preflight_pass: Mapped[Optional[bool]] = mapped_column(Boolean)
+    source_user_message_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ai_messages.id"))
 
     session = relationship("Session", back_populates="drafts")
 

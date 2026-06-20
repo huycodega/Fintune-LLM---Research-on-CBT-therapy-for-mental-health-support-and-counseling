@@ -19,6 +19,7 @@ from app.api.auth_intake import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.admin import router as admin_router
 from app.api.admin_users import router as admin_users_router
+from app.api.ai_moderation import router as ai_moderation_router
 from app.api.conversations import router as conversations_router
 from app.api.screening import router as screening_router
 from app.api.content import router as content_router
@@ -43,6 +44,7 @@ app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(admin_router)
 app.include_router(admin_users_router)
+app.include_router(ai_moderation_router)
 app.include_router(conversations_router)
 app.include_router(screening_router)
 app.include_router(content_router)
@@ -95,6 +97,14 @@ def boot():
         log.info("Seed users ready")
     except Exception as e:
         log.warning("User seed skipped: %s — run `alembic upgrade head`?", e)
+    # Mirror legacy clinician/admin accounts into the v2 RBAC principal table.
+    try:
+        from app.services.admin_principals import sync_admin_principals
+        with db_session() as s:
+            staff_count = sync_admin_principals(s)
+        log.info("Admin RBAC principals ready: %s", staff_count)
+    except Exception as e:
+        log.warning("Admin RBAC sync skipped: %s", e)
     # Seed learning content (lessons + resources, idempotent)
     try:
         from app.db.seed_content import seed_content
