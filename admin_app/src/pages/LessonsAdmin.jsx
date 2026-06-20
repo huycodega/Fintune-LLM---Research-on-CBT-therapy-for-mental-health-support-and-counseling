@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
@@ -8,19 +8,103 @@ import { api } from "../api.js";
    rows (UUID ids) still get a stable icon. */
 function thumbFor(idx) { return THUMBS[(idx % 8) + 1]; }
 
+/* ── Motion helpers ────────────────────────────────────────────── */
+function prefersReducedMotion() {
+  return typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/* Counts a number up from 0 to its target, keeping any prefix/suffix
+   ("48", "63%", "1,842"). Re-runs whenever the value changes (e.g. after
+   the API loads or stats update). Falls back to the raw value otherwise. */
+function CountUp({ value, duration = 1000 }) {
+  const [display, setDisplay] = useState(value);
+  const rafRef = useRef(0);
+  useEffect(() => {
+    const m = String(value).match(/^(\D*)([\d,]+)(.*)$/);
+    const target = m ? parseInt(m[2].replace(/,/g, ""), 10) : NaN;
+    if (!m || Number.isNaN(target) || prefersReducedMotion()) {
+      setDisplay(value);
+      return;
+    }
+    const [, prefix, , suffix] = m;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(prefix + Math.round(target * eased).toLocaleString("en-US") + suffix);
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value, duration]);
+  return <>{display}</>;
+}
+
 /* ── Stat card ─────────────────────────────────────────────────── */
-function StatCard({ icon, tone, label, value, sub, trend }) {
+function StatCard({ icon, tone, label, value, sub, trend, i = 0 }) {
   return (
-    <div className="la-stat">
+    <div className="la-stat la-rise" style={{ "--i": i }}>
       <div className={`la-stat-icon tone-${tone}`}><Icon name={icon} size={22} /></div>
       <div className="la-stat-body">
         <div className="la-stat-label">{label}</div>
-        <div className="la-stat-value">{value}</div>
+        <div className="la-stat-value"><CountUp value={value} /></div>
         <div className={`la-stat-sub ${trend ? "up" : ""}`}>
           {trend && <Icon name="arrowUp" size={12} />}{sub}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Skeletons (shown while data loads) ────────────────────────── */
+function StatSkeleton({ i = 0 }) {
+  return (
+    <div className="la-stat la-rise" style={{ "--i": i }}>
+      <div className="la-skel la-skel-icon" />
+      <div className="la-stat-body" style={{ flex: 1 }}>
+        <div className="la-skel la-skel-line" style={{ width: "60%" }} />
+        <div className="la-skel la-skel-line" style={{ width: "40%", height: 22, margin: "8px 0" }} />
+        <div className="la-skel la-skel-line" style={{ width: "70%" }} />
+      </div>
+    </div>
+  );
+}
+function RowSkeleton() {
+  return (
+    <tr className="la-skel-row">
+      <td>
+        <div className="la-title-cell">
+          <span className="la-skel la-skel-thumb" />
+          <div style={{ flex: 1 }}>
+            <div className="la-skel la-skel-line" style={{ width: "70%" }} />
+            <div className="la-skel la-skel-line" style={{ width: "50%", marginTop: 6 }} />
+          </div>
+        </div>
+      </td>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <td key={i}><div className="la-skel la-skel-line" style={{ width: i === 5 ? 44 : "70%" }} /></td>
+      ))}
+    </tr>
+  );
+}
+function DetailSkeleton() {
+  return (
+    <aside className="la-detail">
+      <div className="la-card">
+        <div className="la-skel la-skel-line" style={{ width: "40%", marginBottom: 12 }} />
+        <div className="la-skel" style={{ height: 150, borderRadius: 13, marginBottom: 14 }} />
+        <div className="la-skel la-skel-line" style={{ width: "75%", height: 16 }} />
+        <div className="la-skel la-skel-line" style={{ width: "100%", marginTop: 12 }} />
+        <div className="la-skel la-skel-line" style={{ width: "90%", marginTop: 8 }} />
+        <div className="la-skel la-skel-line" style={{ width: "60%", marginTop: 8 }} />
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <div className="la-skel" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+          <div className="la-skel" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -123,7 +207,7 @@ function LessonRow({ lesson, idx, selected, onSelect, onDelete }) {
   const [user, time] = [lesson.author || "—", fmtDate(lesson.updated_at)];
   const isDraft = lesson.status === "draft";
   return (
-    <tr className={selected ? "selected" : ""} onClick={() => onSelect(lesson.id)}>
+    <tr className={`la-rise ${selected ? "selected" : ""}`} style={{ "--i": idx }} onClick={() => onSelect(lesson.id)}>
       <td>
         <div className="la-title-cell">
           <span className="la-thumb" style={{ background: bg }}>{emoji}</span>
@@ -195,9 +279,9 @@ function MiniLineChart() {
             </linearGradient>
           </defs>
           <line x1={pad} y1={H / 2} x2={W - pad} y2={H / 2} stroke="#eef0f6" strokeWidth="1" />
-          <path d={area} fill="url(#laFill)" />
-          <path d={line} fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          {pts.length > 0 && <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="3.5" fill="#6366f1" stroke="#fff" strokeWidth="2" />}
+          <path className="la-chart-area" d={area} fill="url(#laFill)" />
+          <path className="la-chart-line" d={line} pathLength="1" fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          {pts.length > 0 && <circle className="la-chart-dot" cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="3.5" fill="#6366f1" stroke="#fff" strokeWidth="2" />}
         </svg>
         <div className="la-chart-xaxis"><span>13/05</span><span>27/05</span><span>10/06</span></div>
       </div>
@@ -219,7 +303,7 @@ function DetailPanel({ lesson, onTogglePublish, onEdit }) {
   const isPub = lesson.status === "published";
   return (
     <aside className="la-detail">
-      <div className="la-card">
+      <div className="la-card la-xfade" key={lesson.id}>
         <div className="la-card-eyebrow">Selected Lesson</div>
         <div className="la-detail-hero" style={{ background: "linear-gradient(135deg,#bbf7d0,#7dd3c0)" }}>
           <span>🧘</span>
@@ -259,10 +343,11 @@ function DetailPanel({ lesson, onTogglePublish, onEdit }) {
         <div className="la-stat-rate">
           <div>
             <div className="la-rate-label">Completion Rate</div>
-            <div className="la-rate-value">63%</div>
+            <div className="la-rate-value"><CountUp value="63%" /></div>
           </div>
           <div className="la-rate-trend"><Icon name="arrowUp" size="13" /> 8% vs last month</div>
         </div>
+        <div className="la-rate-bar"><span style={{ "--val": "63%" }} /></div>
 
         <MiniLineChart />
 
@@ -360,10 +445,16 @@ export default function LessonsAdmin({ onLogout, onNav }) {
           <div className="la-content-left">
             {/* Stat cards */}
             <div className="la-stats">
-              <StatCard icon="book" tone="indigo" label="Total Lessons" value={String(stats.total)} sub="all lessons" />
-              <StatCard icon="checkCircle" tone="green" label="Published" value={String(stats.published)} sub="visible to users" />
-              <StatCard icon="file" tone="orange" label="Drafts" value={String(stats.draft)} sub="not yet published" />
-              <StatCard icon="clock" tone="red" label="Total Views" value={String(stats.views)} sub="across all lessons" />
+              {loading ? (
+                [0, 1, 2, 3].map((i) => <StatSkeleton key={i} i={i} />)
+              ) : (
+                <>
+                  <StatCard i={0} icon="book" tone="indigo" label="Total Lessons" value={String(stats.total)} sub="all lessons" />
+                  <StatCard i={1} icon="checkCircle" tone="green" label="Published" value={String(stats.published)} sub="visible to users" />
+                  <StatCard i={2} icon="file" tone="orange" label="Drafts" value={String(stats.draft)} sub="not yet published" />
+                  <StatCard i={3} icon="clock" tone="red" label="Total Views" value={String(stats.views)} sub="across all lessons" />
+                </>
+              )}
             </div>
 
             {/* Table card */}
@@ -379,7 +470,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {lessons.map((l, i) => (
+                    {loading && Array.from({ length: 6 }).map((_, i) => <RowSkeleton key={i} />)}
+                    {!loading && lessons.map((l, i) => (
                       <LessonRow key={l.id} lesson={l} idx={i} selected={l.id === selected} onSelect={setSelected} onDelete={handleDelete} />
                     ))}
                     {!loading && lessons.length === 0 && (
@@ -392,9 +484,11 @@ export default function LessonsAdmin({ onLogout, onNav }) {
             </div>
           </div>
 
-          {selectedLesson && (
-            <DetailPanel lesson={selectedLesson} onTogglePublish={handleTogglePublish} onEdit={handleEdit} />
-          )}
+          {loading
+            ? <DetailSkeleton />
+            : selectedLesson && (
+              <DetailPanel lesson={selectedLesson} onTogglePublish={handleTogglePublish} onEdit={handleEdit} />
+            )}
         </div>
       </div>
     </div>

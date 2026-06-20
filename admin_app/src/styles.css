@@ -849,3 +849,137 @@ button { font-family: inherit; cursor: pointer; }
   .la-res-toolbar { gap: 10px; }
   .la-hotline-num { font-size: 19px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ADMIN — MOTION & POLISH (Lessons / Resources)
+   Transform/opacity only; honors prefers-reduced-motion at the end.
+═══════════════════════════════════════════════════════════════ */
+
+/* Staggered entrance for stat cards & table rows */
+.la-rise {
+  opacity: 0;
+  animation: la-rise-in 0.5s cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes la-rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Cross-fade the Selected Lesson card when switching rows */
+.la-xfade { animation: la-xfade-in 0.38s ease both; }
+@keyframes la-xfade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Right panel slides in from the right on mount */
+.la-detail { animation: la-slide-right 0.55s cubic-bezier(0.16, 0.84, 0.44, 1) both; }
+@keyframes la-slide-right {
+  from { opacity: 0; transform: translateX(26px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Stat cards: calm hover lift */
+.la-stat { transition: box-shadow 0.26s ease, transform 0.26s ease, border-color 0.26s ease; }
+.la-stat:hover { box-shadow: 0 12px 28px rgba(16,24,40,0.09); transform: translateY(-3px); border-color: #dfe5ee; }
+.la-stat-icon { transition: transform 0.26s ease; }
+.la-stat:hover .la-stat-icon { transform: scale(1.07) rotate(-3deg); }
+
+/* Table rows: smooth hover tint + subtle lift, animated accent bar */
+.la-table tbody tr {
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.la-table tbody tr:hover {
+  background: var(--la-bg);
+  box-shadow: 0 6px 18px rgba(16,24,40,0.06);
+  transform: translateY(-1px);
+}
+.la-table tbody tr td:first-child { position: relative; }
+.la-table tbody tr.selected td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--la-indigo);
+  transform: scaleY(0); transform-origin: center;
+  animation: la-grow-y 0.32s cubic-bezier(0.16, 0.84, 0.44, 1) forwards;
+}
+@keyframes la-grow-y { to { transform: scaleY(1); } }
+
+/* Mini line chart: draw-on + fade-in */
+.la-chart-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: la-draw 1.15s ease 0.2s forwards;
+}
+@keyframes la-draw { to { stroke-dashoffset: 0; } }
+.la-chart-area { opacity: 0; animation: la-fade 0.8s ease 0.55s forwards; }
+.la-chart-dot  { opacity: 0; transform-box: fill-box; transform-origin: center; animation: la-pop 0.45s cubic-bezier(0.34,1.56,0.64,1) 1.15s forwards; }
+@keyframes la-fade { to { opacity: 1; } }
+@keyframes la-pop { 0% { opacity: 0; transform: scale(0); } 100% { opacity: 1; transform: scale(1); } }
+
+/* Completion-rate progress bar fills to value */
+.la-rate-bar {
+  height: 7px; background: #eef0f6; border-radius: 99px;
+  overflow: hidden; margin-bottom: 16px;
+}
+.la-rate-bar span {
+  display: block; height: 100%; width: var(--val, 0%);
+  border-radius: 99px; transform-origin: left; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--la-indigo), var(--la-indigo-dark));
+  animation: la-grow-x 1.1s cubic-bezier(0.16, 0.84, 0.44, 1) 0.25s forwards;
+}
+@keyframes la-grow-x { to { transform: scaleX(1); } }
+
+/* Button & control micro-interactions */
+.la-btn-primary, .la-btn-green, .la-btn-outline, .la-btn-ghost,
+.la-page-btn, .la-act, .la-icon-btn, .la-support-btn, .la-tab {
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+              transform 0.15s ease, box-shadow 0.2s ease;
+}
+.la-btn-primary:hover { box-shadow: 0 8px 22px rgba(99,102,241,0.38); transform: translateY(-2px); }
+.la-btn-green:hover   { box-shadow: 0 8px 22px rgba(16,185,129,0.34); transform: translateY(-2px); }
+.la-btn-primary:active, .la-btn-green:active, .la-btn-outline:active,
+.la-btn-ghost:active, .la-page-btn:active, .la-act:active, .la-icon-btn:active { transform: scale(0.96); }
+.la-act:hover { transform: translateY(-1px); }
+
+/* Notification badge gentle pulse */
+.la-notif-badge { animation: la-badge-pulse 2.4s ease-in-out infinite; }
+@keyframes la-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  50%      { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+}
+
+/* Skeleton shimmer */
+.la-skel {
+  position: relative; overflow: hidden;
+  background: #eef1f6; border-radius: 7px;
+}
+.la-skel::after {
+  content: ""; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent);
+  animation: la-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes la-shimmer { to { transform: translateX(100%); } }
+.la-skel-line  { height: 11px; }
+.la-skel-icon  { width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0; }
+.la-skel-thumb { width: 46px; height: 46px; border-radius: 11px; flex-shrink: 0; display: inline-block; }
+.la-skel-row td { padding: 12px 14px; border-bottom: 1px solid var(--la-line); }
+.la-skel-row { cursor: default; }
+.la-skel-row:hover { background: transparent; box-shadow: none; transform: none; }
+
+/* Reduced-motion: strip non-essential animation */
+@media (prefers-reduced-motion: reduce) {
+  .la-rise, .la-xfade, .la-detail, .la-chart-line, .la-chart-area, .la-chart-dot,
+  .la-rate-bar span, .la-notif-badge {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+  .la-table tbody tr:hover, .la-stat:hover { transform: none !important; }
+  .la-stat:hover .la-stat-icon { transform: none !important; }
+  .la-skel::after { animation: none !important; }
+}
