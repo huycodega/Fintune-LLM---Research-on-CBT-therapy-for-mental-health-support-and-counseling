@@ -147,6 +147,10 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
             "\n- Suggested materials (REAL items from the library — you MAY "
             "offer one by its exact title if it fits; do NOT invent others): "
             f"{materials}")
+    plan = (analysis.get("session_plan") or "").strip()
+    if plan:
+        base += ("\n- Session plan — advance THIS step in your Plan/Response, "
+                 "do not restart earlier steps: " + plan)
     return base
 
 

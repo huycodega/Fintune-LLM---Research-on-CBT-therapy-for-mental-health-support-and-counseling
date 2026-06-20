@@ -328,6 +328,10 @@ def chat(body: ChatIn, request: Request,
         retrieved = agent_result.get("retrieved") or []
         analysis = agent_result.get("analysis") or analysis
         analysis["agent_trace"] = agent_result.get("trace")
+        if agent_result.get("plan"):
+            analysis["agent_plan"] = agent_result["plan"]
+        if agent_result.get("self_critique"):
+            analysis["agent_self_critique"] = agent_result["self_critique"]
         p_hash = agent_result.get("prompt_hash", "")
         retrieved_ids = [r["id"] for r in retrieved]
         gen_mode = agent_result.get("gen_mode", "agent")

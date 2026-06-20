@@ -59,6 +59,7 @@ _REQUIRED_ARGS = {
     "retrieve_cbt_knowledge": ["query"],
     "recall_session_memory": ["query"],
     "analyze_cognition": ["text"],
+    "plan_session": [],
     "recommend_lesson": ["topic"],
     "recommend_resource": ["topic"],
     "summarize_progress": [],
@@ -151,6 +152,26 @@ TOOL_SCHEMAS: List[Dict] = [
                              "description": "Text to analyze (the client message)."},
                 },
                 "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_session",
+            "description": (
+                "Lay out a short, standard CBT plan for this session and mark "
+                "which step to work on now. Call it early (after analyze) to "
+                "structure a multi-turn piece of work; it keeps later turns "
+                "advancing the SAME plan instead of restarting."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "technique": {"type": "string",
+                                  "description": "Optional CBT technique to plan "
+                                  "around; defaults to the analyzed technique hint."},
+                },
+                "required": [],
             },
         },
     },
@@ -274,6 +295,8 @@ _SYSTEM_PROMPT = (
     "Recommended procedure (follow it unless the message is too vague):\n"
     "  1. analyze_cognition(text=<the client message>) — detect the emotion "
     "and cognitive distortion.\n"
+    "  1b. (optional) plan_session() — lay out a short CBT plan and work the "
+    "current step; use it for multi-turn work so each turn advances the plan.\n"
     "  2. retrieve_cbt_knowledge(query=<the concern or distortion>) — pull "
     "CBT evidence to ground the reply. This step is REQUIRED before generating.\n"
     "  3. (optional) recall_session_memory(query=...) or summarize_progress() "
@@ -362,6 +385,78 @@ def _tool_analyze(args: Dict, state: Dict) -> str:
     return (f"Emotion: {analysis.get('emotion')}; "
             f"Distortions: {analysis.get('cognitive_distortions')}; "
             f"Technique hint: {analysis.get('technique_hint')}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session planning — standard CBT micro-step sequences per technique. The plan
+# is deterministic (clinically conventional), so no extra LLM call is needed and
+# it can never drift into unsafe territory. Progress through the plan is inferred
+# from how many turns this thread already has.
+# ─────────────────────────────────────────────────────────────────────────────
+_CBT_PLANS = {
+    "thought record": [
+        "Validate the feeling and name the triggering situation",
+        "Identify the automatic thought",
+        "Rate how strongly it's believed and the emotion",
+        "Examine the evidence for and against the thought",
+        "Craft a balanced, alternative thought",
+        "Re-rate the belief/emotion and agree a small next step",
+    ],
+    "cognitive restructuring": [
+        "Validate and pinpoint the key distorted thought",
+        "Name the cognitive distortion at work",
+        "Test the thought against the evidence",
+        "Reframe into a fairer, balanced thought",
+        "Plan one concrete action to practise it",
+    ],
+    "decatastrophizing": [
+        "Validate the worry and name the feared worst case",
+        "Estimate how likely it realistically is",
+        "Plan how you'd cope even if it happened",
+        "Shrink the catastrophe to a manageable size",
+    ],
+    "behavioral activation": [
+        "Validate low motivation and pick one valued/avoided activity",
+        "Break it into a tiny first step",
+        "Schedule exactly when to do it",
+        "Plan a brief review of how it felt",
+    ],
+    "problem solving": [
+        "Validate and define the problem clearly",
+        "Brainstorm several possible options",
+        "Weigh the pros and cons of each",
+        "Choose one and plan the first action",
+    ],
+}
+_GENERIC_PLAN = [
+    "Validate the client's experience",
+    "Clarify the key thought or feeling to work on",
+    "Examine it together with a CBT technique",
+    "Agree one concrete next step",
+]
+
+
+def _prior_ai_turns(state: Dict) -> int:
+    ctx = state.get("session_ctx") or {}
+    hist = ctx.get("history") or []
+    return sum(1 for t in hist if (t.get("reply") or "").strip())
+
+
+def _tool_plan_session(args: Dict, state: Dict) -> str:
+    """Build (or advance) a short CBT session plan and mark the current step.
+    Deterministic per detected technique; the current step follows the number
+    of turns already taken in this thread, so multi-turn work advances."""
+    analysis = state.get("analysis") or {}
+    tech = (args.get("technique") or analysis.get("technique_hint")
+            or "").strip().lower()
+    steps = _CBT_PLANS.get(tech, _GENERIC_PLAN)
+    current = min(_prior_ai_turns(state), len(steps) - 1)
+    state["plan"] = {"technique": tech or "general CBT",
+                     "steps": steps, "current": current}
+    lines = [("→ " if i == current else "   ") + f"{i+1}. {s}"
+             for i, s in enumerate(steps)]
+    return (f"Session plan ({tech or 'general CBT'}) — currently on step "
+            f"{current + 1}/{len(steps)}:\n" + "\n".join(lines))
 
 
 def _topic_terms(topic: str) -> list:
@@ -551,6 +646,13 @@ def _do_generate(args: Dict, state: Dict,
             if ln not in seen:
                 seen.add(ln); uniq.append(ln)
         analysis["suggested_materials"] = "; ".join(uniq)
+    # Tell the responder which planned step to work on this turn.
+    plan = state.get("plan")
+    if plan and plan.get("steps"):
+        cur, steps = plan["current"], plan["steps"]
+        analysis["session_plan"] = (
+            f"{plan['technique']} — work step {cur + 1}/{len(steps)} NOW: "
+            f"{steps[cur]}. (Full plan: " + " → ".join(steps) + ")")
     messages = prompt_builder.build_messages(
         user_input_scrubbed=state["user_scrubbed"],
         intake=state.get("intake"),
@@ -569,6 +671,8 @@ def _do_generate(args: Dict, state: Dict,
         "analysis": state.get("analysis") or {},
         "gen_mode": gen.get("mode", "modal"),
         "prompt_hash": prompt_builder.prompt_hash(messages),
+        "plan": state.get("plan"),
+        "self_critique": state.get("self_critique"),
     }
 
 
@@ -625,6 +729,7 @@ def run_agent(*, user_scrubbed: str,
         "retrieve_cbt_knowledge": _tool_retrieve,
         "recall_session_memory": _tool_recall_memory,
         "analyze_cognition": _tool_analyze,
+        "plan_session": _tool_plan_session,
         "recommend_lesson": _tool_recommend_lesson,
         "recommend_resource": _tool_recommend_resource,
         "summarize_progress": _tool_summarize_progress,
