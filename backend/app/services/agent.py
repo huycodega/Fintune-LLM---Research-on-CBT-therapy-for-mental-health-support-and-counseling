@@ -33,6 +33,7 @@ TOOLS (wrap existing services)
   escalate_to_clinician   → forces review queue                    [TERMINAL]
 """
 import logging
+import re
 from typing import Dict, List, Optional
 
 from app.core.config import settings
@@ -299,19 +300,28 @@ _SYSTEM_PROMPT = (
     "current step; use it for multi-turn work so each turn advances the plan.\n"
     "  2. retrieve_cbt_knowledge(query=<the concern or distortion>) — pull "
     "CBT evidence to ground the reply. This step is REQUIRED before generating.\n"
-    "  3. (optional) recall_session_memory(query=...) or summarize_progress() "
-    "for a returning client; recommend_lesson(topic=...) / "
-    "recommend_resource(topic=...) when a concrete practice would help. Use "
-    "ONLY the titles these tools return — never invent a lesson/resource.\n"
+    "  3. ENRICH the reply before generating — DO call these when they apply, "
+    "they make the response concrete and personal:\n"
+    "     • Returning client (there IS conversation history / prior turns): call "
+    "summarize_progress() to acknowledge their journey and stay consistent.\n"
+    "     • Client wants something to DO, or names a workable theme (stress, "
+    "sleep, exams, racing thoughts, 'what can I do', 'how do I practise'): call "
+    "recommend_lesson(topic=...) and/or recommend_resource(topic=...), then offer "
+    "ONE by its EXACT returned title. NEVER invent a lesson/resource.\n"
     "  4. Finish with exactly ONE terminal action:\n"
     "       • generate_cbt_response — the normal path, AFTER retrieving.\n"
     "       • ask_clarification — ONLY if the message is too vague to help.\n"
     "       • escalate_to_clinician — if you sense risk beyond the triage.\n\n"
-    "Example of a good first step for \"I always fail and everyone judges me\":\n"
-    "  call analyze_cognition with {\"text\": \"I always fail and everyone "
-    "judges me\"}\n"
-    "then call retrieve_cbt_knowledge with {\"query\": \"all-or-nothing "
-    "thinking and fear of judgement\"}, then call generate_cbt_response.\n\n"
+    "Examples (each step is one tool call):\n"
+    "  A) \"I always fail and everyone judges me\": analyze_cognition → "
+    "retrieve_cbt_knowledge(query=\"all-or-nothing thinking, fear of judgement\") "
+    "→ generate_cbt_response.\n"
+    "  B) \"The exam stress is overwhelming — what can I actually do?\": "
+    "analyze_cognition → retrieve_cbt_knowledge(query=\"managing exam stress\") → "
+    "recommend_lesson(topic=\"exam stress\") → generate_cbt_response (offer the "
+    "returned lesson by name).\n"
+    "  C) Returning client (\"the same spiral is back\"): summarize_progress() → "
+    "retrieve_cbt_knowledge(...) → generate_cbt_response.\n\n"
     "Safety rules:\n"
     "  • You may only INCREASE caution. Never downplay risk.\n"
     "  • If anything hints at self-harm, hopelessness, or danger, escalate.\n"
@@ -541,6 +551,35 @@ def _tool_summarize_progress(args: Dict, state: Dict) -> str:
             f"- Gist: {mem.get('summary', '—') or '—'}")
 
 
+# Practice-seeking signals — when the client clearly wants something to DO and
+# the model didn't pull a lesson/resource itself, _ensure_enriched fetches a real
+# one. Gated so it never spam-recommends on ordinary turns.
+_PRACTICE_PAT = re.compile(
+    r"\b(what (can|should|could) i do|how (do|can|should) i|"
+    r"something (concrete|practical|to (do|try|practi\w*))|"
+    r"practi[cs]e|exercises?|tips?|techniques?|tools? (to|for)|"
+    r"manage|cope with|deal with|work on|get better at|"
+    r"this week|day[ -]?to[ -]?day|every ?day|homework|steps? (to|for))\b", re.I)
+
+
+def _ensure_enriched(state: Dict) -> None:
+    """Deterministic enrichment: when the client clearly wants something to
+    practise and the orchestrator didn't already pull a lesson/resource, fetch a
+    REAL one so the reply is actionable. Gated on practice-seeking signals — it
+    never recommends on ordinary turns, and never fabricates (real items only)."""
+    recs = state.get("recommendations") or {"lessons": [], "resources": []}
+    if recs.get("lessons") or recs.get("resources"):
+        return   # the model already enriched — don't double up
+    msg = state.get("user_scrubbed", "")
+    if not _PRACTICE_PAT.search(msg):
+        return   # not a practice-seeking message — leave it alone
+    metrics.inc("cbt_agent_forced_enrichment_total")
+    state["forced_enrichment"] = True
+    analysis = state.get("analysis") or {}
+    topic = ((analysis.get("technique_hint") or "") + " " + msg).strip()
+    _tool_recommend_lesson({"topic": topic}, state)
+
+
 def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
     """Guarantee the responder gets at least one retrieval before generating.
     The orchestrator often shortcuts straight to generate_cbt_response; an
@@ -630,6 +669,7 @@ def _self_correct(drafts: List[Dict], state: Dict,
 def _do_generate(args: Dict, state: Dict,
                  n_responses: int, temperature: float) -> Dict:
     """Terminal: build the prompt and call the fine-tuned responder."""
+    _ensure_enriched(state)   # deterministic lesson/resource for practice-seeking
     focus = (args or {}).get("focus", "")
     analysis = dict(state.get("analysis") or {})
     if focus:
@@ -673,6 +713,8 @@ def _do_generate(args: Dict, state: Dict,
         "prompt_hash": prompt_builder.prompt_hash(messages),
         "plan": state.get("plan"),
         "self_critique": state.get("self_critique"),
+        "recommendations": state.get("recommendations"),
+        "forced_enrichment": state.get("forced_enrichment", False),
     }
 
 
