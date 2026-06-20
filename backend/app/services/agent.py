@@ -39,7 +39,10 @@ from app.core.config import settings
 from app.services import (
     agent_client, retrieval, analyzer, prompt_builder, llm_client,
     post_process, embedder, qdrant_client as qd, metrics, safety_gate,
+    user_memory,
 )
+from app.db import models
+from app.db.session import db_session
 
 
 log = logging.getLogger(__name__)
@@ -56,6 +59,9 @@ _REQUIRED_ARGS = {
     "retrieve_cbt_knowledge": ["query"],
     "recall_session_memory": ["query"],
     "analyze_cognition": ["text"],
+    "recommend_lesson": ["topic"],
+    "recommend_resource": ["topic"],
+    "summarize_progress": [],
     "generate_cbt_response": [],
     "ask_clarification": ["question"],
     "escalate_to_clinician": ["reason"],
@@ -151,6 +157,55 @@ TOOL_SCHEMAS: List[Dict] = [
     {
         "type": "function",
         "function": {
+            "name": "recommend_lesson",
+            "description": (
+                "Find published CBT micro-lessons matching a topic so you can "
+                "offer the client concrete practice. Returns real lesson titles "
+                "from the library — never invent one."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string",
+                              "description": "Theme to match, e.g. 'stress', "
+                              "'sleep', 'all-or-nothing thinking'."},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_resource",
+            "description": (
+                "Find published support resources (articles, audio, tools) "
+                "matching a topic. Returns real resources from the library — "
+                "never invent one."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string",
+                              "description": "Theme to match for the resource."},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_progress",
+            "description": (
+                "Retrieve a compact summary of THIS client's journey so far "
+                "(recurring themes, techniques tried, total prior turns) so you "
+                "can acknowledge progress and stay consistent. Returning-client "
+                "context only — do NOT narrate it as a shared transcript."),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_cbt_response",
             "description": (
                 "TERMINAL. Produce the final CBT response using the fine-tuned "
@@ -221,7 +276,10 @@ _SYSTEM_PROMPT = (
     "and cognitive distortion.\n"
     "  2. retrieve_cbt_knowledge(query=<the concern or distortion>) — pull "
     "CBT evidence to ground the reply. This step is REQUIRED before generating.\n"
-    "  3. (optional) recall_session_memory(query=...) for a returning client.\n"
+    "  3. (optional) recall_session_memory(query=...) or summarize_progress() "
+    "for a returning client; recommend_lesson(topic=...) / "
+    "recommend_resource(topic=...) when a concrete practice would help. Use "
+    "ONLY the titles these tools return — never invent a lesson/resource.\n"
     "  4. Finish with exactly ONE terminal action:\n"
     "       • generate_cbt_response — the normal path, AFTER retrieving.\n"
     "       • ask_clarification — ONLY if the message is too vague to help.\n"
@@ -306,6 +364,88 @@ def _tool_analyze(args: Dict, state: Dict) -> str:
             f"Technique hint: {analysis.get('technique_hint')}")
 
 
+def _topic_terms(topic: str) -> list:
+    return [t for t in (topic or "").lower().replace(",", " ").split() if len(t) > 2]
+
+
+def _match_published(rows, topic: str, limit: int = 3) -> list:
+    """Rank published rows by how well their title/category/tags match the topic.
+    Falls back to the most-recent few when nothing matches, so the agent always
+    has REAL items to offer (never fabricates)."""
+    terms = _topic_terms(topic)
+    scored = []
+    for r in rows:
+        hay = " ".join(str(x).lower() for x in
+                       [r.title, r.category or "", " ".join(r.tags or [])])
+        score = sum(1 for t in terms if t in hay)
+        scored.append((score, r))
+    scored.sort(key=lambda x: -x[0])
+    picked = [r for s, r in scored if s > 0][:limit]
+    if not picked:
+        picked = [r for _, r in scored][:limit]   # general fallback
+    return picked
+
+
+def _tool_recommend_lesson(args: Dict, state: Dict) -> str:
+    topic = (args.get("topic") or state.get("user_scrubbed", "")).strip()
+    try:
+        with db_session() as db:
+            rows = (db.query(models.Lesson)
+                    .filter_by(status="published")
+                    .order_by(models.Lesson.updated_at.desc()).limit(50).all())
+            picked = _match_published(rows, topic)
+            items = [{"title": r.title, "category": r.category,
+                      "duration": r.duration} for r in picked]
+    except Exception as e:
+        log.warning("agent recommend_lesson failed: %s", e)
+        return "Lesson library unavailable."
+    if not items:
+        return "No lessons in the library yet."
+    state["recommendations"]["lessons"].extend(items)
+    return "Matching CBT lessons:\n" + "\n".join(
+        f"- {it['title']}" + (f" ({it['duration']})" if it['duration'] else "")
+        for it in items)
+
+
+def _tool_recommend_resource(args: Dict, state: Dict) -> str:
+    topic = (args.get("topic") or state.get("user_scrubbed", "")).strip()
+    try:
+        with db_session() as db:
+            rows = (db.query(models.Resource)
+                    .filter_by(status="published")
+                    .order_by(models.Resource.updated_at.desc()).limit(50).all())
+            picked = _match_published(rows, topic)
+            items = [{"title": r.title, "type": r.type} for r in picked]
+    except Exception as e:
+        log.warning("agent recommend_resource failed: %s", e)
+        return "Resource library unavailable."
+    if not items:
+        return "No resources in the library yet."
+    state["recommendations"]["resources"].extend(items)
+    return "Matching resources:\n" + "\n".join(
+        f"- {it['title']} [{it['type']}]" for it in items)
+
+
+def _tool_summarize_progress(args: Dict, state: Dict) -> str:
+    uid = state.get("user_id")
+    if not uid:
+        return "No prior history for this client."
+    try:
+        with db_session() as db:
+            mem = user_memory.load_for_prompt(db, uid)
+    except Exception as e:
+        log.warning("agent summarize_progress failed: %s", e)
+        return "Progress summary unavailable."
+    if not mem or not mem.get("turn_count"):
+        return "This is an early session — little prior history yet."
+    themes = ", ".join(mem.get("recurring_themes", []) or []) or "—"
+    techs = ", ".join(mem.get("techniques_used", []) or []) or "—"
+    return ("Client journey (routing context only — do NOT quote as a "
+            f"transcript):\n- Prior turns: {mem.get('turn_count', 0)}\n"
+            f"- Recurring themes: {themes}\n- Techniques tried: {techs}\n"
+            f"- Gist: {mem.get('summary', '—') or '—'}")
+
+
 def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
     """Guarantee the responder gets at least one retrieval before generating.
     The orchestrator often shortcuts straight to generate_cbt_response; an
@@ -328,6 +468,18 @@ def _do_generate(args: Dict, state: Dict,
     analysis = dict(state.get("analysis") or {})
     if focus:
         analysis = {**analysis, "agent_focus": focus}
+    # Surface any real lessons/resources the agent pulled so the responder can
+    # offer them by name (never fabricate — these come from the library).
+    recs = state.get("recommendations") or {}
+    rec_lines = ([f"Lesson: {x['title']}" for x in recs.get("lessons", [])]
+                 + [f"Resource: {x['title']}" for x in recs.get("resources", [])])
+    if rec_lines:
+        # de-dupe preserving order
+        seen, uniq = set(), []
+        for ln in rec_lines:
+            if ln not in seen:
+                seen.add(ln); uniq.append(ln)
+        analysis["suggested_materials"] = "; ".join(uniq)
     messages = prompt_builder.build_messages(
         user_input_scrubbed=state["user_scrubbed"],
         intake=state.get("intake"),
@@ -382,6 +534,7 @@ def run_agent(*, user_scrubbed: str,
         "risk_level": risk_level,      # locked — drives risk-aware retrieval
         "user_id": user_id,
         "retrieved": [],
+        "recommendations": {"lessons": [], "resources": []},
     }
 
     task = (
@@ -399,6 +552,9 @@ def run_agent(*, user_scrubbed: str,
         "retrieve_cbt_knowledge": _tool_retrieve,
         "recall_session_memory": _tool_recall_memory,
         "analyze_cognition": _tool_analyze,
+        "recommend_lesson": _tool_recommend_lesson,
+        "recommend_resource": _tool_recommend_resource,
+        "summarize_progress": _tool_summarize_progress,
     }
 
     for step in range(settings.agent_max_steps):
