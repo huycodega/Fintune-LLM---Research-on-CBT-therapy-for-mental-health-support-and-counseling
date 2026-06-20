@@ -3,15 +3,29 @@ import { getUser, clearSession, api } from "./api.js";
 import { initials, displayName } from "./ui.jsx";
 import Login from "./pages/Login.jsx";
 import Overview from "./pages/Overview.jsx";
-import Users from "./pages/Users.jsx";
 import Cases from "./pages/Cases.jsx";
 import Crisis from "./pages/Crisis.jsx";
+import UsersAdmin from "./pages/UsersAdmin.jsx";
+import ModerationAdmin from "./pages/ModerationAdmin.jsx";
+import LessonsAdmin from "./pages/LessonsAdmin.jsx";
+import ResourcesAdmin from "./pages/ResourcesAdmin.jsx";
+
+/* Self-contained la-* pages bring their own dark-navy shell. */
+const LA_PAGES = {
+  users:      UsersAdmin,
+  moderation: ModerationAdmin,
+  lessons:    LessonsAdmin,
+  resources:  ResourcesAdmin,
+};
 
 const NAV = [
-  { id: "overview", icon: "📊", label: "Overview" },
-  { id: "users",    icon: "👥", label: "User management" },
-  { id: "cases",    icon: "📋", label: "Cases to handle", badgeKey: "pending" },
-  { id: "crisis",   icon: "🚨", label: "Crisis control", badgeKey: "crisis" },
+  { id: "overview",   icon: "📊", label: "Overview" },
+  { id: "users",      icon: "👥", label: "User management" },
+  { id: "cases",      icon: "📋", label: "Cases to handle", badgeKey: "pending" },
+  { id: "crisis",     icon: "🚨", label: "Crisis control", badgeKey: "crisis" },
+  { id: "moderation", icon: "🤖", label: "AI Moderation" },
+  { id: "lessons",    icon: "📚", label: "CBT Lessons" },
+  { id: "resources",  icon: "🗂️", label: "Resources" },
 ];
 
 const PAGE_META = {
@@ -130,6 +144,13 @@ export default function App() {
 
   if (!user) return <Login onAuth={setUser} />;
 
+  // la-* pages render their own full dark-navy shell.
+  if (LA_PAGES[page]) {
+    const LaPage = LA_PAGES[page];
+    return <LaPage onLogout={logout} onNav={nav} />;
+  }
+
+  const knownOld = ["overview", "cases", "crisis"];
   return (
     <div className="admin-shell">
       <Sidebar page={page} onNav={nav} badges={badges} />
@@ -138,9 +159,16 @@ export default function App() {
                 search={search} onSearch={setSearch} />
         <div className="admin-content">
           {page === "overview" && <Overview onNav={nav} />}
-          {page === "users" && <Users search={search} onOpenCase={() => setPage("cases")} />}
           {page === "cases" && <Cases />}
           {page === "crisis" && <Crisis search={search} />}
+          {!knownOld.includes(page) && (
+            <div className="admin-placeholder">
+              <div className="admin-placeholder-icon">🚧</div>
+              <h2>Coming soon</h2>
+              <p>This section hasn’t been built yet.</p>
+              <button className="admin-btn" onClick={() => nav("overview")}>Back to Overview</button>
+            </div>
+          )}
         </div>
       </div>
     </div>

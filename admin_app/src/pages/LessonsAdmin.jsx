@@ -296,17 +296,18 @@ const OBJECTIVES_FALLBACK = [
   "Build a personal stress management plan",
 ];
 
-function DetailPanel({ lesson, onTogglePublish, onEdit }) {
+function DetailPanel({ lesson, thumb, onTogglePublish, onEdit }) {
   const objectives = (lesson.objectives && lesson.objectives.length)
     ? lesson.objectives : OBJECTIVES_FALLBACK;
   const tags = lesson.tags && lesson.tags.length ? lesson.tags : [];
   const isPub = lesson.status === "published";
+  const [heroEmoji, heroBg] = thumb || ["🧘", "linear-gradient(135deg,#bbf7d0,#7dd3c0)"];
   return (
     <aside className="la-detail">
       <div className="la-card la-xfade" key={lesson.id}>
         <div className="la-card-eyebrow">Selected Lesson</div>
-        <div className="la-detail-hero" style={{ background: "linear-gradient(135deg,#bbf7d0,#7dd3c0)" }}>
-          <span>🧘</span>
+        <div className="la-detail-hero" style={{ background: heroBg }}>
+          <span>{heroEmoji}</span>
         </div>
         <div className="la-detail-titlerow">
           <h3>{lesson.title}</h3>
@@ -373,6 +374,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
   const [stats, setStats] = useState({ total: 0, published: 0, draft: 0, views: 0 });
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
 
   async function load() {
@@ -384,47 +386,76 @@ export default function LessonsAdmin({ onLogout, onNav }) {
       setSelected((prev) =>
         prev && (r.lessons || []).some((l) => l.id === prev)
           ? prev : (r.lessons?.[0]?.id ?? null));
+      setMock(false);
       setErr("");
     } catch (e) {
-      setErr(e.message || "Failed to load lessons");
+      // Backend not wired yet → demo with representative data so the page
+      // is usable and not an empty 500 screen.
+      const demo = LESSONS.map((l) => ({
+        ...l,
+        author: l.by,
+        updated_at: l.date,
+        description: l.desc + " This lesson guides learners through practical, evidence-based CBT techniques they can apply straight away.",
+        tags: [l.category.toLowerCase().split(" ")[0], l.level, "cbt"],
+      }));
+      setLessons(demo);
+      setStats({
+        total: demo.length,
+        published: demo.filter((x) => x.status === "published").length,
+        draft: demo.filter((x) => x.status === "draft").length,
+        views: 12480,
+      });
+      setSelected((prev) => (prev && demo.some((l) => l.id === prev) ? prev : demo[0].id));
+      setMock(true);
+      setErr("");
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => { load(); }, []);
 
+  // Keep stats in sync after a local (demo) mutation.
+  function commitLocal(list) {
+    setLessons(list);
+    setStats((s) => ({
+      ...s,
+      total: list.length,
+      published: list.filter((x) => x.status === "published").length,
+      draft: list.filter((x) => x.status === "draft").length,
+    }));
+  }
+
   async function handleAdd() {
     const title = window.prompt("New lesson title:");
     if (!title) return;
-    try {
-      await api.createLesson({ title, status: "draft" });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) {
+      const item = { id: `m${Date.now()}`, title, desc: "Newly added lesson.", description: "Newly added lesson — add objectives and content next.", category: "General", level: "basic", duration: "—", status: "draft", author: "You", updated_at: new Date().toISOString(), tags: ["new"] };
+      commitLocal([item, ...lessons]); setSelected(item.id); return;
+    }
+    try { await api.createLesson({ title, status: "draft" }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleDelete(lesson) {
     if (!window.confirm(`Delete lesson "${lesson.title}"?`)) return;
-    try {
-      await api.deleteLesson(lesson.id);
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) { commitLocal(lessons.filter((l) => l.id !== lesson.id)); return; }
+    try { await api.deleteLesson(lesson.id); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleTogglePublish(lesson) {
     const status = lesson.status === "published" ? "draft" : "published";
-    try {
-      await api.updateLesson(lesson.id, { status });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) { commitLocal(lessons.map((l) => l.id === lesson.id ? { ...l, status } : l)); return; }
+    try { await api.updateLesson(lesson.id, { status }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleEdit(lesson) {
     const title = window.prompt("Edit title:", lesson.title);
     if (title == null) return;
-    try {
-      await api.updateLesson(lesson.id, { title });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) { commitLocal(lessons.map((l) => l.id === lesson.id ? { ...l, title } : l)); return; }
+    try { await api.updateLesson(lesson.id, { title }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   const selectedLesson = lessons.find((l) => l.id === selected) || lessons[0] || null;
@@ -441,7 +472,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
           onLogout={onLogout}
         />
 
-        <div className="la-content">
+        <div className={`la-content ${selectedLesson ? "" : "la-content-nopanel"}`}>
           <div className="la-content-left">
             {/* Stat cards */}
             <div className="la-stats">
@@ -460,6 +491,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
             {/* Table card */}
             <div className="la-card la-table-card">
               <FilterBar onAdd={handleAdd} />
+              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — lessons API not reachable yet</span></div>}
               {err && <div className="la-empty" style={{ color: "#ef4444", padding: 16 }}>{err}</div>}
               <div className="la-table-wrap">
                 <table className="la-table">
@@ -487,7 +519,12 @@ export default function LessonsAdmin({ onLogout, onNav }) {
           {loading
             ? <DetailSkeleton />
             : selectedLesson && (
-              <DetailPanel lesson={selectedLesson} onTogglePublish={handleTogglePublish} onEdit={handleEdit} />
+              <DetailPanel
+                lesson={selectedLesson}
+                thumb={thumbFor(Math.max(0, lessons.findIndex((l) => l.id === selectedLesson.id)))}
+                onTogglePublish={handleTogglePublish}
+                onEdit={handleEdit}
+              />
             )}
         </div>
       </div>

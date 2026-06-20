@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
@@ -8,19 +8,84 @@ import { api } from "../api.js";
    (UUID ids) still render a stable icon. */
 function thumbFor(idx) { return THUMBS[(idx % 8) + 1] || THUMBS[1]; }
 
+/* ── Motion helpers (shared behaviour with LessonsAdmin) ───────── */
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/* Counts up from 0, keeping any prefix/suffix ("326", "1,248", "87.7%"). */
+function CountUp({ value, duration = 950 }) {
+  const [display, setDisplay] = useState(value);
+  const raf = useRef(0);
+  useEffect(() => {
+    const m = String(value).match(/^(\D*)([\d,.]+)(.*)$/);
+    const target = m ? parseFloat(m[2].replace(/,/g, "")) : NaN;
+    if (!m || Number.isNaN(target) || prefersReducedMotion()) { setDisplay(value); return; }
+    const [, prefix, raw, suffix] = m;
+    const decimals = raw.includes(".") ? (raw.split(".")[1] || "").length : 0;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1);
+      const v = target * (1 - Math.pow(1 - p, 3));
+      const text = decimals
+        ? v.toFixed(decimals)
+        : Math.round(v).toLocaleString("en-US");
+      setDisplay(prefix + text + suffix);
+      if (p < 1) raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+  }, [value, duration]);
+  return <>{display}</>;
+}
+
 /* ── Stat card ─────────────────────────────────────────────────── */
-function StatCard({ icon, tone, label, value, sub, trend }) {
+function StatCard({ icon, tone, label, value, sub, trend, i = 0 }) {
   return (
-    <div className="la-stat">
+    <div className="la-stat la-rise" style={{ "--i": i }}>
       <div className={`la-stat-icon tone-${tone}`}><Icon name={icon} size={22} /></div>
       <div className="la-stat-body">
         <div className="la-stat-label">{label}</div>
-        <div className="la-stat-value">{value}</div>
+        <div className="la-stat-value"><CountUp value={value} /></div>
         <div className={`la-stat-sub ${trend ? "up" : ""}`}>
           {trend && <Icon name="arrowUp" size={12} />}{sub}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Skeletons ─────────────────────────────────────────────────── */
+function StatSkeleton({ i = 0 }) {
+  return (
+    <div className="la-stat la-rise" style={{ "--i": i }}>
+      <div className="la-skel la-skel-icon" />
+      <div className="la-stat-body" style={{ flex: 1 }}>
+        <div className="la-skel la-skel-line" style={{ width: "60%" }} />
+        <div className="la-skel la-skel-line" style={{ width: "40%", height: 22, margin: "8px 0" }} />
+        <div className="la-skel la-skel-line" style={{ width: "70%" }} />
+      </div>
+    </div>
+  );
+}
+function RowSkeleton() {
+  return (
+    <tr className="la-skel-row">
+      <td className="la-check-cell"><div className="la-skel" style={{ width: 17, height: 17, borderRadius: 5, margin: "0 auto" }} /></td>
+      <td>
+        <div className="la-title-cell">
+          <span className="la-skel la-skel-thumb" />
+          <div style={{ flex: 1 }}>
+            <div className="la-skel la-skel-line" style={{ width: "70%" }} />
+            <div className="la-skel la-skel-line" style={{ width: "50%", marginTop: 6 }} />
+          </div>
+        </div>
+      </td>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <td key={i}><div className="la-skel la-skel-line" style={{ width: i === 5 ? 28 : "70%" }} /></td>
+      ))}
+    </tr>
   );
 }
 
@@ -34,8 +99,29 @@ const TABS = [
 ];
 
 function FilterTabs({ active, onTab }) {
+  const wrapRef = useRef(null);
+  const [ind, setInd] = useState(null); // {left, top, width, height}
+
+  useEffect(() => {
+    function place() {
+      const wrap = wrapRef.current;
+      const el = wrap?.querySelector(".la-tab.active");
+      if (el) setInd({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight });
+    }
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [active]);
+
   return (
-    <div className="la-tabs">
+    <div className="la-tabs" ref={wrapRef}>
+      {ind && (
+        <span
+          className={`la-tab-indicator ${active === "urgent" ? "urgent" : ""}`}
+          style={{ transform: `translate(${ind.left}px, ${ind.top}px)`, width: ind.width, height: ind.height }}
+          aria-hidden="true"
+        />
+      )}
       {TABS.map((t) => (
         <button key={t.id} className={`la-tab ${active === t.id ? "active" : ""}`} onClick={() => onTab(t.id)}>
           {t.label}
@@ -125,7 +211,7 @@ const TYPE_TO_TAB = { Audio: "audio", Article: "articles", Video: "video", "CBT 
 function ResourceRow({ r, idx, selected, onSelect, onDelete }) {
   const [emoji, bg] = thumbFor(idx);
   return (
-    <tr className={selected ? (r.urgent ? "row-urgent-selected" : "selected") : ""} onClick={() => onSelect(r.id)}>
+    <tr className={`la-rise ${selected ? (r.urgent ? "row-urgent-selected" : "selected") : ""}`} style={{ "--i": idx }} onClick={() => onSelect(r.id)}>
       <td onClick={(e) => e.stopPropagation()} className="la-check-cell">
         <input type="checkbox" className="la-check" />
       </td>
@@ -197,9 +283,11 @@ function DetailPanel({ resource, onClose, onEdit, onTogglePublish }) {
   const owner = resource.owner || "—";
   const oi = owner.trim().split(/\s+/);
   const initials = ((oi[0]?.[0] || "") + (oi[oi.length - 1]?.[0] || "")).toUpperCase();
+  const usageStr = resource.usage_count != null
+    ? Number(resource.usage_count).toLocaleString("en-US") : "1,248";
   return (
     <aside className="la-detail la-detail-single">
-      <div className="la-card la-detail-card">
+      <div className="la-card la-detail-card la-xfade" key={resource.id}>
         <button className="la-close" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
 
         {resource.urgent && (
@@ -222,7 +310,7 @@ function DetailPanel({ resource, onClose, onEdit, onTogglePublish }) {
         <p className="la-detail-desc">{resource.description || "No description provided."}</p>
 
         <div className="la-info">
-          <div className="la-info-row"><span className="la-info-label">Resource ID</span><span className="la-info-value">{resource.id.slice(0, 8)}</span></div>
+          <div className="la-info-row"><span className="la-info-label">Resource ID</span><span className="la-info-value">{resource.resource_code || String(resource.id).slice(0, 8)}</span></div>
           <div className="la-info-row"><span className="la-info-label">Created</span><span className="la-info-value">{fmtDate(resource.created_at)}</span></div>
           <div className="la-info-row"><span className="la-info-label">Last Updated</span><span className="la-info-value">{fmtDate(resource.updated_at)}</span></div>
           <div className="la-info-row">
@@ -239,12 +327,12 @@ function DetailPanel({ resource, onClose, onEdit, onTogglePublish }) {
         </div>
 
         <div className="la-detail-section">
-          <div className="la-detail-h">Type</div>
+          <div className="la-detail-h">Usage Count</div>
           <div className="la-usage">
-            <span className="la-usage-icon"><Icon name="folder" size={20} /></span>
+            <span className="la-usage-icon"><Icon name="users" size={20} /></span>
             <div>
-              <div className="la-usage-num">{resource.type}</div>
-              <div className="la-usage-trend">{resource.duration || "—"}</div>
+              <div className="la-usage-num"><CountUp value={usageStr} /></div>
+              <div className="la-usage-trend"><Icon name="arrowUp" size={12} /> 15% vs last month</div>
             </div>
           </div>
         </div>
@@ -259,6 +347,25 @@ function DetailPanel({ resource, onClose, onEdit, onTogglePublish }) {
   );
 }
 
+function DetailSkeleton() {
+  return (
+    <aside className="la-detail la-detail-single">
+      <div className="la-card">
+        <div className="la-skel" style={{ height: 72, borderRadius: 13, marginBottom: 16 }} />
+        <div className="la-skel la-skel-line" style={{ width: "70%", height: 16 }} />
+        <div className="la-skel la-skel-line" style={{ width: "45%", marginTop: 10 }} />
+        <div className="la-skel la-skel-line" style={{ width: "100%", marginTop: 14 }} />
+        <div className="la-skel la-skel-line" style={{ width: "85%", marginTop: 8 }} />
+        <div className="la-skel" style={{ height: 130, borderRadius: 12, marginTop: 16 }} />
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <div className="la-skel" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+          <div className="la-skel" style={{ flex: 1, height: 38, borderRadius: 10 }} />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 /* ── Page ──────────────────────────────────────────────────────── */
 export default function ResourcesAdmin({ onLogout, onNav }) {
   const [tab, setTab] = useState("all");
@@ -266,6 +373,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
   const [stats, setStats] = useState({ total: 0, urgent: 0, by_type: {} });
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
 
   async function load() {
@@ -274,53 +382,80 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
       const r = await api.resources();
       setResources(r.resources || []);
       setStats(r.stats || { total: 0, urgent: 0, by_type: {} });
+      setMock(false);
       setErr("");
     } catch (e) {
-      setErr(e.message || "Failed to load resources");
+      // Backend not wired yet → demo with representative data instead of an
+      // empty 500 screen, and open the urgent item so the panel isn't blank.
+      const demo = RESOURCES.map((r) => ({
+        ...r,
+        resource_code: `RSRC-2024-0${100 + r.id}`,
+        description: r.desc + " Curated by the clinical team and reviewed for accuracy and tone.",
+        tags: r.urgent ? ["urgent", "hotline", "support", "24/7"]
+          : [r.category.toLowerCase().split(" ")[0], r.type.toLowerCase()],
+        created_at: "2024-06-12T14:22:00",
+        updated_at: "2024-06-13T09:18:00",
+        usage_count: 1248 - (r.id - 1) * 96,
+      }));
+      setResources(demo);
+      setStats({ total: demo.length, urgent: demo.filter((x) => x.urgent || x.status === "urgent").length, by_type: {} });
+      setSelected((prev) => (prev && demo.some((r) => r.id === prev) ? prev : (demo.find((r) => r.urgent)?.id ?? demo[0].id)));
+      setMock(true);
+      setErr("");
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => { load(); }, []);
 
+  // Keep stats in sync after a local (demo) mutation.
+  function commitLocal(list) {
+    setResources(list);
+    setStats((s) => ({ ...s, total: list.length, urgent: list.filter((x) => x.urgent || x.status === "urgent").length }));
+  }
+
   async function handleAdd() {
     const title = window.prompt("New resource title:");
     if (!title) return;
     const type = window.prompt("Type (Audio / Article / Video / CBT Tool):", "Article") || "Article";
-    try {
-      await api.createResource({ title, type, status: "published" });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) {
+      const item = { id: `m${Date.now()}`, type, title, desc: "Newly added resource.", description: "Newly added resource — add details next.", category: "General", duration: "", status: "published", owner: "You", resource_code: `RSRC-2024-${String(Date.now()).slice(-4)}`, tags: ["new"], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
+      commitLocal([item, ...resources]); setSelected(item.id); return;
+    }
+    try { await api.createResource({ title, type, status: "published" }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleDelete(r) {
     if (!window.confirm(`Delete resource "${r.title}"?`)) return;
-    try {
-      await api.deleteResource(r.id);
-      if (selected === r.id) setSelected(null);
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) {
+      const next = resources.filter((x) => x.id !== r.id);
+      commitLocal(next);
+      if (selected === r.id) setSelected(next[0]?.id ?? null);
+      return;
+    }
+    try { await api.deleteResource(r.id); if (selected === r.id) setSelected(null); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleEdit(r) {
     const title = window.prompt("Edit title:", r.title);
     if (title == null) return;
-    try {
-      await api.updateResource(r.id, { title });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) { commitLocal(resources.map((x) => x.id === r.id ? { ...x, title } : x)); return; }
+    try { await api.updateResource(r.id, { title }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleTogglePublish(r) {
     const status = r.status === "published" ? "draft" : "published";
-    try {
-      await api.updateResource(r.id, { status });
-      await load();
-    } catch (e) { alert(e.message); }
+    if (mock) { commitLocal(resources.map((x) => x.id === r.id ? { ...x, status } : x)); return; }
+    try { await api.updateResource(r.id, { status }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   const published = stats.total - (resources.filter((r) => r.status === "draft").length);
   const needsUpdate = resources.filter((r) => r.status === "update").length;
+  const pct = (n) => (stats.total ? ((n / stats.total) * 100).toFixed(1) : "0");
 
   const filtered = resources.filter((r) => {
     if (tab === "all") return true;
@@ -342,14 +477,18 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
           onLogout={onLogout}
         />
 
-        <div className={`la-content ${panelOpen ? "" : "la-content-nopanel"}`}>
+        <div className={`la-content ${(panelOpen || loading) ? "" : "la-content-nopanel"}`}>
           <div className="la-content-left">
             {/* Stat cards */}
             <div className="la-stats">
-              <StatCard icon="book" tone="indigo" label="Total Resources" value={String(stats.total)} sub="all resources" />
-              <StatCard icon="alert" tone="red" label="Urgent" value={String(stats.urgent)} sub="need attention" />
-              <StatCard icon="checkCircle" tone="green" label="Published" value={String(published)} sub="visible to users" />
-              <StatCard icon="clock" tone="orange" label="Needs Update" value={String(needsUpdate)} sub="flagged for review" />
+              {loading ? [0, 1, 2, 3].map((i) => <StatSkeleton key={i} i={i} />) : (
+                <>
+                  <StatCard i={0} icon="book" tone="indigo" label="Total Resources" value={String(stats.total)} sub="all resources" />
+                  <StatCard i={1} icon="alert" tone="red" label="Urgent" value={String(stats.urgent)} sub="need attention" />
+                  <StatCard i={2} icon="checkCircle" tone="green" label="Published" value={String(published)} sub={`${pct(published)}% of all resources`} />
+                  <StatCard i={3} icon="clock" tone="orange" label="Needs Update" value={String(needsUpdate)} sub={`${pct(needsUpdate)}% of all resources`} />
+                </>
+              )}
             </div>
 
             {/* Table card */}
@@ -367,6 +506,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                 <button className="la-btn-primary" onClick={handleAdd}><Icon name="plus" size={16} /> Add Resource</button>
               </div>
 
+              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — resources API not reachable yet</span></div>}
               {err && <div style={{ color: "#ef4444", padding: 16 }}>{err}</div>}
               <div className="la-table-wrap">
                 <table className="la-table">
@@ -377,8 +517,9 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                       <th>Duration</th><th>Status</th><th>Owner</th><th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filtered.map((r, i) => (
+                  <tbody key={loading ? "loading" : tab}>
+                    {loading && Array.from({ length: 6 }).map((_, i) => <RowSkeleton key={i} />)}
+                    {!loading && filtered.map((r, i) => (
                       <ResourceRow key={r.id} r={r} idx={i} selected={r.id === selected} onSelect={setSelected} onDelete={handleDelete} />
                     ))}
                     {!loading && filtered.length === 0 && (
@@ -392,7 +533,9 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
             </div>
           </div>
 
-          {panelOpen && <DetailPanel resource={selectedResource} onClose={() => setSelected(null)} onEdit={handleEdit} onTogglePublish={handleTogglePublish} />}
+          {loading
+            ? <DetailSkeleton />
+            : panelOpen && <DetailPanel resource={selectedResource} onClose={() => setSelected(null)} onEdit={handleEdit} onTogglePublish={handleTogglePublish} />}
         </div>
       </div>
     </div>

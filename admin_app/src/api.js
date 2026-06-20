@@ -76,6 +76,23 @@ export const api = {
     }),
   setUserRole: (uid, role) =>
     req(`/admin/users/${uid}/role`, { method: "POST", body: { role } }),
+  assignClinician: (uid, payload) =>
+    req(`/admin/users/${uid}/assign-clinician`, { method: "POST", body: payload }),
+
+  // --- AI moderation (ModerationAdmin) — design doc §7 ---
+  moderationStats: () => req("/admin/ai-moderation/stats"),
+  moderationItems: (params) => req(`/admin/ai-moderation/items${qs(params)}`),
+  moderationItem: (queueItemId) => req(`/admin/ai-moderation/items/${queueItemId}`),
+  moderationClaim: (queueItemId) =>
+    req(`/admin/ai-moderation/items/${queueItemId}/claim`, { method: "PATCH" }),
+  moderationApprove: (queueItemId, payload) =>
+    req(`/admin/ai-moderation/items/${queueItemId}/approve`, { method: "PATCH", body: payload }),
+  moderationEditResponse: (queueItemId, payload) =>
+    req(`/admin/ai-moderation/items/${queueItemId}/edit-response`, { method: "PATCH", body: payload }),
+  moderationReject: (queueItemId, payload) =>
+    req(`/admin/ai-moderation/items/${queueItemId}/reject`, { method: "PATCH", body: payload }),
+  moderationNeedImprovement: (queueItemId, payload) =>
+    req(`/admin/ai-moderation/items/${queueItemId}/need-improvement`, { method: "PATCH", body: payload }),
 
   // --- crisis oversight ---
   crisis: (windowDays = 30) => req(`/admin/crisis?window_days=${windowDays}`),
