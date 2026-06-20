@@ -38,8 +38,8 @@ from typing import Dict, List, Optional
 from app.core.config import settings
 from app.services import (
     agent_client, retrieval, analyzer, prompt_builder, llm_client,
-    post_process, embedder, qdrant_client as qd, metrics, safety_gate,
-    user_memory,
+    post_process, preflight, embedder, qdrant_client as qd, metrics,
+    safety_gate, user_memory,
 )
 from app.db import models
 from app.db.session import db_session
@@ -461,6 +461,77 @@ def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
                   "result": res[:200], "note": "auto-grounding (forced before generate)"})
 
 
+# Below this grounding score (when retrieval exists) a draft is considered
+# under-supported and triggers ONE self-revision. Grounding is lexical/NLI and
+# noisy, so the floor is deliberately low — the primary signal is preflight.
+_GROUNDING_FLOOR = 0.12
+
+
+def _draft_to_text(d: Dict) -> str:
+    return (f"Technique: {d.get('technique','')}\n"
+            f"Rationale: {d.get('rationale','')}\n"
+            f"Plan: {d.get('plan','')}\n"
+            f"Response: {d.get('response','')}")
+
+
+def _self_correct(drafts: List[Dict], state: Dict,
+                  base_messages: List[Dict], temperature: float) -> List[Dict]:
+    """Self-critique: score the best draft with preflight (deterministic) +
+    grounding; if it fails the bar, ask the responder to revise ONCE against the
+    specific critique, then keep the revision only if it's not worse. Bounded to
+    a single extra call — quality up without runaway cost."""
+    if not drafts:
+        return drafts
+    severity = state.get("severity", "moderate")
+    retrieved = state.get("retrieved", [])
+
+    def evald(d: Dict) -> Dict:
+        ok, reasons = preflight.check_draft(d, severity)
+        try:
+            g = post_process.grounding_score(d.get("response", ""), retrieved)
+        except Exception:
+            g = 1.0   # don't penalise when the scorer can't load (low-RAM host)
+        return {"d": d, "ok": ok, "reasons": reasons, "g": g}
+
+    scored = sorted((evald(d) for d in drafts),
+                    key=lambda s: (s["ok"], s["g"]), reverse=True)
+    best = scored[0]
+    ranked = [s["d"] for s in scored]
+    metrics.inc("cbt_agent_selfcritique_total")
+
+    grounded_ok = (not retrieved) or best["g"] >= _GROUNDING_FLOOR
+    if best["ok"] and grounded_ok:
+        return ranked   # passes the bar — no extra call
+
+    metrics.inc("cbt_agent_selfcritique_revised_total")
+    issues = "; ".join(best["reasons"]) or \
+        "the response is weakly grounded in the provided reference material"
+    state["self_critique"] = issues
+    revise_msgs = base_messages + [
+        {"role": "assistant", "content": _draft_to_text(best["d"])},
+        {"role": "user", "content":
+            "[SELF-REVIEW] A clinical reviewer flagged your draft: " + issues
+            + ". Rewrite it ONCE: choose EXACTLY ONE canonical technique "
+            "(verbatim from the allowed list), keep all four labeled fields, "
+            "base every statement ONLY on the reference material and the "
+            "client's own words (invent nothing), and keep the Response under "
+            "200 words."},
+    ]
+    try:
+        gen2 = llm_client.generate(
+            revise_msgs, n=1, temperature=max(0.2, (temperature or 0.65) - 0.2))
+        revised = post_process.parse_all(gen2.get("responses", []))
+    except Exception as e:
+        log.warning("self-critique revision failed: %s", e)
+        return ranked
+    if revised:
+        rv = evald(revised[0])
+        if (rv["ok"], rv["g"]) >= (best["ok"], best["g"]):
+            state["self_critique_applied"] = True
+            return [rv["d"]] + ranked
+    return ranked
+
+
 def _do_generate(args: Dict, state: Dict,
                  n_responses: int, temperature: float) -> Dict:
     """Terminal: build the prompt and call the fine-tuned responder."""
@@ -489,6 +560,8 @@ def _do_generate(args: Dict, state: Dict,
     )
     gen = llm_client.generate(messages, n=n_responses, temperature=temperature)
     drafts = post_process.parse_all(gen.get("responses", []))
+    # Self-critique: revise once if the best draft fails preflight/grounding.
+    drafts = _self_correct(drafts, state, messages, temperature)
     return {
         "outcome": "drafts",
         "drafts": drafts,
