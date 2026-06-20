@@ -71,6 +71,17 @@ def main() -> int:
             if offset is None:
                 break
 
+        # Replicate payload indexes — Qdrant needs them to FILTER. The local
+        # ingestion built risk_allowed / doc_role keyword indexes; without them
+        # the risk-aware retrieval errors (400) and returns nothing on cloud.
+        for field, fld in (info.payload_schema or {}).items():
+            try:
+                schema = getattr(fld, "data_type", None) or qm.PayloadSchemaType.KEYWORD
+                cloud.create_payload_index(name, field_name=field, field_schema=schema)
+                print(f"  index: {field}")
+            except Exception as e:
+                print(f"  (index {field} skipped: {str(e)[:50]})")
+
         cloud_count = cloud.count(name, exact=True).count
         ok = "OK" if cloud_count == local_count else "MISMATCH"
         print(f"[{name}] cloud count = {cloud_count}  [{ok}]\n")
