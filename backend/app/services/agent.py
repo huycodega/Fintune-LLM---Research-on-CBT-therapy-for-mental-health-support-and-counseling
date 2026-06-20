@@ -33,6 +33,7 @@ TOOLS (wrap existing services)
   escalate_to_clinician   → forces review queue                    [TERMINAL]
 """
 import logging
+import re
 from typing import Dict, List, Optional
 
 from app.core.config import settings
@@ -550,6 +551,35 @@ def _tool_summarize_progress(args: Dict, state: Dict) -> str:
             f"- Gist: {mem.get('summary', '—') or '—'}")
 
 
+# Practice-seeking signals — when the client clearly wants something to DO and
+# the model didn't pull a lesson/resource itself, _ensure_enriched fetches a real
+# one. Gated so it never spam-recommends on ordinary turns.
+_PRACTICE_PAT = re.compile(
+    r"\b(what (can|should|could) i do|how (do|can|should) i|"
+    r"something (concrete|practical|to (do|try|practi\w*))|"
+    r"practi[cs]e|exercises?|tips?|techniques?|tools? (to|for)|"
+    r"manage|cope with|deal with|work on|get better at|"
+    r"this week|day[ -]?to[ -]?day|every ?day|homework|steps? (to|for))\b", re.I)
+
+
+def _ensure_enriched(state: Dict) -> None:
+    """Deterministic enrichment: when the client clearly wants something to
+    practise and the orchestrator didn't already pull a lesson/resource, fetch a
+    REAL one so the reply is actionable. Gated on practice-seeking signals — it
+    never recommends on ordinary turns, and never fabricates (real items only)."""
+    recs = state.get("recommendations") or {"lessons": [], "resources": []}
+    if recs.get("lessons") or recs.get("resources"):
+        return   # the model already enriched — don't double up
+    msg = state.get("user_scrubbed", "")
+    if not _PRACTICE_PAT.search(msg):
+        return   # not a practice-seeking message — leave it alone
+    metrics.inc("cbt_agent_forced_enrichment_total")
+    state["forced_enrichment"] = True
+    analysis = state.get("analysis") or {}
+    topic = ((analysis.get("technique_hint") or "") + " " + msg).strip()
+    _tool_recommend_lesson({"topic": topic}, state)
+
+
 def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
     """Guarantee the responder gets at least one retrieval before generating.
     The orchestrator often shortcuts straight to generate_cbt_response; an
@@ -639,6 +669,7 @@ def _self_correct(drafts: List[Dict], state: Dict,
 def _do_generate(args: Dict, state: Dict,
                  n_responses: int, temperature: float) -> Dict:
     """Terminal: build the prompt and call the fine-tuned responder."""
+    _ensure_enriched(state)   # deterministic lesson/resource for practice-seeking
     focus = (args or {}).get("focus", "")
     analysis = dict(state.get("analysis") or {})
     if focus:
@@ -682,6 +713,8 @@ def _do_generate(args: Dict, state: Dict,
         "prompt_hash": prompt_builder.prompt_hash(messages),
         "plan": state.get("plan"),
         "self_critique": state.get("self_critique"),
+        "recommendations": state.get("recommendations"),
+        "forced_enrichment": state.get("forced_enrichment", False),
     }
 
 
