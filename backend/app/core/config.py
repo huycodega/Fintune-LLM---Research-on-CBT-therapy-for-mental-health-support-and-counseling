@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # produced under `data new/qdrant_local` here. It holds the three
     # cbt_rag_bge_m3__* collections; session_memory is created on first boot.
     qdrant_local_path: str = "/app/data/qdrant_local"
+    # Qdrant Cloud (managed) — when QDRANT_URL is set the client connects to the
+    # hosted cluster (url + api_key) instead of the local file directory. Lets
+    # the backend run on a stateless host (Railway/Render) with no local volume.
+    qdrant_url: Optional[str] = None
+    qdrant_api_key: Optional[str] = None
 
     # ---- Modal workspace (single knob to switch deployment account) ----
     # Set MODAL_WORKSPACE (e.g. "zilex-nikke") and the six Modal endpoint URLs
@@ -75,6 +80,14 @@ class Settings(BaseSettings):
     # service instead of loading the model in-process. Unset → reranks locally.
     modal_reranker_endpoint: Optional[str] = None
     modal_reranker_health_endpoint: Optional[str] = None
+
+    # ---- embedder offload to Modal (optional) ----
+    # bge-m3 is ~2.2 GB; loading it in-process OOMs a free-tier / low-RAM host.
+    # When MODAL_EMBEDDER_ENDPOINT is set (or derived from MODAL_WORKSPACE),
+    # embedder.embed() calls the cbt-embedder Modal CPU service instead of
+    # loading the model locally. Unset → embeds in-process.
+    modal_embedder_endpoint: Optional[str] = None
+    modal_embedder_health_endpoint: Optional[str] = None
 
     # ---- Modal call timeout (seconds) ----
     # A cold Modal container loading a 7B model can take 2-4 minutes. Keep this
@@ -194,6 +207,20 @@ class Settings(BaseSettings):
     ]
 
     @model_validator(mode="after")
+    def _normalize_db_url(self):
+        """Railway/Render inject DATABASE_URL as 'postgresql://' (or Heroku-style
+        'postgres://'), which SQLAlchemy maps to the psycopg2 driver. This app
+        uses psycopg3, so rewrite the scheme to 'postgresql+psycopg://'."""
+        url = self.database_url
+        if url.startswith("postgresql+"):
+            return self
+        if url.startswith("postgresql://"):
+            self.database_url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        elif url.startswith("postgres://"):
+            self.database_url = "postgresql+psycopg://" + url[len("postgres://"):]
+        return self
+
+    @model_validator(mode="after")
     def _derive_modal_endpoints(self):
         """When MODAL_WORKSPACE is set, fill any Modal endpoint that wasn't given
         explicitly. Switching Modal accounts then only needs one env var.
@@ -211,6 +238,8 @@ class Settings(BaseSettings):
             "modal_agent_health_endpoint": f"{base}cbt-agent-health.modal.run",
             "modal_reranker_endpoint":     f"{base}cbt-reranker-rerank.modal.run",
             "modal_reranker_health_endpoint": f"{base}cbt-reranker-health.modal.run",
+            "modal_embedder_endpoint":     f"{base}cbt-embedder-embed.modal.run",
+            "modal_embedder_health_endpoint": f"{base}cbt-embedder-health.modal.run",
         }
         for field, url in derived.items():
             # derive only when not set (None or empty) so an explicit endpoint wins

@@ -86,11 +86,9 @@ def rerank(body: dict):
     )
 
 
-@app.function(image=image)
-@modal.fastapi_endpoint(method="GET")
-def health():
-    """GET /health"""
-    return {"status": "ok", "model": RERANKER_REPO, "role": "reranker"}
+# NOTE: no /health endpoint — Modal free tier caps web functions at 8, and the
+# backend only health-checks llm/safety/agent. Drop reranker health to free a
+# slot for the embedder service.
 
 
 @app.local_entrypoint()

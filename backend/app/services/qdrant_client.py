@@ -45,13 +45,19 @@ _lock = threading.RLock()
 
 
 def get_qdrant() -> QdrantClient:
-    """Lazy singleton — local file-mode client."""
+    """Lazy singleton. Qdrant Cloud (url + api_key) when QDRANT_URL is set,
+    otherwise local file-mode at qdrant_local_path."""
     global _client
     if _client is None:
-        path = settings.qdrant_local_path
-        os.makedirs(path, exist_ok=True)
-        log.info("Qdrant local mode at %s", path)
-        _client = QdrantClient(path=path)
+        if settings.qdrant_url:
+            log.info("Qdrant remote mode at %s", settings.qdrant_url)
+            _client = QdrantClient(url=settings.qdrant_url,
+                                   api_key=settings.qdrant_api_key)
+        else:
+            path = settings.qdrant_local_path
+            os.makedirs(path, exist_ok=True)
+            log.info("Qdrant local mode at %s", path)
+            _client = QdrantClient(path=path)
     return _client
 
 

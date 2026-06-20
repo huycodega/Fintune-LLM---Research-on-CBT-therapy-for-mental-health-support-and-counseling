@@ -105,7 +105,7 @@ function ChatBubble({ msg }) {
   return (
     <div className={`ai-row ${isAI ? "ai" : "user"}`}>
       {isAI && (
-        <div className="ai-avatar"><Mascot variant="chat" size={30} /></div>
+        <div className="ai-avatar"><Mascot variant="chat" size={30} className="mascot-idle" /></div>
       )}
       <div className="ai-msg">
         <div className={`ai-bubble ${isAI ? "ai-bubble-ai" : "ai-bubble-user"} ${msg.error ? "ai-bubble-error" : ""}`}>
@@ -148,10 +148,26 @@ function ChatBubble({ msg }) {
 function TypingBubble() {
   return (
     <div className="ai-row ai">
-      <div className="ai-avatar"><Mascot variant="chat" size={30} /></div>
-      <div className="ai-bubble ai-bubble-ai ai-typing">
-        <span /><span /><span />
+      <div className="ai-avatar"><Mascot variant="chat" size={30} className="mascot-idle" /></div>
+      <div className="ai-bubble ai-bubble-ai ai-thinking">
+        <span className="ai-thinking-label">MindCare is thinking</span>
+        <span className="ai-typing"><span /><span /><span /></span>
       </div>
+    </div>
+  );
+}
+
+/* Empty / fresh-chat state: an animated mascot greeting shown before the
+   first user message, instead of a bare welcome bubble. */
+function EmptyState({ greeting }) {
+  return (
+    <div className="ai-empty" data-reveal>
+      <div className="ai-empty-mascot">
+        <span className="ai-empty-halo" aria-hidden="true" />
+        <Mascot variant="wave" size={104} className="mascot-idle" />
+      </div>
+      <p className="ai-empty-text">{greeting}</p>
+      <span className="ai-empty-hint">Share anything that's on your mind — I'm listening.</span>
     </div>
   );
 }
@@ -432,7 +448,11 @@ export default function Chat() {
 
           {/* Feed */}
           <div className="ai-feed">
-            {messages.map((m, i) => (m.typing ? <TypingBubble key={i} /> : <ChatBubble key={i} msg={m} />))}
+            {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
+              <EmptyState greeting={messages[0]?.text || WELCOME[0].text} />
+            ) : (
+              messages.map((m, i) => (m.typing ? <TypingBubble key={i} /> : <ChatBubble key={i} msg={m} />))
+            )}
             <div ref={bottomRef} />
           </div>
 

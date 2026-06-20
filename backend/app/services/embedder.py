@@ -67,13 +67,44 @@ def get_reranker():
     return _reranker
 
 
+def _embed_modal(texts: List[str]) -> Optional[List[List[float]]]:
+    """Fetch normalized embeddings from the Modal cbt-embedder service.
+    Returns None on any failure so the caller can fall back to local encoding."""
+    url = settings.modal_embedder_endpoint
+    if not url:
+        return None
+    try:
+        body = json.dumps({"texts": texts}).encode()
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=settings.modal_call_timeout) as r:
+            data = json.loads(r.read().decode())
+        vecs = data.get("vectors")
+        if isinstance(vecs, list) and len(vecs) == len(texts):
+            return [[float(x) for x in row] for row in vecs]
+        log.warning("Modal embedder returned %d vectors for %d texts",
+                    len(vecs or []), len(texts))
+    except Exception as e:
+        log.warning("Modal embedder call failed (%s) — local fallback", e)
+    return None
+
+
 def embed(texts: List[str]) -> List[List[float]]:
-    """Returns dense vectors (list of 1024-float lists)."""
+    """Returns dense vectors (list of 1024-float lists).
+
+    When MODAL_EMBEDDER_ENDPOINT is set the vectors come from the Modal CPU
+    service (keeps the 2.2 GB bge-m3 out of a low-RAM backend); otherwise the
+    model is loaded and run in-process. Modal vectors are already L2-normalized,
+    matching the local path."""
     if not texts:
         return []
-    vecs = get_embedder().encode(texts, normalize_embeddings=True,
+    vecs = _embed_modal(texts)
+    if vecs is not None:
+        return vecs
+    local = get_embedder().encode(texts, normalize_embeddings=True,
                                    convert_to_numpy=True)
-    return vecs.tolist()
+    return local.tolist()
 
 
 def embed_one(text: str) -> List[float]:

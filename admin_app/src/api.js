@@ -3,6 +3,10 @@ const TOKEN_KEY = "cbt_admin_token";
 const USER_KEY = "cbt_admin_user";
 const EXPECTED_ROLE = "admin";
 
+// Base URL of the backend. Empty in dev → "/api" hits the Vite proxy.
+// In production (Vercel) set VITE_API_BASE to the Railway backend URL.
+const API_BASE = import.meta.env.VITE_API_BASE || "";
+
 export function getToken() { return localStorage.getItem(TOKEN_KEY); }
 export function getUser() {
   try { return JSON.parse(localStorage.getItem(USER_KEY)); }
@@ -21,7 +25,7 @@ async function req(path, { method = "GET", body } = {}) {
   const headers = { "Content-Type": "application/json" };
   const t = getToken();
   if (t) headers["Authorization"] = `Bearer ${t}`;
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     method, headers,
     body: body ? JSON.stringify(body) : undefined,
   });
