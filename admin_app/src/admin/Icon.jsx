@@ -57,6 +57,10 @@ const PATHS = {
   tool:    <><path d="M4 7h8M18 7h2M4 17h2M12 17h8" /><circle cx="15" cy="7" r="2.4" /><circle cx="9" cy="17" r="2.4" /></>,
   phone:   <path d="M5 4h4l2 5-3 2c1 3 3 5 6 6l2-3 5 2v4c0 1-1 2-2 2C9 22 2 15 2 6c0-1 1-2 3-2z" />,
   link:    <><path d="M9 15l6-6" /><path d="M10 6l1-1a4 4 0 0 1 6 6l-1 1" /><path d="M14 18l-1 1a4 4 0 0 1-6-6l1-1" /></>,
+  flag:    <><path d="M6 21V4" /><path d="M6 4h11l-2 3.5L17 11H6z" /></>,
+  xCircle: <><circle cx="12" cy="12" r="9" /><path d="M15 9l-6 6M9 9l6 6" /></>,
+  heart:   <path d="M12 20s-6.5-4-9-8.2A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 9 4.8C18.5 16 12 20 12 20z" />,
+  external: <><path d="M14 4h6v6" /><path d="M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>,
 };
 
 export default function Icon({ name, size = 18, className = "", stroke = 1.7 }) {
