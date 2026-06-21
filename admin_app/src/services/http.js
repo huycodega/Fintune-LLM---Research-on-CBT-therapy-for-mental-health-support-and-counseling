@@ -1,5 +1,10 @@
 import { getToken } from "../api.js";
 
+// Same base as api.js: empty in dev (Vite proxy) or the Railway URL in
+// prod/local-against-prod via VITE_API_BASE — so the service-based pages
+// (dashboard, cases, screening) hit the same backend as the rest of the app.
+const API_BASE = import.meta.env.VITE_API_BASE || "";
+
 export class ApiError extends Error {
   constructor(message, status, payload) {
     super(message);
@@ -20,7 +25,7 @@ export async function adminRequest(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...options.headers };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`/api/admin${path}`, {
+  const response = await fetch(`${API_BASE}/api/admin${path}`, {
     ...options,
     headers,
     body: options.body && typeof options.body !== "string"
