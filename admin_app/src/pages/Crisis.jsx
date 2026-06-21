@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
 import { Avatar, StatCard, Empty, displayName, fmtDateTime } from "../ui.jsx";
+import AppShell from "../admin/AppShell.jsx";
 
 const VIEW_TABS = [
   { id: "open", label: "Open" },
@@ -9,10 +10,11 @@ const VIEW_TABS = [
   { id: "L1", label: "High risk (L1)" },
 ];
 
-export default function Crisis({ search }) {
+export default function Crisis({ onNav, onLogout }) {
   const [data, setData] = useState(null);
   const [view, setView] = useState("open");
   const [windowDays, setWindowDays] = useState(30);
+  const [search, setSearch] = useState("");
 
   function load() {
     api.crisis(windowDays).then(setData).catch(() => setData({ crisis: [], counts: {} }));
@@ -34,12 +36,14 @@ export default function Crisis({ search }) {
   }
 
   return (
-    <>
+    <AppShell active="crisis" onNav={onNav} onLogout={onLogout}
+              title="Crisis Control" subtitle="L0/L1 escalations across all accounts"
+              searchPlaceholder="Search name or message…" searchValue={search} onSearch={setSearch}>
       <div className="stat-row">
-        <StatCard icon="🚨" color="red" value={c.open ?? 0} label="Open crisis cases" />
-        <StatCard icon="⛔" color="amber" value={c.L0 ?? 0} label="L0 — crisis" />
-        <StatCard icon="⚠️" color="blue" value={c.L1 ?? 0} label="L1 — high risk" />
-        <StatCard icon="📊" color="purple" value={c.total ?? 0} label={`Total (${windowDays}d)`} />
+        <StatCard icon="alert" color="red" value={c.open ?? 0} label="Open crisis cases" />
+        <StatCard icon="shield" color="amber" value={c.L0 ?? 0} label="L0 — crisis" />
+        <StatCard icon="shieldCheck" color="blue" value={c.L1 ?? 0} label="L1 — high risk" />
+        <StatCard icon="bars" color="purple" value={c.total ?? 0} label={`Total (${windowDays}d)`} />
       </div>
 
       <div className="panel">
@@ -103,6 +107,6 @@ export default function Crisis({ search }) {
         L0 cases never receive an AI reply — the user is shown crisis resources immediately.
         L1 cases are routed to a clinician. Both appear here so admins retain full oversight.
       </div>
-    </>
+    </AppShell>
   );
 }

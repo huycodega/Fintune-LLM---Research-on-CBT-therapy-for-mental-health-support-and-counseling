@@ -3,7 +3,7 @@ import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api, getUser } from "../api.js";
-import { displayName, fmtDate, fmtDateTime, timeAgo, initials, avatarColor } from "../ui.jsx";
+import { displayName, fmtDate, fmtDateTime, timeAgo, initials, avatarColor, DemoNotice, updatedNow } from "../ui.jsx";
 
 /* ─────────────────────────────────────────────────────────────────
    User Management (admin) — la-* design, matches Lessons/Resources.
@@ -235,7 +235,7 @@ export default function UsersAdmin({ onLogout, onNav }) {
       <Sidebar active="users" onNav={onNav} />
 
       <div className="la-main">
-        <TopBar title="User Management" subtitle={loading ? "Loading…" : `${total} users`}
+        <TopBar title="User Management" subtitle={loading ? "Loading…" : updatedNow()}
                 searchPlaceholder="Search users, emails…" onLogout={onLogout} />
 
         <div className="la-content">
@@ -282,7 +282,7 @@ export default function UsersAdmin({ onLogout, onNav }) {
                 </div>
               </div>
 
-              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — admin user API not reachable</span></div>}
+              {mock && <div style={{ marginBottom: 12 }}><DemoNotice>Sample data shown — user admin API isn't connected yet.</DemoNotice></div>}
 
               <div className="la-table-wrap">
                 <table className="la-table">

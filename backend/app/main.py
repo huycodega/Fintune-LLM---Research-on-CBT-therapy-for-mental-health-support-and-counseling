@@ -20,6 +20,9 @@ from app.api.chat import router as chat_router
 from app.api.admin import router as admin_router
 from app.api.admin_users import router as admin_users_router
 from app.api.ai_moderation import router as ai_moderation_router
+from app.api.admin_reports import router as admin_reports_router
+from app.api.admin_logs import router as admin_logs_router
+from app.api.admin_settings import router as admin_settings_router
 from app.api.conversations import router as conversations_router
 from app.api.screening import router as screening_router
 from app.api.content import router as content_router
@@ -45,6 +48,9 @@ app.include_router(chat_router)
 app.include_router(admin_router)
 app.include_router(admin_users_router)
 app.include_router(ai_moderation_router)
+app.include_router(admin_reports_router)
+app.include_router(admin_logs_router)
+app.include_router(admin_settings_router)
 app.include_router(conversations_router)
 app.include_router(screening_router)
 app.include_router(content_router)

@@ -3,6 +3,7 @@ import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
+import { DemoNotice, updatedNow } from "../ui.jsx";
 
 /* Thumb art is keyed 1..8; map any row to one by position so DB-backed rows
    (UUID ids) still render a stable icon. */
@@ -229,7 +230,7 @@ function ResourceRow({ r, idx, selected, onSelect, onDelete }) {
       </td>
       <td><TypeCell type={r.type} /></td>
       <td><span className={`la-cat la-cat-${CAT_COLOR[r.category] || "indigo"}`}>{r.category}</span></td>
-      <td className="la-muted">{r.duration || "—"}</td>
+      <td className="la-muted">{r.duration || "N/A"}</td>
       <td><StatusBadge status={r.status} /></td>
       <td><Owner name={r.owner} idx={idx} /></td>
       <td onClick={(e) => e.stopPropagation()}>
@@ -264,9 +265,9 @@ function Pagination() {
 /* ── Detail panel ──────────────────────────────────────────────── */
 const TAGS = ["urgent", "hotline", "support", "24/7"];
 const INFO = [
-  ["Resource ID", "RSRC-2024-0123"],
-  ["Created", "12/06/2024 14:22"],
-  ["Last Updated", "13/06/2024 09:18"],
+  ["Resource ID", "RSRC-2026-0123"],
+  ["Created", "12/06/2026 14:22"],
+  ["Last Updated", "13/06/2026 09:18"],
 ];
 
 function fmtDate(iso) {
@@ -389,12 +390,12 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
       // empty 500 screen, and open the urgent item so the panel isn't blank.
       const demo = RESOURCES.map((r) => ({
         ...r,
-        resource_code: `RSRC-2024-0${100 + r.id}`,
+        resource_code: `RSRC-2026-0${100 + r.id}`,
         description: r.desc + " Curated by the clinical team and reviewed for accuracy and tone.",
         tags: r.urgent ? ["urgent", "hotline", "support", "24/7"]
           : [r.category.toLowerCase().split(" ")[0], r.type.toLowerCase()],
-        created_at: "2024-06-12T14:22:00",
-        updated_at: "2024-06-13T09:18:00",
+        created_at: "2026-06-12T14:22:00",
+        updated_at: "2026-06-13T09:18:00",
         usage_count: 1248 - (r.id - 1) * 96,
       }));
       setResources(demo);
@@ -419,7 +420,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     if (!title) return;
     const type = window.prompt("Type (Audio / Article / Video / CBT Tool):", "Article") || "Article";
     if (mock) {
-      const item = { id: `m${Date.now()}`, type, title, desc: "Newly added resource.", description: "Newly added resource — add details next.", category: "General", duration: "", status: "published", owner: "You", resource_code: `RSRC-2024-${String(Date.now()).slice(-4)}`, tags: ["new"], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
+      const item = { id: `m${Date.now()}`, type, title, desc: "Newly added resource.", description: "Newly added resource — add details next.", category: "General", duration: "", status: "published", owner: "You", resource_code: `RSRC-2026-${String(Date.now()).slice(-4)}`, tags: ["new"], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
       commitLocal([item, ...resources]); setSelected(item.id); return;
     }
     try { await api.createResource({ title, type, status: "published" }); await load(); }
@@ -472,7 +473,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
       <div className="la-main">
         <TopBar
           title="Resource Management"
-          subtitle={loading ? "Loading…" : `${stats.total} resources`}
+          subtitle={loading ? "Loading…" : updatedNow()}
           searchPlaceholder="Search resources, categories, owners..."
           onLogout={onLogout}
         />
@@ -506,7 +507,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                 <button className="la-btn-primary" onClick={handleAdd}><Icon name="plus" size={16} /> Add Resource</button>
               </div>
 
-              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — resources API not reachable yet</span></div>}
+              {mock && <div style={{ marginBottom: 12 }}><DemoNotice>Sample data shown — resources API isn't connected yet.</DemoNotice></div>}
               {err && <div style={{ color: "#ef4444", padding: 16 }}>{err}</div>}
               <div className="la-table-wrap">
                 <table className="la-table">

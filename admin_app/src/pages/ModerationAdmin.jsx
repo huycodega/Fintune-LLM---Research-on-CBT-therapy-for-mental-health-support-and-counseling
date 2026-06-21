@@ -3,6 +3,7 @@ import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
+import { DemoNotice, updatedNow } from "../ui.jsx";
 
 /* ─────────────────────────────────────────────────────────────────
    AI Moderation queue (admin).
@@ -473,7 +474,7 @@ export default function ModerationAdmin({ onLogout, onNav }) {
       <div className="la-main">
         <TopBar
           title="AI Moderation"
-          subtitle={loading ? "Loading…" : `${stats.pending} pending · ${stats.escalations} escalations`}
+          subtitle={loading ? "Loading…" : updatedNow()}
           searchPlaceholder="Search messages, users, risk…"
           onLogout={onLogout}
         />
@@ -507,7 +508,7 @@ export default function ModerationAdmin({ onLogout, onNav }) {
                             onClick={() => setFilter(id)}>{label}</button>
                   ))}
                 </div>
-                {mock && <span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — API §7 not wired yet</span>}
+                {mock && <DemoNotice>Sample data shown — moderation API isn't connected yet.</DemoNotice>}
               </div>
 
               <div className="la-table-wrap">

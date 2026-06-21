@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
 import { Avatar, StatCard, Empty, displayName, timeAgo } from "../ui.jsx";
+import AppShell from "../admin/AppShell.jsx";
 
-export default function Cases() {
+export default function Cases({ onNav, onLogout }) {
   const [queue, setQueue] = useState([]);
   const [active, setActive] = useState(null);
 
@@ -15,19 +16,20 @@ export default function Cases() {
     return () => clearInterval(t);
   }, []);
 
-  if (active) {
-    return <ReviewPanel sid={active} onDone={() => { setActive(null); refresh(); }} />;
-  }
-
   const l1 = queue.filter((q) => q.triage_level === "L1").length;
   const l2 = queue.filter((q) => q.triage_level === "L2").length;
 
   return (
+    <AppShell active="cases" onNav={onNav} onLogout={onLogout}
+              title="Intervention Cases" subtitle="Human-in-the-loop review queue">
+      {active ? (
+        <ReviewPanel sid={active} onDone={() => { setActive(null); refresh(); }} />
+      ) : (
     <>
       <div className="stat-row">
-        <StatCard icon="📋" color="purple" value={queue.length} label="Cases in queue" />
-        <StatCard icon="⚠️" color="amber" value={l1} label="High priority (L1)" />
-        <StatCard icon="💬" color="blue" value={l2} label="Moderate (L2)" />
+        <StatCard icon="cases" color="purple" value={queue.length} label="Cases in queue" />
+        <StatCard icon="alert" color="amber" value={l1} label="High priority (L1)" />
+        <StatCard icon="message" color="blue" value={l2} label="Moderate (L2)" />
       </div>
 
       <div className="panel">
@@ -65,6 +67,8 @@ export default function Cases() {
         )}
       </div>
     </>
+      )}
+    </AppShell>
   );
 }
 

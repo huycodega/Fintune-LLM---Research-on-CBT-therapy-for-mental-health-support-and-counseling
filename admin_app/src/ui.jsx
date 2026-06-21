@@ -1,4 +1,5 @@
 // Shared UI helpers for the admin console.
+import Icon from "./admin/Icon.jsx";
 
 const AVATAR_COLORS = [
   "linear-gradient(135deg,#6366F1,#8B5CF6)",
@@ -36,6 +37,29 @@ export function fmtDateTime(iso) {
   return d.toLocaleString("en-GB", {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
+}
+
+// "Updated 20/06/2026 · 14:32" for the moment the page was opened. Used in
+// the topbar subtitle so dashboards read as live rather than frozen in time.
+export function updatedNow() {
+  const d = new Date();
+  return `Updated ${d.toLocaleDateString("en-GB")} · ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+// One consistent, low-key notice shown when a page is rendering sample data
+// because its live API isn't wired yet. Replaces the old amber "warning"
+// banners so it informs without looking like an error.
+export function DemoNotice({ children }) {
+  return (
+    <div className="demo-notice" role="status">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5M12 7.5h.01" />
+      </svg>
+      <span>{children}</span>
+    </div>
+  );
 }
 
 export function timeAgo(iso) {
@@ -77,7 +101,7 @@ export function Avatar({ name, size = 34, className = "cell-avatar" }) {
 export function StatCard({ icon, color, value, label }) {
   return (
     <div className="stat-card">
-      <div className={`stat-icon ${color}`}>{icon}</div>
+      <div className={`stat-icon ${color}`}><Icon name={icon} size={22} /></div>
       <div>
         <div className="stat-value">{value}</div>
         <div className="stat-label">{label}</div>

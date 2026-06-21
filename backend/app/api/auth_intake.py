@@ -11,7 +11,7 @@ from app.core import auth, audit as audit_mod
 from app.core.config import settings
 from app.core.crypto import encrypt_phi
 from app.db import models
-from app.db.session import get_db
+from app.db.session import get_db, db_session
 from app.schemas.api import (
     LoginIn, LoginOut, ConsentIn, IntakeIn,
     RegisterIn, VerifyOtpIn, ResendOtpIn,
@@ -172,6 +172,15 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
                       | (models.User.email == ident.lower()))
               .first())
     if not user or not auth.verify_password(body.password, user.password_hash):
+        # Persist the failed attempt in its own committed session — the request
+        # session is about to roll back when we raise below.
+        with db_session() as audit_s:
+            audit_mod.audit(audit_s, action="login_failed",
+                            actor={"username": ident, "role": "unknown"},
+                            ip=auth.client_ip(request),
+                            resource_type="auth", resource_id=None,
+                            detail={"username": ident[:80],
+                                    "reason": "bad_credentials"})
         raise HTTPException(401, "Invalid username or password")
     if getattr(user, "status", "active") == "suspended":
         raise HTTPException(

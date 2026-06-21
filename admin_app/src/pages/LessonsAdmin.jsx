@@ -3,6 +3,7 @@ import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
+import { DemoNotice, updatedNow } from "../ui.jsx";
 
 /* Thumb art is keyed 1..8; map any row to one by its position so DB-backed
    rows (UUID ids) still get a stable icon. */
@@ -151,14 +152,14 @@ const THUMBS = {
 };
 
 const LESSONS = [
-  { id: 1, title: "Managing Stress Effectively", desc: "Understand and control stress in everyday life", category: "Stress Management", level: "basic", duration: "15 min", status: "published", date: "14/06/2024 09:15", by: "Admin" },
-  { id: 2, title: "Positive Thinking Every Day", desc: "Train a positive mindset to improve your emotions", category: "Positive Thinking", level: "basic", duration: "12 min", status: "published", date: "13/06/2024 21:42", by: "Minh Anh" },
-  { id: 3, title: "Mindfulness in the Present", desc: "Practice mindfulness to live fully in the moment", category: "Mindfulness", level: "intermediate", duration: "18 min", status: "published", date: "12/06/2024 18:53", by: "Trần Quang Huy" },
-  { id: 4, title: "4-7-8 Relaxation Breathing", desc: "The 4-7-8 breathing technique to ease anxiety quickly", category: "Breathing & Relaxation", level: "basic", duration: "8 min", status: "published", date: "11/06/2024 16:05", by: "Lê Thanh Tâm" },
-  { id: 5, title: "Building Healthy Habits", desc: "Step by step toward lasting positive habits", category: "Habits", level: "intermediate", duration: "20 min", status: "draft", date: "10/06/2024 14:30", by: "Phạm Gia Bảo" },
-  { id: 6, title: "Facing Anxiety", desc: "Recognize and overcome anxiety sustainably", category: "Stress Management", level: "intermediate", duration: "16 min", status: "draft", date: "09/06/2024 11:22", by: "Vũ Thùy Linh" },
-  { id: 7, title: "Positive Communication Skills", desc: "Communicate effectively and build healthy relationships", category: "Social Skills", level: "advanced", duration: "22 min", status: "published", date: "08/06/2024 10:45", by: "Hoàng Nam" },
-  { id: 8, title: "Sleep Well, Live Well", desc: "Habits to improve sleep and restore energy", category: "Mental Wellness", level: "basic", duration: "14 min", status: "published", date: "07/06/2024 09:30", by: "Đặng Thu Trang" },
+  { id: 1, title: "Managing Stress Effectively", desc: "Understand and control stress in everyday life", category: "Stress Management", level: "basic", duration: "15 min", status: "published", date: "14/06/2026 09:15", by: "Admin" },
+  { id: 2, title: "Positive Thinking Every Day", desc: "Train a positive mindset to improve your emotions", category: "Positive Thinking", level: "basic", duration: "12 min", status: "published", date: "13/06/2026 21:42", by: "Minh Anh" },
+  { id: 3, title: "Mindfulness in the Present", desc: "Practice mindfulness to live fully in the moment", category: "Mindfulness", level: "intermediate", duration: "18 min", status: "published", date: "12/06/2026 18:53", by: "Trần Quang Huy" },
+  { id: 4, title: "4-7-8 Relaxation Breathing", desc: "The 4-7-8 breathing technique to ease anxiety quickly", category: "Breathing & Relaxation", level: "basic", duration: "8 min", status: "published", date: "11/06/2026 16:05", by: "Lê Thanh Tâm" },
+  { id: 5, title: "Building Healthy Habits", desc: "Step by step toward lasting positive habits", category: "Habits", level: "intermediate", duration: "20 min", status: "draft", date: "10/06/2026 14:30", by: "Phạm Gia Bảo" },
+  { id: 6, title: "Facing Anxiety", desc: "Recognize and overcome anxiety sustainably", category: "Stress Management", level: "intermediate", duration: "16 min", status: "draft", date: "09/06/2026 11:22", by: "Vũ Thùy Linh" },
+  { id: 7, title: "Positive Communication Skills", desc: "Communicate effectively and build healthy relationships", category: "Social Skills", level: "advanced", duration: "22 min", status: "published", date: "08/06/2026 10:45", by: "Hoàng Nam" },
+  { id: 8, title: "Sleep Well, Live Well", desc: "Habits to improve sleep and restore energy", category: "Mental Wellness", level: "basic", duration: "14 min", status: "published", date: "07/06/2026 09:30", by: "Đặng Thu Trang" },
 ];
 
 const POPULAR = [
@@ -467,7 +468,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
       <div className="la-main">
         <TopBar
           title="CBT Lessons Management"
-          subtitle={loading ? "Loading…" : `${stats.total} lessons`}
+          subtitle={loading ? "Loading…" : updatedNow()}
           searchPlaceholder="Search lessons, categories, tags..."
           onLogout={onLogout}
         />
@@ -491,7 +492,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
             {/* Table card */}
             <div className="la-card la-table-card">
               <FilterBar onAdd={handleAdd} />
-              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — lessons API not reachable yet</span></div>}
+              {mock && <div style={{ marginBottom: 12 }}><DemoNotice>Sample data shown — lessons API isn't connected yet.</DemoNotice></div>}
               {err && <div className="la-empty" style={{ color: "#ef4444", padding: 16 }}>{err}</div>}
               <div className="la-table-wrap">
                 <table className="la-table">
