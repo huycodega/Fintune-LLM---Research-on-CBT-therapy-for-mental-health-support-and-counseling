@@ -2,25 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
-import ContentFormModal from "../admin/ContentFormModal.jsx";
 import { api } from "../api.js";
-
-/* Field layout for the Resource add/edit modal — mirrors ResourceIn in
-   backend/app/schemas/api.py so what the form sends is exactly what the API
-   accepts. */
-const RESOURCE_FIELDS = [
-  { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Grounding techniques for panic" },
-  { name: "type", label: "Type", type: "select", half: true, options: ["Article", "Audio", "Video", "CBT Tool"] },
-  { name: "status", label: "Status", type: "select", half: true, options: ["published", "draft", "update", "urgent"] },
-  { name: "category", label: "Category", type: "text", half: true, placeholder: "e.g. Anxiety" },
-  { name: "duration", label: "Duration", type: "text", half: true, placeholder: "e.g. 8 min read" },
-  { name: "url", label: "URL", type: "url", placeholder: "https://… (link to the resource)" },
-  { name: "owner", label: "Owner", type: "text", half: true, placeholder: "e.g. Clinical team" },
-  { name: "tags", label: "Tags", type: "tags", half: true, help: "Comma-separated", placeholder: "anxiety, breathing" },
-  { name: "description", label: "Short description", type: "textarea", rows: 2, placeholder: "One-line summary shown in the list." },
-  { name: "content", label: "Content / notes", type: "textarea", rows: 5, placeholder: "Full body, transcript or clinician notes." },
-  { name: "urgent", label: "Mark as urgent", type: "checkbox", help: "Flags this resource for immediate attention" },
-];
+import { DemoNotice, updatedNow } from "../ui.jsx";
 
 /* Thumb art is keyed 1..8; map any row to one by position so DB-backed rows
    (UUID ids) still render a stable icon. */
@@ -214,6 +197,15 @@ const THUMBS = {
   6: ["🌙", "linear-gradient(135deg,#c7d2fe,#93c5fd)"],
   7: ["💪", "linear-gradient(135deg,#fed7aa,#fdba74)"],
 };
+const RESOURCES = [
+  { id: 1, type: "Audio",    title: "5 Minutes of Deep Breathing Daily", desc: "A guided deep-breathing practice to relieve stress quickly.", category: "Stress Relief", duration: "05:23", status: "published", owner: "Trần Quang Huy" },
+  { id: 2, type: "Article",  title: "Understanding Anxiety and How to Manage It", desc: "An article covering the basics of anxiety and how to control it.", category: "Psychology Knowledge", duration: "", status: "published", owner: "Lê Thanh Tâm" },
+  { id: 3, type: "Video",    title: "Mindfulness Meditation for Beginners", desc: "A 10-minute mindfulness meditation guide for beginners.", category: "Mindfulness", duration: "10:12", status: "published", owner: "Vũ Thùy Linh" },
+  { id: 4, type: "Article",  title: "Emergency Support Hotline", desc: "24/7 contact information for emergency situations.", category: "Emergency Support", duration: "", status: "urgent", owner: "Phạm Gia Bảo", urgent: true },
+  { id: 5, type: "CBT Tool", title: "Thought Journal (CBT)", desc: "A tool to record and analyze thoughts using the CBT method.", category: "CBT", duration: "", status: "published", owner: "Hoàng Nam" },
+  { id: 6, type: "Article",  title: "Managing Sleep Effectively", desc: "Tips and habits to improve sleep quality every day.", category: "Mental Wellness", duration: "", status: "update", owner: "Đặng Thu Trang" },
+  { id: 7, type: "Video",    title: "Building Self-Confidence", desc: "A video guide on building and maintaining self-confidence.", category: "Personal Development", duration: "08:45", status: "published", owner: "Nguyễn Hoài An" },
+];
 const TYPE_TO_TAB = { Audio: "audio", Article: "articles", Video: "video", "CBT Tool": "tools" };
 
 /* ── Resource row ──────────────────────────────────────────────── */
@@ -238,7 +230,7 @@ function ResourceRow({ r, idx, selected, onSelect, onDelete }) {
       </td>
       <td><TypeCell type={r.type} /></td>
       <td><span className={`la-cat la-cat-${CAT_COLOR[r.category] || "indigo"}`}>{r.category}</span></td>
-      <td className="la-muted">{r.duration || "—"}</td>
+      <td className="la-muted">{r.duration || "N/A"}</td>
       <td><StatusBadge status={r.status} /></td>
       <td><Owner name={r.owner} idx={idx} /></td>
       <td onClick={(e) => e.stopPropagation()}>
@@ -249,23 +241,19 @@ function ResourceRow({ r, idx, selected, onSelect, onDelete }) {
 }
 
 /* ── Pagination ────────────────────────────────────────────────── */
-function Pagination({ total = 0, pageSize = 10 }) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const shown = Math.min(total, pageSize);
-  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
+function Pagination() {
+  const pages = [1, 2, 3, 4, "…", 14];
   return (
     <div className="la-pagination">
-      <div className="la-page-info">
-        {total === 0 ? "No resources yet" : `Showing 1–${shown} / ${total} resources`}
-      </div>
+      <div className="la-page-info">Showing 1–10 / 326 resources</div>
       <div className="la-page-controls">
-        <button className="la-page-btn" disabled><Icon name="chevronsLeft" size={14} /></button>
-        <button className="la-page-btn" disabled><Icon name="chevronLeft" size={15} /></button>
-        {pages.map((p) => (
-          <button key={p} className={`la-page-btn ${p === 1 ? "active" : ""}`}>{p}</button>
+        <button className="la-page-btn"><Icon name="chevronsLeft" size={14} /></button>
+        <button className="la-page-btn"><Icon name="chevronLeft" size={15} /></button>
+        {pages.map((p, i) => (
+          <button key={i} className={`la-page-btn ${p === 1 ? "active" : ""} ${p === "…" ? "ellipsis" : ""}`} disabled={p === "…"}>{p}</button>
         ))}
-        <button className="la-page-btn" disabled={pageCount <= 1}><Icon name="chevronRight" size={15} /></button>
-        <button className="la-page-btn" disabled={pageCount <= 1}><Icon name="chevronsRight" size={14} /></button>
+        <button className="la-page-btn"><Icon name="chevronRight" size={15} /></button>
+        <button className="la-page-btn"><Icon name="chevronsRight" size={14} /></button>
       </div>
       <div className="la-select-group">
         <select className="la-select"><option>10 / page</option></select>
@@ -275,6 +263,13 @@ function Pagination({ total = 0, pageSize = 10 }) {
 }
 
 /* ── Detail panel ──────────────────────────────────────────────── */
+const TAGS = ["urgent", "hotline", "support", "24/7"];
+const INFO = [
+  ["Resource ID", "RSRC-2026-0123"],
+  ["Created", "12/06/2026 14:22"],
+  ["Last Updated", "13/06/2026 09:18"],
+];
+
 function fmtDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -381,8 +376,6 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
   const [loading, setLoading] = useState(true);
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
-  // null = closed; {} = add new; {...r} = editing an existing resource.
-  const [formItem, setFormItem] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -393,13 +386,23 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
       setMock(false);
       setErr("");
     } catch (e) {
-      // Backend unreachable → show an empty list with an error. Never inject
-      // demo data so the page only ever reflects real DB content.
-      setResources([]);
-      setStats({ total: 0, urgent: 0, by_type: {} });
-      setSelected(null);
-      setMock(false);
-      setErr("Couldn't reach the resources API.");
+      // Backend not wired yet → demo with representative data instead of an
+      // empty 500 screen, and open the urgent item so the panel isn't blank.
+      const demo = RESOURCES.map((r) => ({
+        ...r,
+        resource_code: `RSRC-2026-0${100 + r.id}`,
+        description: r.desc + " Curated by the clinical team and reviewed for accuracy and tone.",
+        tags: r.urgent ? ["urgent", "hotline", "support", "24/7"]
+          : [r.category.toLowerCase().split(" ")[0], r.type.toLowerCase()],
+        created_at: "2026-06-12T14:22:00",
+        updated_at: "2026-06-13T09:18:00",
+        usage_count: 1248 - (r.id - 1) * 96,
+      }));
+      setResources(demo);
+      setStats({ total: demo.length, urgent: demo.filter((x) => x.urgent || x.status === "urgent").length, by_type: {} });
+      setSelected((prev) => (prev && demo.some((r) => r.id === prev) ? prev : (demo.find((r) => r.urgent)?.id ?? demo[0].id)));
+      setMock(true);
+      setErr("");
     } finally {
       setLoading(false);
     }
@@ -412,26 +415,16 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     setStats((s) => ({ ...s, total: list.length, urgent: list.filter((x) => x.urgent || x.status === "urgent").length }));
   }
 
-  function handleAdd() { setFormItem({}); }
-
-  async function handleFormSubmit(payload) {
-    const editingId = formItem && formItem.id;
+  async function handleAdd() {
+    const title = window.prompt("New resource title:");
+    if (!title) return;
+    const type = window.prompt("Type (Audio / Article / Video / CBT Tool):", "Article") || "Article";
     if (mock) {
-      if (editingId) {
-        commitLocal(resources.map((x) => x.id === editingId ? { ...x, ...payload, desc: payload.description } : x));
-      } else {
-        const item = {
-          id: `m${Date.now()}`, ...payload, desc: payload.description,
-          resource_code: `RSRC-2024-${String(Date.now()).slice(-4)}`,
-          created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0,
-        };
-        commitLocal([item, ...resources]); setSelected(item.id);
-      }
-      return;
+      const item = { id: `m${Date.now()}`, type, title, desc: "Newly added resource.", description: "Newly added resource — add details next.", category: "General", duration: "", status: "published", owner: "You", resource_code: `RSRC-2026-${String(Date.now()).slice(-4)}`, tags: ["new"], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
+      commitLocal([item, ...resources]); setSelected(item.id); return;
     }
-    if (editingId) await api.updateResource(editingId, payload);
-    else await api.createResource(payload);
-    await load();
+    try { await api.createResource({ title, type, status: "published" }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleDelete(r) {
@@ -446,9 +439,12 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     catch (e) { alert(e.message); }
   }
 
-  function handleEdit(r) {
-    // DetailPanel passes the full row; normalise desc → description for the form.
-    setFormItem({ ...r, description: r.description ?? r.desc ?? "" });
+  async function handleEdit(r) {
+    const title = window.prompt("Edit title:", r.title);
+    if (title == null) return;
+    if (mock) { commitLocal(resources.map((x) => x.id === r.id ? { ...x, title } : x)); return; }
+    try { await api.updateResource(r.id, { title }); await load(); }
+    catch (e) { alert(e.message); }
   }
 
   async function handleTogglePublish(r) {
@@ -477,10 +473,9 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
       <div className="la-main">
         <TopBar
           title="Resource Management"
-          subtitle={loading ? "Loading…" : `${stats.total} resources`}
+          subtitle={loading ? "Loading…" : updatedNow()}
           searchPlaceholder="Search resources, categories, owners..."
           onLogout={onLogout}
-          onNav={onNav}
         />
 
         <div className={`la-content ${(panelOpen || loading) ? "" : "la-content-nopanel"}`}>
@@ -512,7 +507,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                 <button className="la-btn-primary" onClick={handleAdd}><Icon name="plus" size={16} /> Add Resource</button>
               </div>
 
-              {mock && <div style={{ marginBottom: 12 }}><span className="mz-mock-flag"><Icon name="alert" size={12} /> Demo data — resources API not reachable yet</span></div>}
+              {mock && <div style={{ marginBottom: 12 }}><DemoNotice>Sample data shown — resources API isn't connected yet.</DemoNotice></div>}
               {err && <div style={{ color: "#ef4444", padding: 16 }}>{err}</div>}
               <div className="la-table-wrap">
                 <table className="la-table">
@@ -535,7 +530,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                 </table>
               </div>
 
-              <Pagination total={stats.total || resources.length} />
+              <Pagination />
             </div>
           </div>
 
@@ -544,18 +539,6 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
             : panelOpen && <DetailPanel resource={selectedResource} onClose={() => setSelected(null)} onEdit={handleEdit} onTogglePublish={handleTogglePublish} />}
         </div>
       </div>
-
-      {formItem && (
-        <ContentFormModal
-          title={formItem.id ? "Edit Resource" : "Add Resource"}
-          subtitle={formItem.id ? "Update this resource's details." : "Add a new resource to the library."}
-          fields={RESOURCE_FIELDS}
-          initial={formItem}
-          submitLabel={formItem.id ? "Save changes" : "Create resource"}
-          onSubmit={handleFormSubmit}
-          onClose={() => setFormItem(null)}
-        />
-      )}
     </div>
   );
 }

@@ -505,3 +505,19 @@ class Appointment(Base):
 
 Index("idx_appointments_user", Appointment.user_id)
 Index("idx_appointments_expert_date", Appointment.psychologist_id, Appointment.date)
+
+
+# ============================================================
+# app settings  (admin-managed system configuration)
+# ============================================================
+class AppSetting(Base):
+    """Singleton key/value store for the admin Settings page. One row per
+    section (general, privacy, notifications, hotline, backup, thresholds,
+    rules). `value` is a JSON blob whose shape is owned by the section's
+    serializer in app.services.settings_store. NOT PHI — system config."""
+    __tablename__ = "app_settings"
+    section: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_by: Mapped[Optional[str]] = mapped_column(String)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())

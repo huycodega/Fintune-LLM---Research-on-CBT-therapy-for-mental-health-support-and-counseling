@@ -2,42 +2,23 @@ import { useState, useEffect } from "react";
 import { getUser, clearSession, api } from "./api.js";
 import { initials, displayName } from "./ui.jsx";
 import Login from "./pages/Login.jsx";
-import Overview from "./pages/Overview.jsx";
-import Cases from "./pages/Cases.jsx";
-import Crisis from "./pages/Crisis.jsx";
-import UsersAdmin from "./pages/UsersAdmin.jsx";
-import ModerationAdmin from "./pages/ModerationAdmin.jsx";
-import LessonsAdmin from "./pages/LessonsAdmin.jsx";
-import ResourcesAdmin from "./pages/ResourcesAdmin.jsx";
-import ExpertsAdmin from "./pages/ExpertsAdmin.jsx";
-import LaSidebar from "./admin/Sidebar.jsx";
-import LaTopBar from "./admin/TopBar.jsx";
-
-/* Self-contained la-* pages bring their own dark-navy shell. */
-const LA_PAGES = {
-  users:      UsersAdmin,
-  moderation: ModerationAdmin,
-  lessons:    LessonsAdmin,
-  resources:  ResourcesAdmin,
-};
+import DashboardPage from "./components/dashboard/DashboardPage.jsx";
+import Users from "./pages/Users.jsx";
+import CaseManagementPage from "./components/cases/CaseManagementPage.jsx";
+import ModerationPage from "./pages/ai-moderation/ModerationPage.jsx";
 
 const NAV = [
-  { id: "overview",   icon: "📊", label: "Overview" },
-  { id: "users",      icon: "👥", label: "User management" },
-  { id: "cases",      icon: "📋", label: "Cases to handle", badgeKey: "pending" },
-  { id: "crisis",     icon: "🚨", label: "Crisis control", badgeKey: "crisis" },
-  { id: "moderation", icon: "🤖", label: "AI Moderation" },
-  { id: "lessons",    icon: "📚", label: "CBT Lessons" },
-  { id: "resources",  icon: "🗂️", label: "Resources" },
-  { id: "experts",    icon: "🧑‍⚕️", label: "Psychologists" },
+  { id: "overview", icon: "📊", label: "Tổng quan" },
+  { id: "users",    icon: "👥", label: "User management" },
+  { id: "moderation", icon: "🤖", label: "AI Moderation", badgeKey: "pending" },
+  { id: "cases",    icon: "📋", label: "Ca cần xử lý" },
 ];
 
 const PAGE_META = {
-  overview: { title: "Overview", sub: "System health & key metrics" },
+  overview: { title: "Tổng quan", sub: "Chỉ số vận hành và tín hiệu cần chú ý" },
   users:    { title: "User management", sub: "Accounts, status & per-user case history" },
-  cases:    { title: "Cases to handle", sub: "Human-in-the-loop review queue" },
-  crisis:   { title: "Crisis control", sub: "L0/L1 escalations across all accounts" },
-  experts:  { title: "Psychologists", sub: "Experts & consultation appointments" },
+  moderation: { title: "AI Moderation", sub: "Kiểm duyệt phản hồi AI và mức độ rủi ro" },
+  cases:    { title: "Ca cần xử lý", sub: "Phân công và theo dõi ca rủi ro" },
 };
 
 function Sidebar({ page, onNav, badges }) {
@@ -76,7 +57,7 @@ function Sidebar({ page, onNav, badges }) {
 function Topbar({ page, user, onLogout, search, onSearch }) {
   const [menu, setMenu] = useState(false);
   const meta = PAGE_META[page] || {};
-  const showSearch = page === "users" || page === "crisis";
+  const showSearch = page === "users";
   return (
     <header className="admin-topbar">
       <div>
@@ -127,7 +108,8 @@ export default function App() {
   const [user, setUser] = useState(getUser());
   const [page, setPage] = useState("overview");
   const [search, setSearch] = useState("");
-  const [badges, setBadges] = useState({ pending: 0, crisis: 0 });
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [badges, setBadges] = useState({ pending: 0 });
 
   // Lightweight badge poll so the sidebar shows live counts.
   useEffect(() => {
@@ -136,7 +118,7 @@ export default function App() {
     async function poll() {
       try {
         const o = await api.overview();
-        if (alive) setBadges({ pending: o.pending_review, crisis: o.crisis_open });
+        if (alive) setBadges({ pending: o.pending_review });
       } catch { /* ignore */ }
     }
     poll();
@@ -145,40 +127,21 @@ export default function App() {
   }, [user]);
 
   function logout() { clearSession(); setUser(null); }
-  function nav(p) { setPage(p); setSearch(""); }
+  function nav(p, userId = null) { setPage(p); setSearch(""); setSelectedUserId(userId); }
 
   if (!user) return <Login onAuth={setUser} />;
 
-  // la-* pages render their own full dark-navy shell.
-  if (LA_PAGES[page]) {
-    const LaPage = LA_PAGES[page];
-    return <LaPage onLogout={logout} onNav={nav} />;
-  }
-
-  const knownOld = ["overview", "cases", "crisis", "experts"];
   return (
-    <div className="la-shell">
-      <LaSidebar active={page} onNav={nav} />
-      <div className="la-main">
-        <LaTopBar
-          title={PAGE_META[page]?.title || ""}
-          subtitle={PAGE_META[page]?.sub || ""}
-          onLogout={logout}
-          onNav={nav}
-        />
+    <div className="admin-shell">
+      <Sidebar page={page} onNav={nav} badges={badges} />
+      <div className="admin-main">
+        <Topbar page={page} user={user} onLogout={logout}
+                search={search} onSearch={setSearch} />
         <div className="admin-content">
-          {page === "overview" && <Overview onNav={nav} />}
-          {page === "cases" && <Cases />}
-          {page === "crisis" && <Crisis search="" />}
-          {page === "experts" && <ExpertsAdmin />}
-          {!knownOld.includes(page) && (
-            <div className="admin-placeholder">
-              <div className="admin-placeholder-icon">🚧</div>
-              <h2>Coming soon</h2>
-              <p>This section hasn’t been built yet.</p>
-              <button className="admin-btn" onClick={() => nav("overview")}>Back to Overview</button>
-            </div>
-          )}
+          {page === "overview" && <DashboardPage onNav={nav} />}
+          {page === "users" && <Users search={search} selectedUserId={selectedUserId} onOpenCase={() => setPage("cases")} />}
+          {page === "moderation" && <ModerationPage />}
+          {page === "cases" && <CaseManagementPage onNav={nav} />}
         </div>
       </div>
     </div>

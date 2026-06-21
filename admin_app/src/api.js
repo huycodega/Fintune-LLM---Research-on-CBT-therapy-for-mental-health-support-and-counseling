@@ -40,6 +40,20 @@ async function req(path, { method = "GET", body } = {}) {
   return data;
 }
 
+async function download(path) {
+  const headers = {};
+  const t = getToken();
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+  const res = await fetch(`${API_BASE}/api${path}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : `Error ${res.status}`);
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "report.csv";
+  return { blob: await res.blob(), filename };
+}
+
 function qs(params) {
   const s = new URLSearchParams(
     Object.entries(params || {}).filter(([, v]) => v !== "" && v != null)
@@ -66,6 +80,8 @@ export const api = {
 
   // --- dashboard ---
   overview: () => req("/admin/overview"),
+  reports: (params) => req(`/admin/reports${qs(params)}`),
+  exportReport: (params) => download(`/admin/reports/export${qs(params)}`),
 
   // --- user management ---
   users: (params) => req(`/admin/users${qs(params)}`),
@@ -116,16 +132,16 @@ export const api = {
   deleteResource: (rid) =>
     req(`/admin/resources/${rid}`, { method: "DELETE" }),
 
-  // --- psychologists + appointments (ExpertsAdmin) ---
-  experts: () => req("/admin/psychologists"),
-  createExpert: (payload) =>
-    req("/admin/psychologists", { method: "POST", body: payload }),
-  updateExpert: (eid, payload) =>
-    req(`/admin/psychologists/${eid}`, { method: "PATCH", body: payload }),
-  deleteExpert: (eid) =>
-    req(`/admin/psychologists/${eid}`, { method: "DELETE" }),
-  appointments: (expertId = "") =>
-    req(`/admin/appointments${expertId ? `?expert_id=${expertId}` : ""}`),
-  setAppointmentStatus: (aid, status) =>
-    req(`/admin/appointments/${aid}`, { method: "PATCH", body: { status } }),
+  // --- system logs (LogsAdmin) ---
+  logs: (params) => req(`/admin/logs${qs(params)}`),
+  logsStats: () => req("/admin/logs/stats"),
+  logDetail: (logId) => req(`/admin/logs/${logId}`),
+
+  // --- system settings (SettingsAdmin) ---
+  settings: () => req("/admin/settings"),
+  settingsSection: (section) => req(`/admin/settings/${section}`),
+  updateSettings: (section, value) =>
+    req(`/admin/settings/${section}`, { method: "PUT", body: value }),
+  settingsBackup: () => req("/admin/settings/backup", { method: "POST" }),
+  settingsRestore: () => req("/admin/settings/restore", { method: "POST" }),
 };

@@ -14,6 +14,9 @@
 | Resource Management (redesign + animation) | `admin_app` | ✅ Xong (demo fallback) |
 | **AI Moderation** (mới) | `admin_app` | ✅ Xong (demo fallback) |
 | **User Management + Assign Clinician** (mới) | `admin_app` | ✅ Xong (demo fallback) |
+| **Reports & Analytics** | `admin_app` + `backend` | ✅ Xong (API thật + demo fallback) |
+| **System Logs** | `admin_app` | ✅ Xong (API audit + demo fallback) |
+| **System Settings** | `admin_app` | ✅ Xong (UI state, validation, save feedback) |
 
 Tất cả animation tôn trọng `prefers-reduced-motion`. Icon dùng **SVG inline** (không phụ thuộc Flaticon/asset ngoài, sạch bản quyền, animate được).
 
@@ -68,11 +71,31 @@ Theo design doc §5 + §7, FE chịu trách nhiệm mapping **L0–L3** (§2.3):
 - List + filter (status tabs + risk L0–L3 + search), detail (hồ sơ, screening, lịch sử ca).
 - **Đổi status** (suspend/re-activate), **đổi role**, và **gán clinician** (§4.4: mỗi user tối đa 1 phân công active).
 
+### 2.5. Reports & Analytics — `src/pages/ReportsAdmin.jsx`
+- Dashboard responsive gồm KPI, daily screening, risk donut, popular topics, case status, monthly summary và insights.
+- Dữ liệu thật từ `GET /api/admin/reports?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`; giới hạn khoảng báo cáo 366 ngày và yêu cầu admin auth.
+- `GET /api/admin/reports/export` xuất monthly summary dạng CSV UTF-8.
+- Aggregation không giải mã nội dung chat: risk lấy từ PHQ-9/GAD-7, topic lấy từ metadata `analysis`, processing/approval lấy từ session và review queue.
+- Date presets/custom range gọi lại API; UI chỉ dùng demo fallback có cảnh báo khi backend không khả dụng.
+
+### 2.6. System Logs — `src/pages/LogsAdmin.jsx`
+- KPI, filter bar, audit table, pagination, event detail và recent critical events theo dark navy/indigo admin system.
+- Giữ `GET /api/admin/audit` hiện có; filter, search, pagination, row selection và detail switching chạy local trên response mà không đổi API contract.
+- Refresh gọi lại audit API; khi API lỗi hoặc chưa có audit row, UI hiển thị demo fallback có cảnh báo rõ ràng.
+- Responsive: sidebar icon-only trên tablet, drawer trên mobile, detail chuyển thành full-screen bottom sheet.
+
+### 2.7. System Settings — `src/pages/SettingsAdmin.jsx`
+- Grid 3 cột gồm General, Roles & Permissions, Privacy & Security, AI thresholds, Moderation Rules, Notifications, Emergency Hotline, Integrations và Backup & Restore.
+- Controlled inputs/selects/toggles, validation HTML cho field bắt buộc/email và trạng thái `Saved` có check icon sau submit.
+- Role menus, editable risk/action settings, configure integration và backup/restore feedback chạy local vì hiện chưa có settings API trong backend.
+- Responsive 2 cột trên tablet, 1 cột trên mobile; sidebar icon-only/drawer và table cuộn ngang.
+
 ---
 
 ## 3. API client (`admin_app/src/api.js`)
 Đã thêm các method theo design doc §7 (chưa wire backend):
 - `assignClinician`, `moderationStats/Items/Item/Claim/Approve/EditResponse/Reject/NeedImprovement`.
+- `reports`, `exportReport`.
 
 ## 4. ⚠️ Lưu ý cho Backend (Đức)
 - Các API mới (`/api/admin/ai-moderation/*`, `/api/admin/users/*/assign-clinician`) **chưa wire** → các trang admin tự **fallback demo data** (có cờ *"Demo data"*), thao tác CRUD chạy local; khi backend xong, FE **tự dùng API thật** (try real → fallback). Không cần sửa FE.

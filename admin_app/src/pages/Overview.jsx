@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
 import { StatCard, Empty } from "../ui.jsx";
+import AppShell from "../admin/AppShell.jsx";
 
-export default function Overview({ onNav }) {
+export default function Overview({ onNav, onLogout }) {
   const [o, setO] = useState(null);
   const [stats, setStats] = useState(null);
   const [err, setErr] = useState("");
@@ -12,19 +13,19 @@ export default function Overview({ onNav }) {
     api.stats().then(setStats).catch(() => {});
   }, []);
 
-  if (err) return <Empty icon="⚠️" text={err} />;
-  if (!o) return <div className="loading">Loading overview…</div>;
-
   const byLevel = stats?.by_triage_level || {};
 
   return (
+    <AppShell active="overview" onNav={onNav} onLogout={onLogout}
+              title="Overview" subtitle="System health & key metrics">
+      {err ? <Empty icon="⚠️" text={err} /> : !o ? <div className="loading">Loading overview…</div> : (
     <>
       <div className="stat-row">
-        <StatCard icon="👥" color="purple" value={o.total_users} label="Total users" />
-        <StatCard icon="🟢" color="green" value={o.active_7d} label="Active (7 days)" />
-        <StatCard icon="📋" color="amber" value={o.pending_review} label="Cases pending review" />
-        <StatCard icon="🚨" color="red" value={o.crisis_open} label="Open crisis cases" />
-        <StatCard icon="⛔" color="blue" value={o.suspended_users} label="Suspended accounts" />
+        <StatCard icon="users" color="purple" value={o.total_users} label="Total users" />
+        <StatCard icon="checkCircle" color="green" value={o.active_7d} label="Active (7 days)" />
+        <StatCard icon="cases" color="amber" value={o.pending_review} label="Cases pending review" />
+        <StatCard icon="alert" color="red" value={o.crisis_open} label="Open crisis cases" />
+        <StatCard icon="lock" color="blue" value={o.suspended_users} label="Suspended accounts" />
       </div>
 
       <div className="split">
@@ -73,5 +74,7 @@ export default function Overview({ onNav }) {
         </div>
       </div>
     </>
+      )}
+    </AppShell>
   );
 }

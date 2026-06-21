@@ -31,6 +31,21 @@ const PATHS = {
   clock:   <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   alert:   <><path d="M12 3.5l9 16.5H3z" /><path d="M12 10v4.5M12 17.5h.01" /></>,
   arrowUp: <><path d="M12 19V6" /><path d="M6 12l6-6 6 6" /></>,
+  arrowDown: <><path d="M12 5v13" /><path d="M6 12l6 6 6-6" /></>,
+  download: <><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></>,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  shieldCheck: <><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z" /><path d="M8.5 12l2.2 2.2 4.8-5" /></>,
+  lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></>,
+  refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M6.1 8a7 7 0 0 1 11.7-2.1L20 8M4 16l2.2 2.1A7 7 0 0 0 18 16" /></>,
+  sliders: <><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4" /><circle cx="16" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="14" cy="18" r="2" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M4 7l8 6 8-6" /></>,
+  message: <><path d="M4 4h16v13H9l-5 4z" /><path d="M8 9h8M8 13h5" /></>,
+  plug: <><path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4" /></>,
+  backup: <><path d="M5 18a4 4 0 0 1 1-7.9A6 6 0 0 1 17.5 8 4.5 4.5 0 0 1 18 17H8" /><path d="M12 20v-8M8.5 15.5 12 12l3.5 3.5" /></>,
+  restore: <><path d="M4 8V3m0 0h5M4 3l3.5 3.5A8 8 0 1 1 5 15" /><path d="M12 8v5l3 2" /></>,
+  key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l8-8M15 8l3 3M17 6l2 2" /></>,
   // actions
   eye:     <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
   pencil:  <><path d="M4 20h4L18 10l-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
@@ -44,6 +59,10 @@ const PATHS = {
   tool:    <><path d="M4 7h8M18 7h2M4 17h2M12 17h8" /><circle cx="15" cy="7" r="2.4" /><circle cx="9" cy="17" r="2.4" /></>,
   phone:   <path d="M5 4h4l2 5-3 2c1 3 3 5 6 6l2-3 5 2v4c0 1-1 2-2 2C9 22 2 15 2 6c0-1 1-2 3-2z" />,
   link:    <><path d="M9 15l6-6" /><path d="M10 6l1-1a4 4 0 0 1 6 6l-1 1" /><path d="M14 18l-1 1a4 4 0 0 1-6-6l1-1" /></>,
+  flag:    <><path d="M6 21V4" /><path d="M6 4h11l-2 3.5L17 11H6z" /></>,
+  xCircle: <><circle cx="12" cy="12" r="9" /><path d="M15 9l-6 6M9 9l6 6" /></>,
+  heart:   <path d="M12 20s-6.5-4-9-8.2A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 9 4.8C18.5 16 12 20 12 20z" />,
+  external: <><path d="M14 4h6v6" /><path d="M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>,
 };
 
 export default function Icon({ name, size = 18, className = "", stroke = 1.7 }) {
