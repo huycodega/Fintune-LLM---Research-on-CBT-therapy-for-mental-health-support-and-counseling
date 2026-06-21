@@ -51,114 +51,139 @@ function Checklist({ checklist = {} }) {
   );
 }
 
-function ActionEditor({ mode, currentResponse, busy, onCancel, onSubmit }) {
-  const [reason, setReason] = useState("");
-  const [editedResponse, setEditedResponse] = useState(currentResponse || "");
+function ReviewEditor({ detail, busy, onApprove, onReject, onEditResponse, onNeedImprovement }) {
+  const drafts = detail.drafts || [];
+  const [idx, setIdx] = useState(0);
+  const [editText, setEditText] = useState("");
   const [note, setNote] = useState("");
   const [library, setLibrary] = useState([]);
+  const [reasonMode, setReasonMode] = useState(null);   // "reject" | "improve"
+  const [reason, setReason] = useState("");
 
+  // Reset when a different session is opened.
   useEffect(() => {
-    setReason("");
-    setEditedResponse(currentResponse || "");
-    setNote("");
-  }, [mode, currentResponse]);
+    setIdx(0);
+    setEditText(drafts[0]?.response ?? detail.aiResponse ?? "");
+    setNote(""); setReasonMode(null); setReason("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.id]);
 
   // Load the published library so recommendations are swappable.
   useEffect(() => {
-    if (mode !== "edit") return;
     Promise.all([api.lessons().catch(() => ({})), api.resources().catch(() => ({}))])
-      .then(([L, R]) => {
-        setLibrary([
-          ...(L.lessons || []).filter((l) => l.status === "published")
-            .map((l) => ({ kind: "lesson", id: l.id, title: l.title, duration: l.duration })),
-          ...(R.resources || []).filter((r) => r.status !== "draft")
-            .map((r) => ({ kind: "resource", id: r.id, title: r.title, type: r.type })),
-        ]);
-      });
-  }, [mode]);
+      .then(([L, R]) => setLibrary([
+        ...(L.lessons || []).filter((l) => l.status === "published")
+          .map((l) => ({ kind: "lesson", id: l.id, title: l.title, duration: l.duration })),
+        ...(R.resources || []).filter((r) => r.status !== "draft")
+          .map((r) => ({ kind: "resource", id: r.id, title: r.title, type: r.type })),
+      ]));
+  }, []);
 
-  const { body: replyBody, recs } = parseFooter(editedResponse, library);
+  function selectDraft(i) { setIdx(i); setEditText(drafts[i]?.response ?? ""); }
+
+  const { body: replyBody, recs } = parseFooter(editText, library);
   function removeRec(item) {
-    setEditedResponse(buildReply(replyBody, recs.filter((r) => !(r.kind === item.kind && r.id === item.id))));
+    setEditText(buildReply(replyBody, recs.filter((r) => !(r.kind === item.kind && r.id === item.id))));
   }
   function addRec(item) {
     if (!item || recs.some((r) => r.kind === item.kind && r.id === item.id)) return;
-    setEditedResponse(buildReply(replyBody, [...recs, item]));
+    setEditText(buildReply(replyBody, [...recs, item]));
   }
 
-  if (!mode) return null;
+  const original = drafts[idx]?.response ?? detail.aiResponse ?? "";
+  const changed = editText.trim() !== (original || "").trim();
 
-  const title = {
-    reject: "Reject session",
-    edit: "Edit AI response",
-    improve: "Mark as Need Improvement",
-  }[mode];
-
-  function submit(event) {
-    event.preventDefault();
-    if (mode === "edit") onSubmit({ editedResponse, note });
-    else onSubmit({ reason });
+  function approve() {
+    if (changed) onEditResponse(editText, note || "Edited by moderator");
+    else onApprove(drafts[idx]?.idx);
   }
 
   return (
-    <form className="am-action-editor" onSubmit={submit}>
-      <div className="am-action-editor-head">
-        <strong>{title}</strong>
-        <button type="button" onClick={onCancel}>Close</button>
-      </div>
+    <section className="am-detail-card am-actions-card">
+      <h3>Review &amp; respond</h3>
 
-      {mode === "edit" ? (
-        <>
-          <label>
-            <span>Edited Response</span>
-            <textarea rows={5} value={editedResponse} onChange={(event) => setEditedResponse(event.target.value)} required />
-          </label>
-
-          {library.length > 0 && (
-            <div className="rec-editor">
-              <span className="am-rec-label">Recommended materials (sent with the reply)</span>
-              <div className="rec-chips">
-                {recs.map((r) => (
-                  <span key={r.kind + r.id} className="rec-chip">
-                    <span>{r.kind === "lesson" ? "📘" : "📗"}</span>
-                    {r.title}
-                    <button type="button" className="rec-chip-x" onClick={() => removeRec(r)} aria-label="Remove">✕</button>
-                  </span>
-                ))}
-                {recs.length === 0 && <span className="rec-empty">No materials attached.</span>}
+      {drafts.length > 0 && (
+        <div className="am-drafts">
+          {drafts.map((d, i) => (
+            <button type="button" key={d.id || i}
+                    className={`am-draft-card ${i === idx ? "sel" : ""}`}
+                    onClick={() => selectDraft(i)}>
+              <div className="am-draft-meta">
+                <b>{d.technique || `Option ${i + 1}`}</b>
+                {d.preflightPass === false && <span className="am-draft-warn">⚠ preflight</span>}
+                {i === idx && <span className="am-draft-sel">✓ selected</span>}
               </div>
-              <select className="la-input" value=""
-                      onChange={(e) => { addRec(library.find((x) => x.kind + x.id === e.target.value)); e.target.value = ""; }}>
-                <option value="">＋ Add a lesson / resource…</option>
-                {library
-                  .filter((it) => !recs.some((r) => r.kind === it.kind && r.id === it.id))
-                  .map((it) => (
-                    <option key={it.kind + it.id} value={it.kind + it.id}>
-                      {it.kind === "lesson" ? "Lesson" : "Resource"}: {it.title}
-                    </option>
-                  ))}
-              </select>
-              <p className="rec-hint">Edits are sent to the patient when you Submit.</p>
-            </div>
-          )}
-
-          <label>
-            <span>Moderator note</span>
-            <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} required />
-          </label>
-        </>
-      ) : (
-        <label>
-          <span>Reason</span>
-          <textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} required />
-        </label>
+              <p className="am-draft-resp">{d.response}</p>
+            </button>
+          ))}
+        </div>
       )}
 
-      <div className="am-action-editor-actions">
-        <button type="button" className="am-ghost-btn" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button type="submit" className="am-primary-btn" disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
+      <label className="am-field">
+        <span>Response to patient {drafts.length > 0 ? `(option ${idx + 1})` : ""}</span>
+        <textarea rows={5} value={editText} onChange={(e) => setEditText(e.target.value)} />
+      </label>
+
+      {library.length > 0 && (
+        <div className="rec-editor">
+          <span className="am-rec-label">Recommended materials (sent with the reply)</span>
+          <div className="rec-chips">
+            {recs.map((r) => (
+              <span key={r.kind + r.id} className="rec-chip">
+                <span>{r.kind === "lesson" ? "📘" : "📗"}</span>
+                {r.title}
+                <button type="button" className="rec-chip-x" onClick={() => removeRec(r)} aria-label="Remove">✕</button>
+              </span>
+            ))}
+            {recs.length === 0 && <span className="rec-empty">No materials attached.</span>}
+          </div>
+          <select className="la-input" value=""
+                  onChange={(e) => { addRec(library.find((x) => x.kind + x.id === e.target.value)); e.target.value = ""; }}>
+            <option value="">＋ Add a lesson / resource…</option>
+            {library
+              .filter((it) => !recs.some((r) => r.kind === it.kind && r.id === it.id))
+              .map((it) => (
+                <option key={it.kind + it.id} value={it.kind + it.id}>
+                  {it.kind === "lesson" ? "Lesson" : "Resource"}: {it.title}
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
+
+      <label className="am-field">
+        <span>Moderator note (optional)</span>
+        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+
+      <div className="am-action-grid">
+        <button type="button" className="am-primary-btn" disabled={busy} onClick={approve}>
+          {changed ? "Send edited reply" : `Approve option ${idx + 1}`}
+        </button>
+        <button type="button" className="am-danger-btn" disabled={busy} onClick={() => setReasonMode("reject")}>Reject</button>
+        <button type="button" className="am-warning-btn" disabled={busy} onClick={() => setReasonMode("improve")}>Need improvement</button>
       </div>
-    </form>
+
+      {reasonMode && (
+        <div className="am-action-editor">
+          <div className="am-action-editor-head">
+            <strong>{reasonMode === "reject" ? "Reject session" : "Mark as Need Improvement"}</strong>
+            <button type="button" onClick={() => setReasonMode(null)}>Close</button>
+          </div>
+          <label>
+            <span>{reasonMode === "reject" ? "Reason" : "What needs improvement?"}</span>
+            <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required />
+          </label>
+          <div className="am-action-editor-actions">
+            <button type="button" className="am-ghost-btn" onClick={() => setReasonMode(null)} disabled={busy}>Cancel</button>
+            <button type="button" className="am-primary-btn" disabled={busy}
+                    onClick={() => { (reasonMode === "reject" ? onReject : onNeedImprovement)(reason); setReasonMode(null); }}>
+              {busy ? "Saving..." : "Submit"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -172,17 +197,6 @@ export default function ModerationDetailPanel({
   onEditResponse,
   onNeedImprovement,
 }) {
-  const [mode, setMode] = useState(null);
-
-  useEffect(() => setMode(null), [detail?.id]);
-
-  async function submitAction(payload) {
-    if (mode === "reject") await onReject(payload.reason);
-    if (mode === "edit") await onEditResponse(payload.editedResponse, payload.note);
-    if (mode === "improve") await onNeedImprovement(payload.reason);
-    setMode(null);
-  }
-
   if (loading) {
     return <aside className="am-detail-panel"><div className="am-state">Loading session details...</div></aside>;
   }
@@ -254,23 +268,6 @@ export default function ModerationDetailPanel({
         </div>
       </section>
 
-      {(detail.drafts || []).length > 0 && (
-        <section className="am-detail-card">
-          <h3>Draft responses</h3>
-          <div className="am-history">
-            {detail.drafts.map((draft) => (
-              <div className="am-history-item" key={draft.id || draft.idx}>
-                <strong>{draft.technique || `Draft ${draft.idx + 1}`}</strong>
-                <span>{draft.preflightPass === false ? "Preflight failed" : "Preflight passed"}</span>
-                {draft.rationale && <p>{draft.rationale}</p>}
-                {draft.plan && <p>{draft.plan}</p>}
-                <p>{draft.response}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {detail.agentTrace && (
         <section className="am-detail-card">
           <h3>Agent trace</h3>
@@ -299,22 +296,14 @@ export default function ModerationDetailPanel({
         </div>
       </section>
 
-      <section className="am-detail-card am-actions-card">
-        <div className="am-action-grid">
-          <button type="button" className="am-primary-btn" disabled={busy} onClick={onApprove}>Approve</button>
-          <button type="button" className="am-ghost-btn" disabled={busy} onClick={() => setMode("edit")}>Edit Response</button>
-          <button type="button" className="am-danger-btn" disabled={busy} onClick={() => setMode("reject")}>Reject</button>
-          <button type="button" className="am-warning-btn" disabled={busy} onClick={() => setMode("improve")}>Mark as Need Improvement</button>
-        </div>
-
-        <ActionEditor
-          mode={mode}
-          currentResponse={detail.editedResponse || detail.aiResponse}
-          busy={busy}
-          onCancel={() => setMode(null)}
-          onSubmit={submitAction}
-        />
-      </section>
+      <ReviewEditor
+        detail={detail}
+        busy={busy}
+        onApprove={onApprove}
+        onReject={onReject}
+        onEditResponse={onEditResponse}
+        onNeedImprovement={onNeedImprovement}
+      />
     </aside>
   );
 }

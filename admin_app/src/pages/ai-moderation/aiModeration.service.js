@@ -50,10 +50,16 @@ function mapItem(it) {
     histories: it.histories || it.revisions || [],
     agentTrace: it.agent_trace || null,
     retrievedIds: it.retrieved_ids || [],
-    drafts: it.draft
-      ? [{ id: `${it.id}-d`, idx: 0, technique: it.draft.model_name,
-           preflightPass: true, response: it.draft.response }]
-      : [],
+    drafts: (it.drafts && it.drafts.length)
+      ? it.drafts.map((d) => ({
+          id: d.id, idx: d.idx, technique: d.technique,
+          preflightPass: d.preflight_pass !== false,
+          rationale: d.rationale, plan: d.plan, response: d.response,
+        }))
+      : (it.draft
+          ? [{ id: `${it.id}-d`, idx: 0, technique: it.draft.model_name,
+               preflightPass: true, response: it.draft.response }]
+          : []),
   };
 }
 
@@ -92,7 +98,8 @@ export const aiModerationApi = {
   },
 
   detail: async (id) => mapItem(await request(`/items/${id}`)),
-  approve: (id) => request(`/items/${id}/approve`, { method: "PATCH", body: {} }),
+  approve: (id, draftIdx) =>
+    request(`/items/${id}/approve`, { method: "PATCH", body: { draft_idx: draftIdx ?? null } }),
   reject: (id, reason) => request(`/items/${id}/reject`, { method: "PATCH", body: { note: reason } }),
   editResponse: (id, editedResponse, note) =>
     request(`/items/${id}/edit-response`, { method: "PATCH", body: { response: editedResponse, note } }),

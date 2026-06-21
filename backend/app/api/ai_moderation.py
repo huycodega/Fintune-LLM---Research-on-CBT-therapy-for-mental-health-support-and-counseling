@@ -45,6 +45,7 @@ REFERRAL_REPLY = (
 class DecisionIn(BaseModel):
     checklist: Optional[dict] = None
     note: Optional[str] = ""
+    draft_idx: Optional[int] = None
 
 
 class EditIn(DecisionIn):
@@ -110,6 +111,13 @@ def _item(q, s, u, drafts, claimer_name=None):
         "user": {"name": _display(u.username), "masked_email": _mask_email(u.email)},
         "messages": messages,
         "draft": draft,
+        "drafts": [{
+            "id": str(d.id), "idx": d.idx,
+            "technique": d.technique or f"Option {d.idx + 1}",
+            "rationale": d.rationale, "plan": d.plan,
+            "preflight_pass": d.preflight_pass,
+            "response": decrypt_str(d.response_enc) if d.response_enc else "",
+        } for d in drafts],
         "revisions": [],
     }
 
@@ -242,7 +250,12 @@ def approve(qid: str, body: DecisionIn, request: Request,
     _ensure_claimable(q, actor)
     drafts = (db.query(models.Draft).filter_by(session_id=s.id)
               .order_by(models.Draft.idx).all())
-    draft = next((d for d in drafts if d.response_enc), None)
+    draft = None
+    if body.draft_idx is not None:
+        draft = next((d for d in drafts
+                      if d.idx == body.draft_idx and d.response_enc), None)
+    if draft is None:
+        draft = next((d for d in drafts if d.response_enc), None)
     if not draft:
         raise HTTPException(400, "No AI draft to approve — use edit-response")
     _finalize(s, q, "approve", decrypt_str(draft.response_enc),

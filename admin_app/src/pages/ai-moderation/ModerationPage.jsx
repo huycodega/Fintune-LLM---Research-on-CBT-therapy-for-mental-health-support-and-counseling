@@ -200,7 +200,7 @@ export default function ModerationPage() {
           loading={detailLoading}
           error={detailError}
           busy={actionBusy}
-          onApprove={() => runAction(() => aiModerationApi.approve(selectedId))}
+          onApprove={(draftIdx) => runAction(() => aiModerationApi.approve(selectedId, draftIdx))}
           onReject={(reason) => runAction(() => aiModerationApi.reject(selectedId, reason))}
           onEditResponse={(editedResponse, note) => runAction(() => aiModerationApi.editResponse(selectedId, editedResponse, note))}
           onNeedImprovement={(reason) => runAction(() => aiModerationApi.needImprovement(selectedId, reason))}
