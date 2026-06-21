@@ -11,6 +11,7 @@ import SangLoc from "./pages/SangLoc.jsx";
 import HoSo from "./pages/HoSo.jsx";
 import BaiHoc from "./pages/BaiHoc.jsx";
 import TaiNguyen from "./pages/TaiNguyen.jsx";
+import TuVan from "./pages/TuVan.jsx";
 import CaiDat from "./pages/CaiDat.jsx";
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { id: "chat", icon: "bot", label: "AI Support" },
   { id: "baihoc", icon: "book", label: "Lessons" },
   { id: "tainguyen", icon: "folder", label: "Resources" },
+  { id: "tuvan", icon: "expert", label: "Counselling" },
   { id: "hoso", icon: "user", label: "Profile" },
   { id: "caidat", icon: "settings", label: "Settings" },
 ];
@@ -89,6 +91,15 @@ function NavSvgIcon({ name }) {
       </svg>
     );
   }
+  if (name === "expert") {
+    return (
+      <svg {...common} className="nav-svg-icon">
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+        <path d="M16 4.5c1.6-1.4 4-0.3 4 1.7 0 1.6-2 3-4 4.3-2-1.3-4-2.7-4-4.3 0-2 2.4-3.1 4-1.7Z" />
+      </svg>
+    );
+  }
   if (name === "user") {
     return (
       <svg {...common} className="nav-svg-icon">
@@ -104,7 +115,7 @@ function NavSvgIcon({ name }) {
   </svg>
 );
 }
-function Topbar({ activePage, onNav, user, onLogout }) {
+function Topbar({ activePage, onNav, user, onLogout, onMenu }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initials = user?.username ? user.username.slice(0, 1).toUpperCase() : "U";
   const displayName = user?.username
@@ -113,11 +124,22 @@ function Topbar({ activePage, onNav, user, onLogout }) {
 
   return (
     <header className="app-topbar">
-      {/* Logo (aligned to sidebar width) */}
-      <div className="topbar-logo-section">
+      {/* Hamburger — only shows on mobile (CSS) to open the nav drawer */}
+      <button type="button" className="topbar-hamburger" onClick={onMenu} aria-label="Open menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
+      {/* Logo (aligned to sidebar width) — click to go Home */}
+      <button
+        type="button"
+        className="topbar-logo-section"
+        onClick={() => onNav("dashboard")}
+        aria-label="Go to Home"
+      >
         <div className="topbar-logo-icon"><Mascot variant="wave" size={30} /></div>
         <span className="topbar-brand">MindCare AI</span>
-      </div>
+      </button>
 
       {/* Center tabs â€” only on Home/Dashboard */}
       {activePage === "dashboard" && (
@@ -173,9 +195,11 @@ function Topbar({ activePage, onNav, user, onLogout }) {
   );
 }
 
-function Sidebar({ activePage, onNav }) {
+function Sidebar({ activePage, onNav, open, onClose }) {
   return (
-    <nav className="sidebar">
+    <>
+      {open && <div className="sidebar-backdrop" onClick={onClose} />}
+      <nav className={`sidebar ${open ? "sidebar-open" : ""}`}>
       <div className="sidebar-nav">
         {NAV_ITEMS.map((item) => (
           <button
@@ -205,7 +229,8 @@ function Sidebar({ activePage, onNav }) {
           </svg>
         </div>
       </div>
-    </nav>
+      </nav>
+    </>
   );
 }
 
@@ -214,6 +239,9 @@ export default function App() {
   const [stage, setStage] = useState("loading");
   const [activePage, setActivePage] = useState("dashboard");
   const [showLogin, setShowLogin] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  // Navigate + always close the mobile drawer.
+  const navTo = (id) => { setActivePage(id); setNavOpen(false); };
 
   useEffect(() => {
     if (!user) { setStage("landing"); return; }
@@ -273,12 +301,13 @@ export default function App() {
   if (stage === "intake")  return <Intake  onDone={() => setStage("app")} />;
 
   const pages = {
-    dashboard: <Dashboard user={user} onNav={setActivePage} />,
+    dashboard: <Dashboard user={user} onNav={navTo} />,
     sangloc:   <SangLoc />,
-    chat:      <Chat />,
+    chat:      <Chat onNav={navTo} />,
     baihoc:    <BaiHoc />,
     hoso:      <HoSo user={user} />,
     tainguyen: <TaiNguyen />,
+    tuvan:     <TuVan />,
     caidat:    <CaiDat user={user} onLogout={logout} />,
   };
 
@@ -286,10 +315,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Topbar activePage={activePage} onNav={setActivePage} user={user} onLogout={logout} />
+      <Topbar activePage={activePage} onNav={navTo} user={user} onLogout={logout}
+              onMenu={() => setNavOpen((o) => !o)} />
 
       <div className="app-body">
-        <Sidebar activePage={activePage} onNav={setActivePage} />
+        <Sidebar activePage={activePage} onNav={navTo}
+                 open={navOpen} onClose={() => setNavOpen(false)} />
 
         <div className={`main-content ${isChatPage ? "chat-mode" : ""}`}>
           {isChatPage ? (

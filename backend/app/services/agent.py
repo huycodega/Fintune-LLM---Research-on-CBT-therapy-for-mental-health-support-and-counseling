@@ -474,21 +474,94 @@ def _topic_terms(topic: str) -> list:
 
 
 def _match_published(rows, topic: str, limit: int = 3) -> list:
-    """Rank published rows by how well their title/category/tags match the topic.
-    Falls back to the most-recent few when nothing matches, so the agent always
-    has REAL items to offer (never fabricates)."""
+    """Rank published rows by topic-keyword overlap (title/category/tags) and
+    return ONLY genuine matches (score > 0). No blind fallback: if nothing in the
+    library fits the conversation we return [] so the caller recommends NOTHING,
+    rather than pushing an off-topic item. (Never fabricates — real rows only.)"""
     terms = _topic_terms(topic)
     scored = []
     for r in rows:
         hay = " ".join(str(x).lower() for x in
                        [r.title, r.category or "", " ".join(r.tags or [])])
         score = sum(1 for t in terms if t in hay)
-        scored.append((score, r))
+        if score > 0:
+            scored.append((score, r))
     scored.sort(key=lambda x: -x[0])
-    picked = [r for s, r in scored if s > 0][:limit]
-    if not picked:
-        picked = [r for _, r in scored][:limit]   # general fallback
-    return picked
+    return [r for _, r in scored][:limit]
+
+
+# Cosine floor for semantic matching. bge-m3 is L2-normalized, so this is a
+# straight dot-product threshold: below it the item isn't relevant enough to
+# recommend (precision over recall — we'd rather offer nothing than off-topic).
+_SEMANTIC_THRESHOLD = 0.38
+
+
+def _item_text(r) -> str:
+    """Compact text representation of a lesson/resource for embedding."""
+    parts = [getattr(r, "title", "") or "",
+             getattr(r, "category", "") or "",
+             " ".join(getattr(r, "tags", None) or []),
+             getattr(r, "description", "") or ""]
+    return " ".join(p for p in parts if p).strip()
+
+
+def _semantic_rank(rows, topic: str, limit: int = 3):
+    """Rank published rows by EMBEDDING similarity to the topic (meaning, not
+    keywords) so e.g. 'sadness' matches a 'low mood / depression' lesson.
+    Returns matched rows (cosine >= threshold), [] when nothing is relevant
+    enough, or None when embeddings are unavailable (caller falls back to
+    keyword matching)."""
+    if not rows or not (topic or "").strip():
+        return None
+    try:
+        from app.services import embedder
+        texts = [topic] + [_item_text(r) for r in rows]
+        vecs = embedder.embed(texts)
+        if not vecs or len(vecs) != len(texts):
+            return None
+        q = vecs[0]
+        sims = [(sum(a * b for a, b in zip(q, v)), r)
+                for r, v in zip(rows, vecs[1:])]
+        sims.sort(key=lambda x: -x[0])
+        return [r for s, r in sims if s >= _SEMANTIC_THRESHOLD][:limit]
+    except Exception as e:
+        log.warning("semantic recommend failed (%s) — keyword fallback", e)
+        return None
+
+
+def _rank_published(rows, topic: str, limit: int = 3) -> list:
+    """Prefer semantic ranking; fall back to keyword overlap if embeddings are
+    unavailable. Either way, only genuinely-relevant items are returned."""
+    sem = _semantic_rank(rows, topic, limit)
+    if sem is not None:
+        return sem
+    return _match_published(rows, topic, limit)
+
+
+def _top_recommendations(topic: str, limit: int = 2) -> Dict:
+    """Pick the FEW most relevant published items for the topic — lessons and
+    resources ranked TOGETHER by meaning, capped at `limit` total, and only when
+    they genuinely match (semantic threshold). Returns
+    {"lessons": [...], "resources": [...]}; empty when nothing fits."""
+    out = {"lessons": [], "resources": []}
+    try:
+        with db_session() as db:
+            lessons = (db.query(models.Lesson).filter_by(status="published")
+                       .order_by(models.Lesson.updated_at.desc()).limit(50).all())
+            resources = (db.query(models.Resource).filter_by(status="published")
+                         .order_by(models.Resource.updated_at.desc()).limit(50).all())
+            rows = list(lessons) + list(resources)
+            if not rows:
+                return out
+            for r in _rank_published(rows, topic, limit):
+                if isinstance(r, models.Lesson):
+                    out["lessons"].append({"title": r.title, "category": r.category,
+                                           "duration": r.duration})
+                else:
+                    out["resources"].append({"title": r.title, "type": r.type})
+    except Exception as e:
+        log.warning("top_recommendations failed: %s", e)
+    return out
 
 
 def _tool_recommend_lesson(args: Dict, state: Dict) -> str:
@@ -498,7 +571,7 @@ def _tool_recommend_lesson(args: Dict, state: Dict) -> str:
             rows = (db.query(models.Lesson)
                     .filter_by(status="published")
                     .order_by(models.Lesson.updated_at.desc()).limit(50).all())
-            picked = _match_published(rows, topic)
+            picked = _rank_published(rows, topic, 2)
             items = [{"title": r.title, "category": r.category,
                       "duration": r.duration} for r in picked]
     except Exception as e:
@@ -519,7 +592,7 @@ def _tool_recommend_resource(args: Dict, state: Dict) -> str:
             rows = (db.query(models.Resource)
                     .filter_by(status="published")
                     .order_by(models.Resource.updated_at.desc()).limit(50).all())
-            picked = _match_published(rows, topic)
+            picked = _rank_published(rows, topic, 2)
             items = [{"title": r.title, "type": r.type} for r in picked]
     except Exception as e:
         log.warning("agent recommend_resource failed: %s", e)
@@ -573,11 +646,37 @@ def _ensure_enriched(state: Dict) -> None:
     msg = state.get("user_scrubbed", "")
     if not _PRACTICE_PAT.search(msg):
         return   # not a practice-seeking message — leave it alone
-    metrics.inc("cbt_agent_forced_enrichment_total")
-    state["forced_enrichment"] = True
     analysis = state.get("analysis") or {}
     topic = ((analysis.get("technique_hint") or "") + " " + msg).strip()
-    _tool_recommend_lesson({"topic": topic}, state)
+    top = _top_recommendations(topic, limit=2)
+    if not (top["lessons"] or top["resources"]):
+        return   # nothing in the library genuinely fits — recommend nothing
+    metrics.inc("cbt_agent_forced_enrichment_total")
+    state["forced_enrichment"] = True
+    state["recommendations"]["lessons"].extend(top["lessons"])
+    state["recommendations"]["resources"].extend(top["resources"])
+
+
+def _rec_footer(state: Dict) -> str:
+    """Render the REAL lessons/resources the agent pulled as a short footer, so
+    the reply always names them even when the responder doesn't weave them in.
+    Empty string when there are no recommendations."""
+    recs = state.get("recommendations") or {}
+    lines = []
+    for x in recs.get("lessons", []) or []:
+        dur = f" ({x['duration']})" if x.get("duration") else ""
+        lines.append(f"- Lesson: {x['title']}{dur}")
+    for x in recs.get("resources", []) or []:
+        ty = f" [{x['type']}]" if x.get("type") else ""
+        lines.append(f"- Resource: {x['title']}{ty}")
+    if not lines:
+        return ""
+    seen, uniq = set(), []
+    for ln in lines:
+        if ln not in seen:
+            seen.add(ln)
+            uniq.append(ln)
+    return "\n\nFrom your library, these might help:\n" + "\n".join(uniq)
 
 
 def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
@@ -704,6 +803,23 @@ def _do_generate(args: Dict, state: Dict,
     drafts = post_process.parse_all(gen.get("responses", []))
     # Self-critique: revise once if the best draft fails preflight/grounding.
     drafts = _self_correct(drafts, state, messages, temperature)
+    # Deterministically append the REAL recommended materials so the user always
+    # sees the actual library items by name (the responder often omits them).
+    footer = _rec_footer(state)
+    if footer:
+        recs = state.get("recommendations") or {}
+        titles = ([x.get("title", "") for x in (recs.get("lessons") or [])]
+                  + [x.get("title", "") for x in (recs.get("resources") or [])])
+        for d in drafts:
+            resp = d.get("response") or ""
+            if not resp:
+                continue
+            low = resp.lower()
+            # Skip when the responder already listed the materials itself, so we
+            # don't append a duplicate "From your library" block.
+            if "from your library" in low or any(t and t.lower() in low for t in titles):
+                continue
+            d["response"] = resp.rstrip() + footer
     return {
         "outcome": "drafts",
         "drafts": drafts,

@@ -3,15 +3,13 @@ import Icon from "./Icon.jsx";
 /* Canonical admin navigation — shared across all admin pages. */
 export const NAV = [
   { id: "overview",  icon: "grid",    label: "Overview" },
-  { id: "users",     icon: "users",   label: "Users" },
+  { id: "users",     icon: "users",   label: "User management" },
   { id: "cases",     icon: "cases",   label: "Cases to Handle" },
-  { id: "screening", icon: "shield",  label: "Screening" },
+  { id: "crisis",    icon: "alert",   label: "Crisis control" },
   { id: "moderation",icon: "sparkle", label: "AI Moderation" },
   { id: "lessons",   icon: "book",    label: "CBT Lessons" },
   { id: "resources", icon: "folder",  label: "Resources" },
-  { id: "reports",   icon: "bars",    label: "Reports" },
-  { id: "logs",      icon: "logs",    label: "System Logs" },
-  { id: "settings",  icon: "gear",    label: "Settings" },
+  { id: "experts",   icon: "expert",  label: "Psychologists" },
 ];
 
 export default function Sidebar({ active, onNav }) {

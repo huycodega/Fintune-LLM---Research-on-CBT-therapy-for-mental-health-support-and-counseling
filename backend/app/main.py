@@ -23,6 +23,7 @@ from app.api.ai_moderation import router as ai_moderation_router
 from app.api.conversations import router as conversations_router
 from app.api.screening import router as screening_router
 from app.api.content import router as content_router
+from app.api.experts import router as experts_router
 from app.core import auth as auth_core
 from app.core.config import settings
 from app.db import models
@@ -48,6 +49,7 @@ app.include_router(ai_moderation_router)
 app.include_router(conversations_router)
 app.include_router(screening_router)
 app.include_router(content_router)
+app.include_router(experts_router)
 
 
 @app.on_event("startup")
@@ -113,6 +115,14 @@ def boot():
         log.info("Seed content ready")
     except Exception as e:
         log.warning("Content seed skipped: %s — run `alembic upgrade head`?", e)
+    # Preload the NLI grounding model so the first chat doesn't pay the load
+    # cost mid-request (which pushed long agent turns past the gateway timeout).
+    try:
+        from app.services import hallucination_nli
+        hallucination_nli.preload()
+        log.info("NLI grounding model preloaded")
+    except Exception as e:
+        log.warning("NLI preload skipped: %s", e)
 
 
 @app.get("/api/health")

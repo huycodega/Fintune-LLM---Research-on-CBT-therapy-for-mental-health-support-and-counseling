@@ -1,10 +1,13 @@
 """
-Seed data for lessons + resources — mirrors the content the frontend used to
-hardcode (LessonsAdmin / ResourcesAdmin), so the UI looks identical but is now
-served from the DB and editable by admins. Idempotent: only inserts when the
-tables are empty.
+Demo seed data for lessons + resources.
+
+DISABLED BY DEFAULT: admins enter real content through the Resources / Lessons
+admin pages, so we no longer auto-populate the DB with demo rows. The sample
+data below is kept only as an optional fixture — set the env var
+``SEED_DEMO_CONTENT=true`` to re-enable seeding an empty DB with it.
 """
 import logging
+import os
 
 from app.db import models
 
@@ -88,7 +91,13 @@ _RESOURCES = [
 
 
 def seed_content(db) -> None:
-    """Insert demo lessons/resources only if the tables are empty."""
+    """Insert demo lessons/resources only if the tables are empty.
+
+    No-op unless ``SEED_DEMO_CONTENT=true`` — production/real deployments start
+    with empty content tables and admins add the real material themselves.
+    """
+    if os.getenv("SEED_DEMO_CONTENT", "false").strip().lower() not in ("1", "true", "yes"):
+        return
     if db.query(models.Lesson).first() is None:
         for row in _LESSONS:
             db.add(models.Lesson(**row))

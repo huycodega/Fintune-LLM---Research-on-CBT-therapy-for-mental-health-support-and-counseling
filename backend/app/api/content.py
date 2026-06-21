@@ -29,7 +29,7 @@ from app.core import auth, audit as audit_mod
 from app.db import models
 from app.db.session import get_db
 from app.schemas.api import (
-    LessonIn, LessonUpdateIn, ResourceIn, ResourceUpdateIn,
+    LessonIn, LessonUpdateIn, ResourceIn, ResourceUpdateIn, LessonProgressIn,
 )
 
 
@@ -150,6 +150,49 @@ def get_resource(rid: str, _: dict = Depends(auth.current_user),
     if r.status == "draft":
         raise HTTPException(404, "Resource not found")
     return _resource_out(r)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PER-USER lesson progress
+# ═════════════════════════════════════════════════════════════════════════════
+@router.get("/my/lesson-progress")
+def my_lesson_progress(user: dict = Depends(auth.current_user),
+                       db: Session = Depends(get_db)):
+    """All of THIS user's lesson progress, keyed by lesson id."""
+    rows = (db.query(models.UserLessonProgress)
+              .filter_by(user_id=user["uid"]).all())
+    return {"progress": {str(r.lesson_id): {
+        "progress_pct": r.progress_pct,
+        "status": r.status,
+        "completed_steps": r.completed_steps or [],
+    } for r in rows}}
+
+
+@router.post("/my/lesson-progress/{lid}")
+def set_lesson_progress(lid: str, body: LessonProgressIn,
+                        user: dict = Depends(auth.current_user),
+                        db: Session = Depends(get_db)):
+    """Upsert this user's progress on a lesson (>=100% => completed)."""
+    lesson = db.query(models.Lesson).filter_by(id=lid).first()
+    if not lesson:
+        raise HTTPException(404, "Lesson not found")
+    pct = max(0, min(100, int(body.progress_pct)))
+    steps = body.completed_steps or []
+    status = "completed" if pct >= 100 else "in_progress"
+    row = (db.query(models.UserLessonProgress)
+             .filter_by(user_id=user["uid"], lesson_id=lid).first())
+    if row is None:
+        row = models.UserLessonProgress(
+            user_id=user["uid"], lesson_id=lid,
+            progress_pct=pct, completed_steps=steps, status=status)
+        db.add(row)
+    else:
+        row.progress_pct = pct
+        row.completed_steps = steps
+        row.status = status
+    db.flush()
+    return {"ok": True, "lesson_id": lid,
+            "progress_pct": pct, "status": status}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

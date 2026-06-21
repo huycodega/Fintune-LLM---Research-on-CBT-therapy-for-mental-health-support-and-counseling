@@ -143,6 +143,12 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     otp_dev_echo: bool = True           # echo OTP in API response in DEV only
 
+    # ---- Google sign-in (Google Identity Services ID-token flow) ----
+    # When set, the user app shows a "Sign in with Google" button; the backend
+    # verifies the ID token's audience against this Client ID. No client secret
+    # is needed for the GIS ID-token flow. Leave empty to disable Google login.
+    google_oauth_client_id: str = ""
+
     # ---- generation ----
     n_responses: int = 3
     max_new_tokens: int = 400

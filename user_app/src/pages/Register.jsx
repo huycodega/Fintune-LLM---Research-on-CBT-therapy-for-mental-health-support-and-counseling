@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, setSession } from "../api.js";
 import AuthLayout from "../components/AuthLayout.jsx";
+import GoogleSignInButton from "../components/GoogleSignInButton.jsx";
 
 // Two-step Gmail registration: (1) email + password → OTP emailed,
 // (2) enter OTP → verified + auto-logged-in.
@@ -40,6 +41,20 @@ export default function Register({ onAuth, onBackToLogin }) {
     setBusy(true);
     try {
       const res = await api.verifyOtp(email.trim().toLowerCase(), otp.trim());
+      setSession(res.token, { username: res.username, role: res.role });
+      onAuth({ username: res.username, role: res.role });
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleGoogle(credential) {
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await api.googleAuth(credential);
       setSession(res.token, { username: res.username, role: res.role });
       onAuth({ username: res.username, role: res.role });
     } catch (e) {
@@ -137,6 +152,15 @@ export default function Register({ onAuth, onBackToLogin }) {
             </button>
           </form>
         )}
+
+      {step === "form" && (
+        <>
+          <div className="auth-or"><span>or</span></div>
+          <div className="gsi-row">
+            <GoogleSignInButton onCredential={handleGoogle} text="signup_with" />
+          </div>
+        </>
+      )}
 
       <div className="divider" />
       <div className="demo-hint">

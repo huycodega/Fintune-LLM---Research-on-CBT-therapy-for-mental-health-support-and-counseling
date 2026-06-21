@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Mascot from "../components/Mascot.jsx";
 import { api } from "../api.js";
 
@@ -27,102 +28,13 @@ function toCard(r) {
     tags: r.tags && r.tags.length ? r.tags : [],
     action: emergency ? "Get Help Now" : ui.action,
     url: r.url || "",
+    content: r.content || "",
+    rawType: r.type || "Article",
     thumbClass: emergency ? "hotline" : ui.thumbClass,
     useImageIcon: false,
     emergency,
   };
 }
-
-const RESOURCES = [
-  {
-    id: 1,
-    category: "Audio",
-    typeLabel: "Audio",
-    icon: "\u266A",
-    title: "4-7-8 Breathing Exercise",
-    desc: "A simple breathing technique to help reduce anxiety and relax your body.",
-    duration: "5 min",
-    tags: ["Anxiety", "Breathing"],
-    action: "Listen Now",
-    saved: true,
-    thumbClass: "breathing",
-  },
-  {
-    id: 2,
-    category: "Articles",
-    typeLabel: "Article",
-    icon: "\uD83D\uDCC4",
-    title: "5-4-3-2-1 Grounding Technique",
-    desc: "A grounding exercise to help you reconnect with the present moment.",
-    duration: "7 min read",
-    tags: ["Grounding", "Present moment"],
-    action: "Read Now",
-    saved: true,
-    thumbClass: "grounding",
-  },
-  {
-    id: 3,
-    category: "Video",
-    typeLabel: "Video",
-    icon: "\u25B6",
-    title: "Tips to Improve Your Sleep",
-    desc: "Small habits that can help you sleep better and wake up with more energy.",
-    duration: "8 min",
-    tags: ["Sleep", "Daily habits"],
-    action: "Watch Now",
-    saved: false,
-    thumbClass: "sleep",
-  },
-  {
-    id: 4,
-    category: "CBT Tools",
-    typeLabel: "Tool",
-    icon: "\u260E",
-    title: "Talk to a Counselor",
-    desc: "Need support from a professional? Book a private consultation easily.",
-    duration: "Personal Support",
-    tags: ["Personal Support", "Counseling"],
-    action: "Book Now",
-    saved: false,
-    thumbClass: "counselor",
-    useImageIcon: true,
-  },
-  {
-    id: 5,
-    category: "CBT Tools",
-    typeLabel: "CBT Tool",
-    icon: "\u270E",
-    title: "Emotion Journal",
-    desc: "Record your daily emotions to understand yourself better and track progress.",
-    duration: "Self-awareness",
-    tags: ["Self-awareness", "Reflection"],
-    action: "Use Now",
-    saved: true,
-    thumbClass: "journal",
-    useImageIcon: true,
-  },
-  {
-    id: 6,
-    category: "Emergency",
-    typeLabel: "Emergency",
-    icon: "!",
-    title: "24/7 Hotline",
-    desc: "Free, confidential support available whenever you need someone to listen.",
-    duration: "24/7",
-    tags: ["24/7", "Immediate support"],
-    action: "Call 988",
-    saved: false,
-    thumbClass: "hotline",
-    useImageIcon: true,
-    emergency: true,
-  },
-];
-
-const SAVED_FALLBACK = [
-  "4-7-8 Breathing Exercise",
-  "5-4-3-2-1 Grounding Technique",
-  "Emotion Journal",
-];
 
 
 function BookmarkIcon({ filled = true }) {
@@ -138,9 +50,11 @@ function BookmarkIcon({ filled = true }) {
     </svg>
   );
 }
-function ResourceCard({ resource, saved, onToggleSave }) {
+function ResourceCard({ resource, saved, onToggleSave, onOpen }) {
   return (
-    <article className={`resource-v2-card ${resource.emergency ? "emergency" : ""}`}>
+    <article className={`resource-v2-card ${resource.emergency ? "emergency" : ""}`}
+             onClick={() => onOpen(resource)} role="button" tabIndex={0}
+             onKeyDown={(e) => { if (e.key === "Enter") onOpen(resource); }}>
       <div className={`resource-v2-thumb ${resource.thumbClass} ${resource.useImageIcon ? "image-icon" : ""}`}>
         {!resource.useImageIcon && (
           <span className={`resource-v2-icon-badge ${resource.category.toLowerCase().replace(/\s+/g, "-")}`}>
@@ -154,7 +68,7 @@ function ResourceCard({ resource, saved, onToggleSave }) {
           <button
             className={`resource-save-btn ${saved ? "saved" : ""}`}
             type="button"
-            onClick={() => onToggleSave(resource.id)}
+            onClick={(e) => { e.stopPropagation(); onToggleSave(resource.id); }}
             aria-label={saved ? "Remove saved resource" : "Save resource"}
           >
             <BookmarkIcon filled={saved} />
@@ -169,10 +83,56 @@ function ResourceCard({ resource, saved, onToggleSave }) {
           <span>{resource.duration}</span>
         </div>
       </div>
-      <button className={`resource-v2-action ${resource.emergency ? "danger" : ""}`} type="button">
+      <button className={`resource-v2-action ${resource.emergency ? "danger" : ""}`} type="button"
+              onClick={(e) => { e.stopPropagation(); onOpen(resource); }}>
         {resource.action}
       </button>
     </article>
+  );
+}
+
+/* ── Resource detail modal (reuses lx-* styles) ───────────────────────── */
+function ResourceDetail({ resource, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const linkLabel = resource.rawType === "Audio" ? "▶ Listen"
+    : resource.rawType === "Video" ? "▶ Watch" : "Open resource ↗";
+
+  return createPortal(
+    <div className="lx-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="lx-modal" role="dialog" aria-modal="true" aria-label={resource.title}>
+        <button className="lx-close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="lx-head">
+          <h2 className="lx-title">{resource.title}</h2>
+          <div className="lx-meta">
+            <span>{resource.typeLabel}</span>
+            {resource.duration && <span>🕐 {resource.duration}</span>}
+          </div>
+        </div>
+        <div className="lx-body">
+          {resource.desc && <p className="lx-desc">{resource.desc}</p>}
+          {resource.content && (
+            <div className="lx-content">
+              {resource.content.split("\n").map((line, i) =>
+                line.trim() ? <p key={i}>{line}</p> : <br key={i} />)}
+            </div>
+          )}
+          {resource.url && (
+            <a className="lx-link" href={resource.url} target="_blank" rel="noopener noreferrer">
+              {linkLabel}
+            </a>
+          )}
+          {!resource.content && !resource.url && (
+            <p className="lx-desc">No additional content for this resource yet.</p>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -196,6 +156,7 @@ export default function TaiNguyen() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savedItems, setSavedItems] = useState(new Set());
+  const [openRes, setOpenRes] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -279,6 +240,7 @@ export default function TaiNguyen() {
                   resource={resource}
                   saved={savedItems.has(resource.id)}
                   onToggleSave={toggleSave}
+                  onOpen={setOpenRes}
                 />
               ))}
             </section>
@@ -329,6 +291,8 @@ export default function TaiNguyen() {
           </section>
         </aside>
       </div>
+
+      {openRes && <ResourceDetail resource={openRes} onClose={() => setOpenRes(null)} />}
     </div>
   );
 }

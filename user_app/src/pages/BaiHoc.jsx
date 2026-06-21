@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Mascot from "../components/Mascot.jsx";
 import { api } from "../api.js";
 
@@ -39,28 +40,6 @@ const ACCENTS = {
   orange: ["#FDEFD9", "#F59E0B"],
   pink:   ["#FCE3EE", "#EC4899"],
 };
-
-/* ── Lessons by topic (6 cards) ────────────────────────────────── */
-const TOPICS = [
-  { n: 1, accent: "green",  cat: "emotion",  art: "smiley", title: "Managing Stress",
-    desc: "Understand the causes of stress and learn how to control your own reactions.",
-    time: "20 min", progress: 60 },
-  { n: 2, accent: "indigo", cat: "thinking", art: "brain", title: "Positive Thinking",
-    desc: "Identify negative thoughts and replace them with a more positive perspective.",
-    time: "18 min", progress: 40 },
-  { n: 3, accent: "purple", cat: "mindful",  art: "lotus", title: "Mindfulness Skills",
-    desc: "Practice mindfulness to reduce anxiety and live fully in the present moment.",
-    time: "15 min", progress: 20 },
-  { n: 4, accent: "teal",   cat: "relax",    art: "wind", title: "4-7-8 Breathing",
-    desc: "A simple breathing technique to relax the body and calm the mind quickly.",
-    time: "10 min", progress: 0 },
-  { n: 5, accent: "orange", cat: "thinking", art: "cloud", title: "Spotting Cognitive Distortions",
-    desc: "Learn to recognize and adjust common distorted thinking patterns.",
-    time: "22 min", progress: 0 },
-  { n: 6, accent: "pink",   cat: "habit",    art: "target", title: "Setting Realistic Goals",
-    desc: "Set SMART goals and build an effective action plan.",
-    time: "16 min", progress: 0 },
-];
 
 /* ── Topic icons (flat illustrations matching the mockup) ──────── */
 function TopicArt({ type, color }) {
@@ -170,6 +149,8 @@ export default function BaiHoc() {
   const [active, setActive] = useState("all");
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState({});   // { lessonId: {progress_pct, completed_steps, status} }
+  const [openLesson, setOpenLesson] = useState(null);   // full lesson being viewed
 
   useEffect(() => {
     let alive = true;
@@ -177,8 +158,26 @@ export default function BaiHoc() {
       .then((r) => { if (alive) setLessons(r.lessons || []); })
       .catch(() => { if (alive) setLessons([]); })
       .finally(() => { if (alive) setLoading(false); });
+    api.lessonProgress()
+      .then((r) => { if (alive) setProgress(r.progress || {}); })
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  // Persist this user's progress for a lesson and reflect it locally.
+  // explicitPct overrides the derived % (used for objective-less lessons).
+  async function saveProgress(lessonId, completedSteps, total, explicitPct) {
+    const pct = explicitPct != null
+      ? explicitPct
+      : (total > 0 ? Math.round((completedSteps.length / total) * 100) : 0);
+    setProgress((p) => ({
+      ...p,
+      [lessonId]: { progress_pct: pct, completed_steps: completedSteps,
+                    status: pct >= 100 ? "completed" : "in_progress" },
+    }));
+    try { await api.setLessonProgress(lessonId, { progress_pct: pct, completed_steps: completedSteps }); }
+    catch { /* best-effort; local state already updated */ }
+  }
 
   // Map DB lessons → card shape, keeping the illustrated style.
   const cards = lessons.map((l, i) => {
@@ -186,7 +185,9 @@ export default function BaiHoc() {
     return {
       n: i + 1, id: l.id, accent: s.accent, cat: s.cat, art: s.art,
       title: l.title, desc: l.description || "",
-      time: l.duration || "—", progress: 0,
+      time: l.duration || "—",
+      progress: progress[l.id]?.progress_pct || 0,
+      lesson: l,
     };
   });
   const filtered = active === "all" ? cards : cards.filter((t) => t.cat === active);
@@ -258,7 +259,9 @@ export default function BaiHoc() {
           {filtered.map((t) => {
             const [soft, color] = ACCENTS[t.accent];
             return (
-              <article key={t.n} className="bh-card" style={{ "--accent": color, "--accent-soft": soft }}>
+              <article key={t.n} className="bh-card" style={{ "--accent": color, "--accent-soft": soft }}
+                       onClick={() => setOpenLesson(t.lesson)} role="button" tabIndex={0}
+                       onKeyDown={(e) => { if (e.key === "Enter") setOpenLesson(t.lesson); }}>
                 <div className="bh-card-icon"><TopicArt type={t.art} color={color} /></div>
                 <div className="bh-card-name">{t.n}. {t.title}</div>
                 <p className="bh-card-desc">{t.desc}</p>
@@ -269,8 +272,8 @@ export default function BaiHoc() {
                 <div className="bh-progress">
                   <div className="bh-progress-fill" style={{ width: `${t.progress}%` }} />
                 </div>
-                <button className="bh-card-btn">
-                  {t.progress > 0 ? "Continue" : "Start"} <span>→</span>
+                <button className="bh-card-btn" onClick={(e) => { e.stopPropagation(); setOpenLesson(t.lesson); }}>
+                  {t.progress >= 100 ? "Review" : t.progress > 0 ? "Continue" : "Start"} <span>→</span>
                 </button>
               </article>
             );
@@ -340,6 +343,103 @@ export default function BaiHoc() {
           ))}
         </div>
       </aside>
+
+      {openLesson && (
+        <LessonDetail
+          lesson={openLesson}
+          prog={progress[openLesson.id]}
+          onClose={() => setOpenLesson(null)}
+          onSave={saveProgress}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── Lesson detail modal: content + per-user objective checklist ───────── */
+function LessonDetail({ lesson, prog, onClose, onSave }) {
+  const objectives = lesson.objectives || [];
+  const [done, setDone] = useState(
+    new Set((prog?.completed_steps || []).filter((i) => i < objectives.length))
+  );
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const pct = objectives.length
+    ? Math.round((done.size / objectives.length) * 100)
+    : (prog?.progress_pct || 0);
+
+  function toggle(i) {
+    const next = new Set(done);
+    next.has(i) ? next.delete(i) : next.add(i);
+    setDone(next);
+    onSave(lesson.id, [...next], objectives.length);
+  }
+  function markAll() {
+    const all = new Set(objectives.map((_, i) => i));
+    setDone(all);
+    onSave(lesson.id, [...all], objectives.length);
+  }
+
+  return createPortal(
+    <div className="lx-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="lx-modal" role="dialog" aria-modal="true" aria-label={lesson.title}>
+        <button className="lx-close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="lx-head">
+          <h2 className="lx-title">{lesson.title}</h2>
+          <div className="lx-meta">
+            {lesson.duration && <span>🕐 {lesson.duration}</span>}
+            {lesson.level && <span className="lx-level">{lesson.level}</span>}
+            {lesson.category && <span>{lesson.category}</span>}
+          </div>
+        </div>
+
+        <div className="lx-progress-row">
+          <div className="lx-progress"><div className="lx-progress-fill" style={{ width: `${pct}%` }} /></div>
+          <span className="lx-progress-pct">{pct}%{pct >= 100 ? " · Completed ✓" : ""}</span>
+        </div>
+
+        <div className="lx-body">
+          {lesson.description && <p className="lx-desc">{lesson.description}</p>}
+
+          {objectives.length > 0 && (
+            <div className="lx-objectives">
+              <div className="lx-obj-head">
+                <span>Learning objectives — tick as you complete</span>
+                <button className="lx-markall" onClick={markAll}>Mark all done</button>
+              </div>
+              {objectives.map((o, i) => (
+                <label key={i} className={`lx-obj ${done.has(i) ? "checked" : ""}`}>
+                  <input type="checkbox" checked={done.has(i)} onChange={() => toggle(i)} />
+                  <span>{o}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {lesson.content && (
+            <div className="lx-content">
+              {lesson.content.split("\n").map((line, i) =>
+                line.trim() ? <p key={i}>{line}</p> : <br key={i} />)}
+            </div>
+          )}
+
+          {objectives.length === 0 && (
+            <button
+              className="bh-btn-primary bh-btn-full"
+              onClick={() => onSave(lesson.id, [], 0, pct >= 100 ? 0 : 100)}
+              style={{ marginTop: 16 }}
+            >
+              {pct >= 100 ? "Completed ✓ — tap to undo" : "Mark as complete"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import Mascot from "../components/Mascot.jsx";
 
@@ -99,9 +100,115 @@ function MsgText({ text }) {
   ));
 }
 
+/* Split the "From your library" footer out of the reply. Each footer line is
+   parsed on its own ("- Lesson: Title (dur)" / "- Resource: Title [type]") and
+   matched to a real library item by EXACT title, so the chips shown are exactly
+   the ones attached (in order) — even after a clinician adds/removes some.
+   A line with no matching published item still renders (just not clickable). */
+const REC_LINE_RE = /^\s*-\s*(lesson|resource)\s*:\s*(.+?)\s*(?:\(([^)]*)\)|\[([^\]]*)\])?\s*$/i;
+
+function parseRecs(text, library) {
+  const marker = "From your library";
+  const idx = (text || "").indexOf(marker);
+  if (idx === -1) return { body: text, recs: [] };
+  const body = text.slice(0, idx).trim();
+  const footer = text.slice(idx);
+  const lib = library || [];
+  const recs = [];
+  for (const line of footer.split("\n")) {
+    const m = line.match(REC_LINE_RE);
+    if (!m) continue;
+    const kind = m[1].toLowerCase();
+    const title = m[2].trim();
+    const meta = (m[3] || m[4] || "").trim();
+    const found = lib.find((it) => it.kind === kind && it.title &&
+      it.title.trim().toLowerCase() === title.toLowerCase());
+    recs.push(found || {
+      kind, id: `txt:${kind}:${title}`, title, full: null,
+      duration: kind === "lesson" ? meta : undefined,
+      type: kind === "resource" ? meta : undefined,
+    });
+  }
+  return { body: body || text, recs };
+}
+
+/* ── In-chat psychologist booking helpers ─────────────────────────── */
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function fmtApptDate(iso) {
+  if (!iso) return "";
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-GB",
+    { weekday: "short", day: "numeric", month: "short" });
+}
+/* Match the user's recent context to a psychologist's specialty so the agent
+   can recommend the most relevant expert (the user can still pick anyone). */
+// Recommendation is driven by the user's emotional CONTENT, not by the crisis
+// flag itself (suicidal risk is handled by the hotline + deterministic gate,
+// and does NOT imply a "trauma" specialist). So no crisis→specialty mapping.
+// specialty[] uses short stems so it tolerates typos / variants in the
+// admin-entered specialty text (e.g. "anxi" matches "Anxiety", "Anxitey",
+// "anxious"; "depress" matches "Depression").
+const BOOK_THEMES = [
+  { label: "anxiety & panic", weight: 1,
+    triggers: ["anxious", "anxiety", "anxiet", "panic", "worry", "worried", "nervous", "on edge", "overwhelm", "racing thoughts", "chest tightens", "can't breathe", "cant breathe", "freeze up"],
+    specialty: ["anxi", "panic", "stress"] },
+  { label: "depression & low mood", weight: 1,
+    triggers: ["sad", "depress", "hopeless", "empty", "worthless", "numb", "low mood", "no energy", "pointless", "cry", "down"],
+    specialty: ["depress", "mood"] },
+  { label: "trauma", weight: 2,
+    triggers: ["trauma", "abuse", "assault", "ptsd", "flashback", "nightmare"],
+    specialty: ["trauma", "ptsd"] },
+  { label: "grief & loss", weight: 2,
+    triggers: ["grief", "loss", "passed away", "died", "bereave", "mourning"],
+    specialty: ["grief", "loss", "bereave"] },
+  { label: "relationships", weight: 1,
+    triggers: ["relationship", "partner", "breakup", "broke up", "divorce", "family", "lonely", "alone"],
+    specialty: ["relationship", "family", "couple"] },
+  { label: "sleep", weight: 1,
+    triggers: ["sleep", "insomnia", "can't sleep", "cant sleep", "awake at night"],
+    specialty: ["sleep", "insomnia"] },
+];
+
+function recommendExpert(experts, contextText) {
+  const ctx = (contextText || "").toLowerCase();
+  const active = BOOK_THEMES.filter((t) => t.triggers.some((w) => ctx.includes(w)));
+  if (!active.length) return null;
+  let best = null;
+  for (const e of experts || []) {
+    const hay = `${e.specialty || ""} ${e.bio || ""} ${e.experience || ""}`.toLowerCase();
+    let score = 0, label = null;
+    for (const t of active) {
+      if (t.specialty.some((w) => hay.includes(w))) { score += t.weight; if (!label) label = t.label; }
+    }
+    if (score > 0 && (!best || score > best.score)) best = { expert: e, score, reason: `specializes in ${label}` };
+  }
+  return best;
+}
+
+/* Group an expert's free times by day across the whole booking window, so the
+   user can scroll through every available day (not just the first few). */
+function freeSlotsByDay(avail) {
+  if (!avail || !avail.window) return [];
+  const taken = new Set((avail.booked || []).map((b) => `${b.date} ${b.slot}`));
+  const slots = avail.expert?.slots || [];
+  const out = [];
+  const start = new Date(avail.window.from + "T00:00:00");
+  const end = new Date(avail.window.to + "T00:00:00");
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const ds = isoDate(d);
+    const free = slots.filter((sl) => !taken.has(`${ds} ${sl}`));
+    if (free.length) out.push({ date: ds, slots: free });
+  }
+  return out;
+}
+
 /* ── Chat bubble ───────────────────────────────────────────────── */
-function ChatBubble({ msg }) {
+function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt }) {
   const isAI = msg.role === "ai";
+  const { body, recs } = isAI
+    ? parseRecs(msg.text, library)
+    : { body: msg.text, recs: [] };
   return (
     <div className={`ai-row ${isAI ? "ai" : "user"}`}>
       {isAI && (
@@ -109,7 +216,33 @@ function ChatBubble({ msg }) {
       )}
       <div className="ai-msg">
         <div className={`ai-bubble ${isAI ? "ai-bubble-ai" : "ai-bubble-user"} ${msg.error ? "ai-bubble-error" : ""}`}>
-          <MsgText text={msg.text} />
+          <MsgText text={body} />
+          {recs.length > 0 && (
+            <div className="ai-recs">
+              <div className="ai-recs-label">📚 From your library</div>
+              {recs.map((r) => (
+                r.full ? (
+                  <button key={r.kind + r.id} className="ai-rec-chip" onClick={() => onOpenRec(r)}>
+                    <span className="ai-rec-emoji">{r.kind === "lesson" ? "📘" : "📗"}</span>
+                    <span className="ai-rec-title">{r.title}</span>
+                    {(r.duration || r.type) && <span className="ai-rec-meta">{r.duration || r.type}</span>}
+                    <span className="ai-rec-arrow">›</span>
+                  </button>
+                ) : (
+                  <div key={r.kind + r.id} className="ai-rec-chip ai-rec-chip-static">
+                    <span className="ai-rec-emoji">{r.kind === "lesson" ? "📘" : "📗"}</span>
+                    <span className="ai-rec-title">{r.title}</span>
+                    {(r.duration || r.type) && <span className="ai-rec-meta">{r.duration || r.type}</span>}
+                  </div>
+                )
+              ))}
+            </div>
+          )}
+          {(msg.resources || msg.crisis) && onTalkExpert && (
+            <button className="ai-expert-cta" onClick={onTalkExpert}>
+              🧑‍⚕️ Talk to a psychologist →
+            </button>
+          )}
           {(msg.resources || msg.crisis) && (
             <div className="ai-bubble-hotline">
               <Icon name="phone" size={16} />
@@ -135,6 +268,20 @@ function ChatBubble({ msg }) {
               )}
             </div>
           )}
+          {msg.appt && (
+            <div className="ai-appt-card">
+              <div className="ai-appt-title">✅ Appointment booked — please check it's correct</div>
+              <div className="ai-appt-row">🧑‍⚕️ <strong>{msg.appt.name}</strong>{msg.appt.specialty ? ` · ${msg.appt.specialty}` : ""}</div>
+              <div className="ai-appt-row">📅 {fmtApptDate(msg.appt.date)} &nbsp; 🕐 {msg.appt.slot}</div>
+              {msg.appt.phone && <div className="ai-appt-row">📞 {msg.appt.phone}</div>}
+              <div className="ai-appt-status">Status: <strong>pending</strong> the expert's confirmation</div>
+              {onManageAppt && (
+                <button className="ai-appt-manage" onClick={onManageAppt}>
+                  View / change in Counselling →
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="ai-meta">
           <span>{msg.time}</span>
@@ -152,6 +299,98 @@ function TypingBubble() {
       <div className="ai-bubble ai-bubble-ai ai-thinking">
         <span className="ai-thinking-label">MindCare is thinking</span>
         <span className="ai-typing"><span /><span /><span /></span>
+      </div>
+    </div>
+  );
+}
+
+/* In-chat psychologist booking: pick an expert → pick a free time → booked.
+   Rendered as an assistant card at the foot of the feed (transient). */
+function ExpertCard({ e, recommended, onPick }) {
+  return (
+    <button className={`ai-book-expert${recommended ? " ai-book-expert-reco" : ""}`} onClick={() => onPick(e)}>
+      <span className="ai-book-avatar">{e.name.slice(0, 1).toUpperCase()}</span>
+      <span className="ai-book-exp-info">
+        <span className="ai-book-exp-name">{e.name}</span>
+        <span className="ai-book-exp-spec">{e.specialty || "Counselling"}{e.experience ? ` · ${e.experience}` : ""}</span>
+      </span>
+      <span className="ai-rec-arrow">›</span>
+    </button>
+  );
+}
+
+function ExpertBookingCard({ state, onPickExpert, onPickSlot, onBack, onCancel }) {
+  const { step, loading, experts = [], expert, avail, booking, error, recommended } = state;
+  const days = step === "slots" ? freeSlotsByDay(avail) : [];
+  const others = recommended
+    ? experts.filter((e) => e.id !== recommended.expert.id)
+    : experts;
+  return (
+    <div className="ai-row ai">
+      <div className="ai-avatar"><Mascot variant="chat" size={30} className="mascot-idle" /></div>
+      <div className="ai-msg">
+        <div className="ai-bubble ai-bubble-ai ai-book">
+          {step === "experts" && (
+            <>
+              <div className="ai-book-title">Let's connect you with a psychologist. Who would you like to talk to?</div>
+              {loading ? <div className="ai-book-loading">Loading psychologists…</div> : (
+                experts.length === 0 ? (
+                  <div className="ai-book-empty">No psychologists are available right now — please use the hotline above.</div>
+                ) : (
+                  <>
+                    {recommended && (
+                      <div className="ai-book-reco">
+                        <div className="ai-book-reco-label">✨ Recommended for you — {recommended.reason}</div>
+                        <ExpertCard e={recommended.expert} recommended onPick={onPickExpert} />
+                      </div>
+                    )}
+                    {others.length > 0 && (
+                      <div className="ai-book-experts">
+                        {recommended && <div className="ai-book-others-label">Or choose another psychologist</div>}
+                        {others.map((e) => (
+                          <ExpertCard key={e.id} e={e} onPick={onPickExpert} />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              )}
+              <button className="ai-book-cancel" onClick={onCancel}>Not now</button>
+            </>
+          )}
+
+          {step === "slots" && (
+            <>
+              <div className="ai-book-title">Pick a time with <strong>{expert?.name}</strong> (next 3 weeks):</div>
+              {loading ? <div className="ai-book-loading">Loading available times…</div> : (
+                days.length === 0 ? (
+                  <div className="ai-book-empty">No free slots in the next 3 weeks — try another psychologist.</div>
+                ) : (
+                  <div className="ai-book-days">
+                    {days.map((g) => (
+                      <div key={g.date} className="ai-book-day">
+                        <div className="ai-book-day-label">{fmtApptDate(g.date)}</div>
+                        <div className="ai-book-slots">
+                          {g.slots.map((sl) => (
+                            <button key={sl} className="ai-book-slot" disabled={booking}
+                                    onClick={() => onPickSlot(g.date, sl)}>
+                              {sl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+              {error && <div className="ai-book-error">{error}</div>}
+              <div className="ai-book-foot">
+                <button className="ai-book-cancel" onClick={onBack} disabled={booking}>← Back</button>
+                {booking && <span className="ai-book-loading">Booking…</span>}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -295,19 +534,38 @@ function RightPanel({ onUseTip, conversations, activeId, onOpen, onNew }) {
 }
 
 /* ── Page ──────────────────────────────────────────────────────── */
-export default function Chat() {
+export default function Chat({ onNav }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState(WELCOME);
   const [activeId, setActiveId] = useState(null);
   const [conversations, setConversations] = useState([]);
+  const [library, setLibrary] = useState([]);     // lessons+resources for clickable recs
+  const [recDetail, setRecDetail] = useState(null);
+  const [expertBooking, setExpertBooking] = useState(null); // in-chat booking flow
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const pollRef = useRef(null);
+  const pendingRef = useRef(null);  // { sid, idx } while a clinician review is outstanding
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, expertBooking]);
+
+  // Load the library once so "From your library" recommendations can be matched
+  // to real lessons/resources and opened on tap.
+  useEffect(() => {
+    let alive = true;
+    Promise.all([api.lessons().catch(() => ({})), api.resources().catch(() => ({}))])
+      .then(([L, R]) => {
+        if (!alive) return;
+        setLibrary([
+          ...(L.lessons || []).map((l) => ({ kind: "lesson", id: l.id, title: l.title, duration: l.duration, full: l })),
+          ...(R.resources || []).map((r) => ({ kind: "resource", id: r.id, title: r.title, type: r.type, full: r })),
+        ]);
+      });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
@@ -329,35 +587,107 @@ export default function Chat() {
     } catch { /* ignore */ }
   }
 
+
   function newChat() {
     clearInterval(pollRef.current);
+    pollRef.current = null;
+    pendingRef.current = null;
     setMessages(WELCOME);
     setActiveId(null);
+    setExpertBooking(null);
     inputRef.current?.focus();
+  }
+
+  // ── In-chat psychologist booking (opened from the crisis "Talk to a
+  //    psychologist" CTA) — pick expert → pick time → auto-book → confirm. ──
+  async function startExpertBooking() {
+    setExpertBooking({ step: "experts", loading: true, experts: [] });
+    try {
+      const r = await api.experts();
+      const experts = r.experts || [];
+      if (!experts.length && onNav) { setExpertBooking(null); onNav("tuvan"); return; }
+      // Recommend the expert whose specialty best fits the user's recent words.
+      const ctx = messages.filter((m) => m.role === "user").slice(-5).map((m) => m.text).join(" ");
+      const recommended = recommendExpert(experts, ctx);
+      setExpertBooking({ step: "experts", loading: false, experts, recommended });
+    } catch {
+      setExpertBooking(null);
+      if (onNav) onNav("tuvan");   // fall back to the full Counselling page
+    }
+  }
+  async function pickExpert(e) {
+    setExpertBooking((b) => ({ ...b, step: "slots", loading: true, expert: e, error: "" }));
+    try {
+      const av = await api.expertAvailability(e.id);
+      setExpertBooking((b) => ({ ...b, step: "slots", loading: false, expert: e, avail: av }));
+    } catch (err) {
+      setExpertBooking((b) => ({ ...b, step: "slots", loading: false, error: err.message }));
+    }
+  }
+  async function bookSlot(date, slot) {
+    const exp = expertBooking?.expert;
+    if (!exp) return;
+    setExpertBooking((b) => ({ ...b, booking: true, error: "" }));
+    try {
+      await api.bookAppointment({ psychologist_id: exp.id, date, slot });
+      setExpertBooking(null);
+      setMessages((prev) => [...prev, {
+        role: "ai", time: nowTime(),
+        text: "I've booked this consultation for you — please check the details below are correct.",
+        appt: { name: exp.name, specialty: exp.specialty, phone: exp.phone, date, slot },
+      }]);
+    } catch (err) {
+      setExpertBooking((b) => ({ ...b, booking: false, error: err.message }));
+    }
+  }
+
+  // Apply a fetched session: when the clinician has answered/rejected, swap the
+  // placeholder bubble for the final reply and stop polling. Returns true once
+  // settled. Only touches the one bubble at `idx`, so it never clobbers input.
+  function applySession(s, idx) {
+    if (s.status !== "answered" && s.status !== "rejected") return false;
+    clearInterval(pollRef.current);
+    pollRef.current = null;
+    pendingRef.current = null;
+    setMessages((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        role: "ai",
+        time: nowTime(),
+        text: s.status === "answered"
+          ? s.final_reply
+          : "A clinician determined a different approach is needed. Please reach out directly for support.",
+      };
+      return next;
+    });
+    return true;
   }
 
   function startPolling(sid, idx) {
     clearInterval(pollRef.current);
+    pendingRef.current = { sid, idx };
     pollRef.current = setInterval(async () => {
-      try {
-        const s = await api.mySession(sid);
-        if (s.status === "answered" || s.status === "rejected") {
-          clearInterval(pollRef.current);
-          setMessages((prev) => {
-            const next = [...prev];
-            next[idx] = {
-              role: "ai",
-              time: nowTime(),
-              text: s.status === "answered"
-                ? s.final_reply
-                : "A clinician determined a different approach is needed. Please reach out directly for support.",
-            };
-            return next;
-          });
-        }
-      } catch {}
-    }, 4000);
+      try { applySession(await api.mySession(sid), idx); } catch {}
+    }, 3000);
   }
+
+  // Background tabs throttle setInterval to ~once a minute (or pause it), so a
+  // clinician reply approved while the user is on another tab/window wouldn't
+  // appear until reload. Re-check the outstanding session the instant the tab
+  // regains focus — covers the "approve in admin, switch back" flow.
+  useEffect(() => {
+    const recheck = async () => {
+      const p = pendingRef.current;
+      if (!p || document.visibilityState !== "visible") return;
+      try { applySession(await api.mySession(p.sid), p.idx); } catch {}
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    return () => {
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("focus", recheck);
+    };
+  }, []);
 
   async function sendText(raw) {
     const text = (raw ?? input).trim();
@@ -368,44 +698,82 @@ export default function Chat() {
     setInput("");
     setBusy(true);
 
+    // The agent can take a few minutes on a cold start — longer than the
+    // hosting gateway keeps a single request open. The backend still finishes
+    // and SAVES the reply, so as a safety net we poll for the freshly-created
+    // session and show its reply the moment it lands (no manual reload, no
+    // "couldn't reach server"). Whichever resolves first — the direct /chat
+    // response or the poll — wins; the other is ignored.
+    let settled = false;
+    const show = (obj, after) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(pollStartTimer);
+      clearInterval(pollRef.current);
+      setMessages((prev) => { const n = [...prev]; n[aiIdx] = obj; return n; });
+      loadConversations();
+      if (after) after();
+    };
+
+    const fromSession = async (sess) => {
+      if (sess.status === "auto_sent" || sess.status === "answered") {
+        let txt = "I'm here with you.";
+        try { const full = await api.mySession(sess.id); txt = full.final_reply || txt; } catch {}
+        show({ role: "ai", time: nowTime(), text: txt });
+      } else if (sess.status === "pending_review") {
+        show({ role: "ai", time: nowTime(), text: "Thank you for sharing. A clinician is reviewing the response and will respond shortly." },
+          () => startPolling(sess.id, aiIdx));
+      } else if (sess.status === "crisis") {
+        let txt = "I'm really glad you reached out. Your safety matters most right now.";
+        try { const full = await api.mySession(sess.id); txt = full.final_reply || txt; } catch {}
+        show({ role: "ai", time: nowTime(), text: txt, crisis: true });
+      }
+    };
+
+    let knownIds = null;
+    const startReplyPoll = async () => {
+      if (settled || pollRef.current) return;
+      if (knownIds === null) {
+        try { const s0 = await api.mySessions(); knownIds = new Set((s0.sessions || []).map((x) => x.id)); }
+        catch { knownIds = new Set(); }
+      }
+      const t0 = Date.now();
+      pollRef.current = setInterval(async () => {
+        if (settled) { clearInterval(pollRef.current); return; }
+        if (Date.now() - t0 > 30 * 60 * 1000) {
+          show({ role: "ai", time: nowTime(), error: true, text: "This is taking longer than usual — please reload in a moment to see the reply." });
+          return;
+        }
+        try {
+          const r = await api.mySessions();
+          const fresh = (r.sessions || []).find((x) => !knownIds.has(x.id));
+          if (fresh) await fromSession(fresh);
+        } catch {}
+      }, 3000);
+    };
+    // Give the direct request a head start; only poll if it's slow.
+    const pollStartTimer = setTimeout(startReplyPoll, 12000);
+
     try {
       const r = await api.chat(text, activeId ? { conversation_id: activeId } : {});
-      const wasNew = r.conversation_id && r.conversation_id !== activeId;
-      if (wasNew) setActiveId(r.conversation_id);
-
-      let replyText;
-      let crisis = false;
+      if (settled) return;
+      if (r.conversation_id && r.conversation_id !== activeId) setActiveId(r.conversation_id);
       // crisis_resources is sent for both L0 (crisis) and L1 (pending_review)
       // so the user always has a real-person lifeline to reach for.
-      let resources = r.crisis_resources || null;
+      const resources = r.crisis_resources || null;
       if (r.outcome === "answered") {
-        replyText = r.final?.response || "I'm here with you.";
-        resources = null;
+        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you." });
       } else if (r.outcome === "crisis") {
-        replyText = r.message || "I'm really glad you reached out. Your safety matters most right now.";
-        crisis = true;
+        show({ role: "ai", time: nowTime(), text: r.message || "I'm really glad you reached out. Your safety matters most right now.", crisis: true, resources });
       } else if (r.outcome === "pending_review") {
-        replyText = r.message || "Thank you for sharing. A clinician is reviewing your message and will respond shortly.";
+        show({ role: "ai", time: nowTime(), text: r.message || "Thank you for sharing. A clinician is reviewing your message and will respond shortly.", resources },
+          () => r.session_id && startPolling(r.session_id, aiIdx));
       } else {
-        replyText = r.message || "I'm here with you.";
-        resources = null;
+        show({ role: "ai", time: nowTime(), text: r.message || "I'm here with you." });
       }
-
-      setMessages((prev) => {
-        const next = [...prev];
-        next[aiIdx] = { role: "ai", time: nowTime(), text: replyText, crisis, resources };
-        return next;
-      });
-
-      if (r.outcome === "pending_review" && r.session_id) startPolling(r.session_id, aiIdx);
-      // Refresh the sidebar so a newly-created thread appears (and titles update).
-      loadConversations();
     } catch {
-      setMessages((prev) => {
-        const next = [...prev];
-        next[aiIdx] = { role: "ai", time: nowTime(), error: true, text: "Sorry, I couldn't reach the server. Please try again in a moment." };
-        return next;
-      });
+      // Gateway cut the long request — let the poll recover the saved reply.
+      if (!settled) startReplyPoll();
     } finally {
       setBusy(false);
     }
@@ -451,7 +819,21 @@ export default function Chat() {
             {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
               <EmptyState greeting={messages[0]?.text || WELCOME[0].text} />
             ) : (
-              messages.map((m, i) => (m.typing ? <TypingBubble key={i} /> : <ChatBubble key={i} msg={m} />))
+              messages.map((m, i) => (m.typing ? <TypingBubble key={i} /> : (
+                <ChatBubble key={i} msg={m} library={library}
+                  onOpenRec={(r) => setRecDetail(r)}
+                  onTalkExpert={startExpertBooking}
+                  onManageAppt={onNav ? () => onNav("tuvan") : null} />
+              )))
+            )}
+            {expertBooking && (
+              <ExpertBookingCard
+                state={expertBooking}
+                onPickExpert={pickExpert}
+                onPickSlot={bookSlot}
+                onBack={startExpertBooking}
+                onCancel={() => setExpertBooking(null)}
+              />
             )}
             <div ref={bottomRef} />
           </div>
@@ -499,6 +881,62 @@ export default function Chat() {
           onNew={newChat}
         />
       </div>
+
+      {recDetail && <RecDetail rec={recDetail} onClose={() => setRecDetail(null)} />}
     </div>
+  );
+}
+
+/* ── Read-only detail for a recommended lesson/resource (reuses lx-* CSS) ── */
+function RecDetail({ rec, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const d = rec.full || {};
+  const isLesson = rec.kind === "lesson";
+  const objectives = d.objectives || [];
+
+  return createPortal(
+    <div className="lx-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="lx-modal" role="dialog" aria-modal="true" aria-label={d.title}>
+        <button className="lx-close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="lx-head">
+          <h2 className="lx-title">{d.title}</h2>
+          <div className="lx-meta">
+            {d.duration && <span>🕐 {d.duration}</span>}
+            {isLesson
+              ? (d.level && <span className="lx-level">{d.level}</span>)
+              : (d.type && <span>{d.type}</span>)}
+            {d.category && <span>{d.category}</span>}
+          </div>
+        </div>
+        <div className="lx-body">
+          {d.description && <p className="lx-desc">{d.description}</p>}
+          {isLesson && objectives.length > 0 && (
+            <div className="lx-objectives">
+              <div className="lx-obj-head"><span>Learning objectives</span></div>
+              {objectives.map((o, i) => (
+                <div key={i} className="lx-obj"><span>• {o}</span></div>
+              ))}
+            </div>
+          )}
+          {d.content && (
+            <div className="lx-content">
+              {d.content.split("\n").map((line, i) =>
+                line.trim() ? <p key={i}>{line}</p> : <br key={i} />)}
+            </div>
+          )}
+          {!isLesson && d.url && (
+            <a className="lx-link" href={d.url} target="_blank" rel="noopener noreferrer">
+              {d.type === "Audio" ? "▶ Listen" : d.type === "Video" ? "▶ Watch" : "Open ↗"}
+            </a>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, setSession } from "../api.js";
 import Register from "./Register.jsx";
 import AuthLayout from "../components/AuthLayout.jsx";
+import GoogleSignInButton from "../components/GoogleSignInButton.jsx";
 
 export default function Login({ onAuth, onBack }) {
   const [mode, setMode] = useState("login"); // login | register
@@ -22,6 +23,20 @@ export default function Login({ onAuth, onBack }) {
     setBusy(true);
     try {
       const res = await api.login(username, password);
+      setSession(res.token, { username: res.username, role: res.role });
+      onAuth({ username: res.username, role: res.role });
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleGoogle(credential) {
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await api.googleAuth(credential);
       setSession(res.token, { username: res.username, role: res.role });
       onAuth({ username: res.username, role: res.role });
     } catch (e) {
@@ -61,6 +76,11 @@ export default function Login({ onAuth, onBack }) {
           Sign in
         </button>
       </form>
+
+      <div className="auth-or"><span>or</span></div>
+      <div className="gsi-row">
+        <GoogleSignInButton onCredential={handleGoogle} text="continue_with" />
+      </div>
 
       <div className="divider" />
       <div className="demo-hint">

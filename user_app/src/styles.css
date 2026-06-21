@@ -93,7 +93,33 @@ input, textarea, select { font-family: var(--font); }
   align-items: center;
   gap: 10px;
   padding: 0 22px;
+  /* now a <button> — reset native chrome, keep it clickable */
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
+.topbar-logo-section:hover { opacity: 0.88; }
+
+/* Hamburger — hidden on desktop, shown on mobile (see media query below) */
+.topbar-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-left: 8px;
+  border: none;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.topbar-hamburger:hover { background: var(--bg); }
+.sidebar-backdrop { display: none; }
 .topbar-logo-icon {
   width: 38px; height: 38px;
   background: var(--primary-soft);
@@ -614,6 +640,12 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 
 /* Divider */
 .divider { height: 1px; background: var(--line); margin: 16px 0; }
+
+/* "or" separator + Google sign-in button row on the auth screens */
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; color: var(--ink-soft); font-size: 12px; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.gsi-row { display: flex; justify-content: center; }
+.gsi-btn-wrap { display: flex; justify-content: center; min-height: 40px; color-scheme: light; }
 
 /* Banner */
 .banner {
@@ -4475,9 +4507,45 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   .topbar-tabs { display: none; }
   .dash-bottom { grid-template-columns: 1fr; }
 }
+/* ── Mobile: sidebar becomes an off-canvas drawer opened by the hamburger ── */
+@media (max-width: 860px) {
+  .topbar-hamburger { display: flex; }
+  .topbar-logo-section { width: auto; padding: 0 12px; }
+  .sidebar {
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+    z-index: 50;
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 40;
+    animation: u-fade 0.18s ease;
+  }
+}
+@keyframes u-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Small phones: keep the topbar + auth card from overflowing ── */
+@media (max-width: 480px) {
+  .topbar-username, .topbar-caret { display: none; }
+  .topbar-brand { font-size: 16px; }
+  .topbar-logo-icon { transform: scale(0.85); }
+  .auth2-card { padding: 26px 18px; }
+  .login-card { padding: 26px 20px; }
+  .page-content { padding: 14px; }
+  .topbar-right { gap: 6px; }
+}
+
 @media (max-width: 640px) {
-  :root { --sidebar-w: 0px; }
-  .sidebar { display: none; }
   .topbar-logo-section { width: auto; }
   .page-content { padding: 16px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -6275,3 +6343,252 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   margin-top: 8px;
   padding-top: 16px;
 }
+
+/* ============================================================
+   Mobile polish — appended last so these win the cascade.
+   Fixes: dashboard 2-col not collapsing, chat horizontal overflow.
+   ============================================================ */
+@media (max-width: 900px) {
+  .home-dashboard-v3 { grid-template-columns: 1fr; max-width: 100%; }
+  .home-bottom-grid  { grid-template-columns: 1fr; }
+  .home-side-v3      { width: 100%; }
+}
+@media (max-width: 640px) {
+  html, body, #root { overflow-x: hidden; max-width: 100%; }
+  .app-shell, .app-body, .main-content { max-width: 100vw; }
+
+  /* Chat: keep everything inside the viewport */
+  .chat-page { padding: 12px; }
+  .chat-page .page-hero { padding: 14px 16px; min-height: auto; }
+  .chat-page .page-hero-mascot { display: none; }
+  .chat-page .page-hero-sub { max-width: 100%; }
+  .chat-feed { padding: 14px 0 8px; }
+  .bubble { padding: 4px 10px; }
+  .bubble-user .bubble-body, .bubble-ai .bubble-body { max-width: 88%; }
+
+  /* General pages */
+  .page-content { padding: 14px; overflow-x: hidden; }
+  .home-hero-v3 { padding: 22px 18px; min-height: auto; }
+}
+
+/* ============================================================
+   Mobile fix v2 — target the REAL chat classes (ai-*) + global
+   horizontal-overflow guard. (Earlier chat-* rules were no-ops.)
+   ============================================================ */
+html, body, #root { overflow-x: hidden; }
+
+@media (max-width: 1024px) {
+  .home-dashboard-v3 { grid-template-columns: 1fr; max-width: 100%; }
+  .home-bottom-grid  { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* Chat (AI Support) — keep the conversation inside the viewport */
+  .ai-grid { grid-template-columns: 1fr; max-width: 100%; gap: 0; }
+  .ai-card, .ai-main, .ai-feed, .ai-msg { max-width: 100%; min-width: 0; }
+  .ai-row { max-width: 92%; }
+  .ai-feed { padding: 12px 2px 4px; }
+  .ai-bubble { font-size: 14px; }
+  .ai-inputbar { max-width: 100%; }
+}
+
+/* ── Lesson / Resource detail modal (lx-*) ───────────────────────────── */
+.lx-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 16px; overflow-y: auto; animation: u-fade 0.16s ease;
+}
+.lx-modal {
+  position: relative; width: 100%; max-width: 640px;
+  /* Cap the height to the viewport and scroll the content INSIDE the modal,
+     so a tall modal stays centered with its title reachable (avoids the
+     flex margin:auto top-clipping bug). */
+  max-height: calc(100vh - 48px); overflow-y: auto;
+  background: var(--surface); border-radius: 18px; border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  padding: 26px 28px 28px; animation: u-fade 0.2s ease;
+}
+.lx-close {
+  position: absolute; top: 14px; right: 14px; width: 34px; height: 34px;
+  border-radius: 9px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink-soft); cursor: pointer; font-size: 14px;
+}
+.lx-close:hover { color: var(--danger); border-color: var(--danger); }
+.lx-title { font-size: 20px; font-weight: 800; color: var(--ink); padding-right: 40px; }
+.lx-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 13px; color: var(--ink-soft); }
+.lx-level { text-transform: capitalize; }
+.lx-progress-row { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; }
+.lx-progress { flex: 1; height: 8px; border-radius: 99px; background: var(--primary-soft); overflow: hidden; }
+.lx-progress-fill { height: 100%; background: var(--primary); border-radius: 99px; transition: width 0.25s; }
+.lx-progress-pct { font-size: 13px; font-weight: 700; color: var(--primary-dark); white-space: nowrap; }
+.lx-body { margin-top: 14px; }
+.lx-desc { color: var(--ink-soft); font-size: 14.5px; line-height: 1.6; margin-bottom: 16px; }
+.lx-objectives { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 18px; }
+.lx-obj-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 8px; }
+.lx-markall { border: none; background: none; color: var(--primary-dark); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.lx-obj { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 14px; color: var(--ink); cursor: pointer; }
+.lx-obj input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+.lx-obj.checked span { color: var(--ink-soft); text-decoration: line-through; }
+.lx-content p { color: var(--ink); font-size: 14.5px; line-height: 1.7; margin: 0 0 10px; }
+.lx-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 11px 18px; background: var(--primary); color: #fff; border-radius: 12px; font-weight: 700; text-decoration: none; }
+.lx-link:hover { background: var(--primary-dark); }
+@media (max-width: 640px) { .lx-overlay { padding: 16px 10px; } .lx-modal { padding: 22px 16px; } .lx-title { font-size: 18px; } }
+
+/* ── Clickable "From your library" recommendations inside a chat bubble ── */
+.ai-recs { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ai-recs-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 2px; }
+.ai-rec-chip {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  text-align: left; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface);
+  cursor: pointer; transition: all 0.15s; font: inherit;
+}
+.ai-rec-chip:hover { border-color: var(--primary); background: var(--primary-light); }
+.ai-rec-chip-static { cursor: default; opacity: 0.85; }
+.ai-rec-chip-static:hover { border-color: var(--line); background: var(--surface); }
+.ai-rec-emoji { font-size: 16px; flex-shrink: 0; }
+.ai-rec-title { flex: 1; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ai-rec-meta { font-size: 12px; color: var(--ink-soft); white-space: nowrap; flex-shrink: 0; }
+.ai-rec-arrow { color: var(--primary); font-size: 18px; flex-shrink: 0; }
+
+/* ── Counselling (Tư vấn) page ─────────────────────────────────────────── */
+.tv-page { max-width: 1000px; margin: 0 auto; }
+.tv-header h1 { font-size: 24px; font-weight: 800; color: var(--ink); }
+.tv-header p { color: var(--ink-soft); font-size: 14px; margin-top: 4px; max-width: 620px; }
+.tv-banner { margin: 16px 0; padding: 11px 14px; border-radius: 12px; font-size: 13.5px; font-weight: 600; }
+.tv-banner.ok { background: var(--primary-soft); color: var(--primary-dark); }
+.tv-banner.err { background: #fde8e8; color: #b91c1c; }
+.tv-section { margin-top: 22px; }
+.tv-h2 { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 12px; }
+.tv-muted { color: var(--ink-soft); font-size: 14px; }
+
+.tv-experts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.tv-expert { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--shadow-sm); }
+.tv-expert-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.tv-avatar { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; font-weight: 800; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tv-expert-name { font-weight: 800; color: var(--ink); }
+.tv-expert-spec { font-size: 12.5px; color: var(--primary-dark); font-weight: 600; }
+.tv-expert-exp { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 8px; }
+.tv-expert-phone { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; }
+.tv-btn-primary { width: 100%; padding: 10px; border: none; border-radius: 11px; background: var(--primary); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.tv-btn-primary:hover { background: var(--primary-dark); }
+
+.tv-appts { display: flex; flex-direction: column; gap: 10px; }
+.tv-appt { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; flex-wrap: wrap; }
+.tv-appt-name { font-weight: 700; color: var(--ink); }
+.tv-appt-spec { color: var(--ink-soft); font-weight: 500; font-size: 13px; }
+.tv-appt-when { font-size: 13.5px; color: var(--ink); margin-top: 4px; }
+.tv-appt-phone { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.tv-appt-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.tv-appt-actions { display: flex; gap: 8px; }
+.tv-btn-ghost { padding: 6px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; font-size: 12.5px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.tv-btn-ghost:hover { border-color: var(--primary); color: var(--primary-dark); }
+.tv-btn-ghost.danger { color: #b91c1c; }
+.tv-btn-ghost.danger:hover { border-color: #ef4444; background: #fde8e8; }
+.tv-locked { font-size: 11.5px; color: var(--ink-soft); }
+.tv-pill { font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; text-transform: capitalize; }
+.tv-pill.pending { background: #fef3c7; color: #b45309; }
+.tv-pill.accepted { background: var(--primary-soft); color: var(--primary-dark); }
+.tv-pill.cancelled, .tv-pill.declined { background: #f1f5f9; color: #64748b; }
+
+/* booking calendar (inside lx-modal) */
+.tv-modal { max-width: 560px; }
+.tv-cal { margin-top: 16px; }
+.tv-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.tv-cal-head { margin-bottom: 6px; }
+.tv-cal-wd { text-align: center; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+.tv-day { position: relative; aspect-ratio: 1; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--ink); transition: all 0.12s; }
+.tv-day:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-light); }
+.tv-day.sel { background: var(--primary); border-color: var(--primary); color: #fff; }
+.tv-day.full { background: #fde8e8; border-color: #f6c6c6; color: #c0494a; cursor: not-allowed; }
+.tv-day-dot { position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+.tv-day.sel .tv-day-dot { background: #fff; }
+.tv-cal-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
+.tv-lg { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 5px; vertical-align: -1px; }
+.tv-lg.free { background: var(--surface); border: 1px solid var(--line); }
+.tv-lg.full { background: #fde8e8; border: 1px solid #f6c6c6; }
+.tv-slots-wrap { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.tv-slots-label { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+.tv-slots { display: flex; flex-wrap: wrap; gap: 8px; }
+.tv-slot { padding: 9px 16px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; font-size: 14px; font-weight: 700; color: var(--primary-dark); cursor: pointer; }
+.tv-slot:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+@media (max-width: 640px) { .tv-appt-side { align-items: flex-start; width: 100%; } }
+
+/* Crisis (L0) "talk to a psychologist" call-to-action in chat */
+.ai-expert-cta {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 10px;
+  padding: 10px 16px; border-radius: 12px; border: none;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 14px;
+  cursor: pointer;
+}
+.ai-expert-cta:hover { background: var(--primary-dark); }
+
+/* ── In-chat psychologist booking ─────────────────────────────────── */
+.ai-book { min-width: 280px; }
+.ai-book-title { font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 10px; line-height: 1.5; }
+.ai-book-loading, .ai-book-empty { font-size: 13px; color: var(--ink-soft); padding: 4px 0; }
+.ai-book-error { font-size: 12.5px; color: var(--danger); margin-top: 8px; }
+.ai-book-experts { display: flex; flex-direction: column; gap: 8px; }
+.ai-book-reco { margin-bottom: 12px; }
+.ai-book-reco-label {
+  font-size: 12px; font-weight: 700; color: var(--primary-dark);
+  margin-bottom: 6px; text-transform: capitalize;
+}
+.ai-book-expert-reco { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 1px var(--primary) inset; }
+.ai-book-others-label { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 2px; }
+.ai-book-expert {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; transition: all 0.15s; font: inherit;
+}
+.ai-book-expert:hover { border-color: var(--primary); background: var(--primary-light); }
+.ai-book-avatar {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.ai-book-exp-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ai-book-exp-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.ai-book-exp-spec { font-size: 12px; color: var(--ink-soft); }
+.ai-book-days { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.ai-book-day-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
+.ai-book-slots { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-book-slot {
+  padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.ai-book-slot:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-light); }
+.ai-book-slot:disabled { opacity: 0.5; cursor: default; }
+.ai-book-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.ai-book-cancel {
+  margin-top: 12px; border: none; background: none; color: var(--ink-soft);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0;
+}
+.ai-book-foot .ai-book-cancel { margin-top: 0; }
+.ai-book-cancel:hover { color: var(--ink); }
+
+/* Appointment confirmation card (sent back after booking) */
+.ai-appt-card {
+  margin-top: 10px; padding: 12px 14px; border-radius: 12px;
+  background: var(--primary-light); border: 1px solid var(--primary);
+}
+.ai-appt-title { font-size: 13px; font-weight: 800; color: var(--primary-dark); margin-bottom: 8px; }
+.ai-appt-row { font-size: 13px; color: var(--ink); margin-bottom: 4px; }
+.ai-appt-status { font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
+.ai-appt-manage {
+  margin-top: 10px; border: none; background: var(--primary); color: #fff;
+  font: inherit; font-size: 12.5px; font-weight: 700; padding: 8px 14px;
+  border-radius: 10px; cursor: pointer;
+}
+.ai-appt-manage:hover { background: var(--primary-dark); }
+
+/* In-app cancel confirmation */
+.tv-confirm { max-width: 420px; }
+.tv-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.tv-btn-danger { padding: 9px 18px; border: none; border-radius: 11px; background: #ef4444; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.tv-btn-danger:hover { background: #dc2626; }
+
+/* Center small dialogs vertically (confirm boxes) */
+.lx-overlay-center { align-items: center; }

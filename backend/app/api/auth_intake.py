@@ -1,7 +1,11 @@
 """Auth + consent + intake endpoints (user-facing pre-chat flow)."""
 import re
+import json
 import hashlib
 import secrets
+import logging
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,9 +18,11 @@ from app.db import models
 from app.db.session import get_db
 from app.schemas.api import (
     LoginIn, LoginOut, ConsentIn, IntakeIn,
-    RegisterIn, VerifyOtpIn, ResendOtpIn,
+    RegisterIn, VerifyOtpIn, ResendOtpIn, GoogleAuthIn,
 )
 from app.services import intake_parser, email_sender, redis_client as rc
+
+log = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api")
@@ -41,6 +47,28 @@ def _validate_email(email: str) -> str:
 def _gen_otp() -> str:
     n = settings.otp_length
     return "".join(secrets.choice("0123456789") for _ in range(n))
+
+
+_GOOGLE_ISS = ("accounts.google.com", "https://accounts.google.com")
+
+
+def _verify_google_token(credential: str) -> dict:
+    """Verify a Google Identity Services ID token via Google's tokeninfo
+    endpoint and return its claims. Raises 401 on any problem."""
+    url = ("https://oauth2.googleapis.com/tokeninfo?id_token="
+           + urllib.parse.quote(credential))
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            info = json.loads(r.read().decode())
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("Google token verification failed: %s", e)
+        raise HTTPException(401, "Could not verify Google sign-in")
+
+    if info.get("aud") != settings.google_oauth_client_id:
+        raise HTTPException(401, "Google token was issued for a different app")
+    if info.get("iss") not in _GOOGLE_ISS:
+        raise HTTPException(401, "Invalid Google token issuer")
+    return info
 
 
 # ============================================================
@@ -194,6 +222,80 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     intake_required = False
     if user.role == "user" and not consent_required:
         # Has the user submitted at least one intake?
+        intake_required = (
+            db.query(models.IntakeForm)
+              .filter_by(user_id=user.id).first() is None
+        )
+    return LoginOut(
+        token=auth.make_token(str(user.id), user.username, user.role),
+        username=user.username, role=user.role,
+        consent_required=consent_required,
+        intake_required=intake_required,
+    )
+
+
+# ============================================================
+# Google sign-in (Google Identity Services ID-token flow)
+#   The browser obtains a Google ID token; we verify it, then find-or-create
+#   the matching user (email already verified by Google) and issue our token.
+# ============================================================
+@router.post("/auth/google", response_model=LoginOut)
+def google_auth(body: GoogleAuthIn, request: Request,
+                db: Session = Depends(get_db)):
+    if not settings.google_oauth_client_id:
+        raise HTTPException(503, "Google sign-in is not configured")
+
+    info = _verify_google_token(body.credential)
+    email = (info.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "Google account has no email")
+    if str(info.get("email_verified")).lower() != "true":
+        raise HTTPException(400, "Google account email is not verified")
+
+    # Keep the same domain policy as Gmail self-registration.
+    domain = email.split("@")[-1]
+    allowed = [d.lower() for d in settings.allowed_email_domains]
+    if allowed and domain not in allowed:
+        raise HTTPException(
+            400, f"Only these email domains are allowed: {', '.join(allowed)}")
+
+    user = db.query(models.User).filter_by(email=email).first()
+    created = False
+    if not user:
+        # No password is ever used for Google accounts; store a random hash so
+        # the NOT NULL column is satisfied and password login can't match.
+        user = models.User(
+            username=email,
+            email=email,
+            password_hash=auth.hash_password(secrets.token_urlsafe(32)),
+            role="user",
+            email_verified=True,
+        )
+        db.add(user)
+        db.flush()
+        created = True
+    elif not user.email_verified:
+        user.email_verified = True
+
+    if getattr(user, "status", "active") == "suspended":
+        raise HTTPException(
+            403, "This account has been suspended. Please contact support.")
+    if body.expected_role and body.expected_role != user.role:
+        raise HTTPException(
+            403,
+            f"Account role '{user.role}' is not allowed on this app "
+            f"(expects '{body.expected_role}')")
+
+    user.last_login = datetime.now(timezone.utc)
+    db.flush()
+    audit_mod.audit(db, action="login_google", actor={
+        "uid": str(user.id), "username": user.username, "role": user.role,
+    }, ip=auth.client_ip(request), resource_type="user", resource_id=user.id,
+        detail={"created": created})
+
+    consent_required = user.role == "user" and user.consent_at is None
+    intake_required = False
+    if user.role == "user" and not consent_required:
         intake_required = (
             db.query(models.IntakeForm)
               .filter_by(user_id=user.id).first() is None

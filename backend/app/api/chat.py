@@ -13,9 +13,12 @@ Chat endpoint — wires the FULL pipeline v4:
                               →  L3: auto-sent
 """
 import hashlib
+import logging
+import re
+import time
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import auth, audit as audit_mod
@@ -83,8 +86,87 @@ def _sla_for(level: str) -> datetime:
     return base + timedelta(minutes=15 if level == "L1" else 60)
 
 
+# ── Greeting fast-path ───────────────────────────────────────────────────────
+# A standalone greeting carries no risk content, so we answer it instantly with
+# a warm opener instead of spinning up the safety gate + agent. The whole
+# message must BE the greeting (anchored) — "hi I want to disappear" is NOT a
+# greeting and goes through the full pipeline.
+_GREETING_PAT = re.compile(
+    r"^\s*(hi+|hey+|hello+|helo+|heya|hiya|yo|hai|hallo|alo+|sup|"
+    r"good\s*(morning|afternoon|evening)|gm|"
+    r"ch[aà]o|xin\s*ch[aà]o)"
+    r"[\s,.!~]*(there|bot|mindcare|ai|friend|b[aạ]n|nh[eé])?[\s,.!?~]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_greeting(text: str) -> bool:
+    t = (text or "").strip()
+    if not t or len(t) > 40:
+        return False
+    return bool(_GREETING_PAT.match(t))
+
+
+def _greeting_reply(mem: dict) -> str:
+    """Memory-aware opener. Returning user → recall; new user → simple welcome."""
+    mem = mem or {}
+    turns = mem.get("turn_count", 0) or 0
+    themes = [t for t in (mem.get("recurring_themes") or []) if t][:2]
+    if turns > 0:
+        if themes:
+            return (
+                "Hey, good to see you again — I'm right here. Last time we were "
+                f"working through {', '.join(themes)}. How have things been with "
+                "that since we last talked?"
+            )
+        return (
+            "Hey, good to see you again — I'm right here. How have you been "
+            "since we last talked? Anything you'd like to pick up on today?"
+        )
+    return (
+        "Hi, I'm really glad you're here. I'm your CBT companion — a safe, "
+        "private space to talk through whatever's on your mind. What would you "
+        "like to start with today?"
+    )
+
+
+# Greetings answer instantly without touching Modal, so we use the moment to
+# warm the scale-to-zero GPU services in the BACKGROUND: by the time the user
+# sends their first real message, safety/llm/agent containers are already hot.
+# Throttled in-process so repeated greetings don't re-trigger warm-ups.
+_log = logging.getLogger("cbt")
+_last_warm = 0.0
+_WARM_COOLDOWN = 240  # seconds
+
+
+def _warm_modal() -> None:
+    global _last_warm
+    now = time.time()
+    if now - _last_warm < _WARM_COOLDOWN:
+        return
+    _last_warm = now
+    _log.info("greeting → warming Modal GPU services in background")
+    t0 = time.time()
+    tiny = [{"role": "user", "content": "hi"}]
+    try:
+        safety_gate.assess("hi", history=[])
+    except Exception:
+        pass
+    try:
+        llm_client.generate(tiny, n=1, temperature=0.1)
+    except Exception:
+        pass
+    try:
+        if agent_client.available():
+            agent_client.chat(tiny, tools=[], max_new_tokens=8)
+    except Exception:
+        pass
+    _log.info("greeting warm-up done in %.1fs", time.time() - t0)
+
+
 @router.post("/chat")
 def chat(body: ChatIn, request: Request,
+          background_tasks: BackgroundTasks,
           user: dict = Depends(auth.current_user),
           db: Session = Depends(get_db)):
     if user["role"] != "user":
@@ -109,6 +191,44 @@ def chat(body: ChatIn, request: Request,
 
     # ---- resolve the thread FIRST so the safety gate can see prior turns ----
     convo = _resolve_conversation(db, u.id, body.conversation_id, text)
+
+    # ---- Greeting fast-path: instant, memory-aware "hello" ----
+    # Skips the safety gate + agent (no Modal call) so a bare "hi" returns
+    # immediately. Returning users get a recall-flavoured greeting; new users a
+    # simple welcome. We do NOT count this as a real turn (no user_memory
+    # update) so it never makes a brand-new user look "returning".
+    if _is_greeting(text):
+        mem = user_memory.load_for_prompt(db, u.id)
+        greeting = _greeting_reply(mem)
+        user_message = moderation_store.record_user_message(
+            db, convo, u, text, "L3")
+        sess = models.Session(
+            user_id=u.id, intake_id=intake.id, conversation_id=convo.id,
+            user_input_enc=encrypt_phi(text), user_input_hash=text_hash,
+            triage_level="L3", triage_reason="greeting", severity="low",
+            confidence=1.0, status="auto_sent",
+            final_reply_enc=encrypt_phi(greeting), final_technique="greeting",
+            analysis={"greeting": True,
+                      "memory_aware": bool(mem.get("turn_count"))},
+            completed_at=datetime.now(timezone.utc),
+        )
+        db.add(sess); db.flush()
+        moderation_store.record_ai_message(
+            db, convo, user_message, greeting, "L3", "not_required",
+            confidence=1.0, model_name="greeting")
+        # Warm the GPU services in the background so the first real message is fast.
+        background_tasks.add_task(_warm_modal)
+        return {
+            "session_id": str(sess.id),
+            "conversation_id": str(convo.id),
+            "outcome": "answered",
+            "triage": {"triage_level": "L3", "reason": "greeting",
+                       "severity": "low", "confidence": 1.0},
+            "final": {"technique": "greeting", "response": greeting},
+            "drafts": [{"idx": 0, "technique": "greeting",
+                        "response": greeting}],
+            "mode": "greeting",
+        }
 
     # Prior CLIENT turns of this thread (decrypted), most recent last. Reading
     # each message in isolation caused L1 over-triage with hallucinated reasons;

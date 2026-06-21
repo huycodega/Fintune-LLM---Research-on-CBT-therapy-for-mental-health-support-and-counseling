@@ -236,7 +236,7 @@ export default function UsersAdmin({ onLogout, onNav }) {
 
       <div className="la-main">
         <TopBar title="User Management" subtitle={loading ? "Loading…" : `${total} users`}
-                searchPlaceholder="Search users, emails…" onLogout={onLogout} />
+                searchPlaceholder="Search users, emails…" onLogout={onLogout} onNav={onNav} />
 
         <div className="la-content">
           <div className="la-content-left">

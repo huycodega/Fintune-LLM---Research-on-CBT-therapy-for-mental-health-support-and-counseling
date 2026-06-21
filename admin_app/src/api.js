@@ -115,4 +115,17 @@ export const api = {
     req(`/admin/resources/${rid}`, { method: "PATCH", body: payload }),
   deleteResource: (rid) =>
     req(`/admin/resources/${rid}`, { method: "DELETE" }),
+
+  // --- psychologists + appointments (ExpertsAdmin) ---
+  experts: () => req("/admin/psychologists"),
+  createExpert: (payload) =>
+    req("/admin/psychologists", { method: "POST", body: payload }),
+  updateExpert: (eid, payload) =>
+    req(`/admin/psychologists/${eid}`, { method: "PATCH", body: payload }),
+  deleteExpert: (eid) =>
+    req(`/admin/psychologists/${eid}`, { method: "DELETE" }),
+  appointments: (expertId = "") =>
+    req(`/admin/appointments${expertId ? `?expert_id=${expertId}` : ""}`),
+  setAppointmentStatus: (aid, status) =>
+    req(`/admin/appointments/${aid}`, { method: "PATCH", body: { status } }),
 };

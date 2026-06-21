@@ -2,7 +2,23 @@ import { useState, useEffect, useRef } from "react";
 import Icon from "../admin/Icon.jsx";
 import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
+import ContentFormModal from "../admin/ContentFormModal.jsx";
 import { api } from "../api.js";
+
+/* Field layout for the Lesson add/edit modal — mirrors LessonIn in
+   backend/app/schemas/api.py. */
+const LESSON_FIELDS = [
+  { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Identifying cognitive distortions" },
+  { name: "level", label: "Level", type: "select", half: true, options: ["basic", "intermediate", "advanced"] },
+  { name: "status", label: "Status", type: "select", half: true, options: ["draft", "published"] },
+  { name: "category", label: "Category", type: "text", half: true, placeholder: "e.g. Cognitive restructuring" },
+  { name: "duration", label: "Duration", type: "text", half: true, placeholder: "e.g. 15 min" },
+  { name: "author", label: "Author", type: "text", half: true, placeholder: "e.g. Clinical team" },
+  { name: "tags", label: "Tags", type: "tags", half: true, help: "Comma-separated", placeholder: "distortions, thoughts" },
+  { name: "objectives", label: "Learning objectives", type: "tags", help: "Comma-separated — one objective per item", placeholder: "Spot all-or-nothing thinking, Reframe a thought" },
+  { name: "description", label: "Short description", type: "textarea", rows: 2, placeholder: "One-line summary shown in the list." },
+  { name: "content", label: "Lesson content", type: "textarea", rows: 6, placeholder: "Full lesson body / script." },
+];
 
 /* Thumb art is keyed 1..8; map any row to one by its position so DB-backed
    rows (UUID ids) still get a stable icon. */
@@ -150,17 +166,6 @@ const THUMBS = {
   8: ["🌙", "linear-gradient(135deg,#c7d2fe,#a5b4fc)"],
 };
 
-const LESSONS = [
-  { id: 1, title: "Managing Stress Effectively", desc: "Understand and control stress in everyday life", category: "Stress Management", level: "basic", duration: "15 min", status: "published", date: "14/06/2024 09:15", by: "Admin" },
-  { id: 2, title: "Positive Thinking Every Day", desc: "Train a positive mindset to improve your emotions", category: "Positive Thinking", level: "basic", duration: "12 min", status: "published", date: "13/06/2024 21:42", by: "Minh Anh" },
-  { id: 3, title: "Mindfulness in the Present", desc: "Practice mindfulness to live fully in the moment", category: "Mindfulness", level: "intermediate", duration: "18 min", status: "published", date: "12/06/2024 18:53", by: "Trần Quang Huy" },
-  { id: 4, title: "4-7-8 Relaxation Breathing", desc: "The 4-7-8 breathing technique to ease anxiety quickly", category: "Breathing & Relaxation", level: "basic", duration: "8 min", status: "published", date: "11/06/2024 16:05", by: "Lê Thanh Tâm" },
-  { id: 5, title: "Building Healthy Habits", desc: "Step by step toward lasting positive habits", category: "Habits", level: "intermediate", duration: "20 min", status: "draft", date: "10/06/2024 14:30", by: "Phạm Gia Bảo" },
-  { id: 6, title: "Facing Anxiety", desc: "Recognize and overcome anxiety sustainably", category: "Stress Management", level: "intermediate", duration: "16 min", status: "draft", date: "09/06/2024 11:22", by: "Vũ Thùy Linh" },
-  { id: 7, title: "Positive Communication Skills", desc: "Communicate effectively and build healthy relationships", category: "Social Skills", level: "advanced", duration: "22 min", status: "published", date: "08/06/2024 10:45", by: "Hoàng Nam" },
-  { id: 8, title: "Sleep Well, Live Well", desc: "Habits to improve sleep and restore energy", category: "Mental Wellness", level: "basic", duration: "14 min", status: "published", date: "07/06/2024 09:30", by: "Đặng Thu Trang" },
-];
-
 const POPULAR = [
   { rank: 1, title: "Positive Thinking Every Day", n: "1,842" },
   { rank: 2, title: "Managing Stress Effectively", n: "1,539" },
@@ -235,18 +240,21 @@ function LessonRow({ lesson, idx, selected, onSelect, onDelete }) {
 }
 
 /* ── Pagination ────────────────────────────────────────────────── */
-function Pagination() {
-  const pages = [1, 2, 3, "…", 6];
-  const [active] = [1];
+function Pagination({ total = 0, pageSize = 10 }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const shown = Math.min(total, pageSize);
+  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
   return (
     <div className="la-pagination">
-      <div className="la-page-info">Showing 1 to 8 of 48 lessons</div>
+      <div className="la-page-info">
+        {total === 0 ? "No lessons yet" : `Showing 1 to ${shown} of ${total} lessons`}
+      </div>
       <div className="la-page-controls">
-        <button className="la-page-btn"><Icon name="chevronLeft" size={15} /></button>
-        {pages.map((p, i) => (
-          <button key={i} className={`la-page-btn ${p === active ? "active" : ""} ${p === "…" ? "ellipsis" : ""}`} disabled={p === "…"}>{p}</button>
+        <button className="la-page-btn" disabled><Icon name="chevronLeft" size={15} /></button>
+        {pages.map((p) => (
+          <button key={p} className={`la-page-btn ${p === 1 ? "active" : ""}`}>{p}</button>
         ))}
-        <button className="la-page-btn"><Icon name="chevronRight" size={15} /></button>
+        <button className="la-page-btn" disabled={pageCount <= 1}><Icon name="chevronRight" size={15} /></button>
       </div>
       <div className="la-select-group">
         <select className="la-select"><option>10 / page</option></select>
@@ -376,6 +384,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
   const [loading, setLoading] = useState(true);
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
+  // null = closed; {} = add new; {...lesson} = editing.
+  const [formItem, setFormItem] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -389,25 +399,13 @@ export default function LessonsAdmin({ onLogout, onNav }) {
       setMock(false);
       setErr("");
     } catch (e) {
-      // Backend not wired yet → demo with representative data so the page
-      // is usable and not an empty 500 screen.
-      const demo = LESSONS.map((l) => ({
-        ...l,
-        author: l.by,
-        updated_at: l.date,
-        description: l.desc + " This lesson guides learners through practical, evidence-based CBT techniques they can apply straight away.",
-        tags: [l.category.toLowerCase().split(" ")[0], l.level, "cbt"],
-      }));
-      setLessons(demo);
-      setStats({
-        total: demo.length,
-        published: demo.filter((x) => x.status === "published").length,
-        draft: demo.filter((x) => x.status === "draft").length,
-        views: 12480,
-      });
-      setSelected((prev) => (prev && demo.some((l) => l.id === prev) ? prev : demo[0].id));
-      setMock(true);
-      setErr("");
+      // Backend unreachable → show an empty list with an error. Never inject
+      // demo data so the page only ever reflects real DB content.
+      setLessons([]);
+      setStats({ total: 0, published: 0, draft: 0, views: 0 });
+      setSelected(null);
+      setMock(false);
+      setErr("Couldn't reach the lessons API.");
     } finally {
       setLoading(false);
     }
@@ -425,15 +423,25 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     }));
   }
 
-  async function handleAdd() {
-    const title = window.prompt("New lesson title:");
-    if (!title) return;
+  function handleAdd() { setFormItem({}); }
+
+  async function handleFormSubmit(payload) {
+    const editingId = formItem && formItem.id;
     if (mock) {
-      const item = { id: `m${Date.now()}`, title, desc: "Newly added lesson.", description: "Newly added lesson — add objectives and content next.", category: "General", level: "basic", duration: "—", status: "draft", author: "You", updated_at: new Date().toISOString(), tags: ["new"] };
-      commitLocal([item, ...lessons]); setSelected(item.id); return;
+      if (editingId) {
+        commitLocal(lessons.map((l) => l.id === editingId ? { ...l, ...payload, desc: payload.description, updated_at: new Date().toISOString() } : l));
+      } else {
+        const item = {
+          id: `m${Date.now()}`, ...payload, desc: payload.description,
+          updated_at: new Date().toISOString(),
+        };
+        commitLocal([item, ...lessons]); setSelected(item.id);
+      }
+      return;
     }
-    try { await api.createLesson({ title, status: "draft" }); await load(); }
-    catch (e) { alert(e.message); }
+    if (editingId) await api.updateLesson(editingId, payload);
+    else await api.createLesson(payload);
+    await load();
   }
 
   async function handleDelete(lesson) {
@@ -450,12 +458,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     catch (e) { alert(e.message); }
   }
 
-  async function handleEdit(lesson) {
-    const title = window.prompt("Edit title:", lesson.title);
-    if (title == null) return;
-    if (mock) { commitLocal(lessons.map((l) => l.id === lesson.id ? { ...l, title } : l)); return; }
-    try { await api.updateLesson(lesson.id, { title }); await load(); }
-    catch (e) { alert(e.message); }
+  function handleEdit(lesson) {
+    setFormItem({ ...lesson, description: lesson.description ?? lesson.desc ?? "" });
   }
 
   const selectedLesson = lessons.find((l) => l.id === selected) || lessons[0] || null;
@@ -470,6 +474,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
           subtitle={loading ? "Loading…" : `${stats.total} lessons`}
           searchPlaceholder="Search lessons, categories, tags..."
           onLogout={onLogout}
+          onNav={onNav}
         />
 
         <div className={`la-content ${selectedLesson ? "" : "la-content-nopanel"}`}>
@@ -512,7 +517,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
                   </tbody>
                 </table>
               </div>
-              <Pagination />
+              <Pagination total={stats.total || lessons.length} />
             </div>
           </div>
 
@@ -528,6 +533,18 @@ export default function LessonsAdmin({ onLogout, onNav }) {
             )}
         </div>
       </div>
+
+      {formItem && (
+        <ContentFormModal
+          title={formItem.id ? "Edit Lesson" : "Add Lesson"}
+          subtitle={formItem.id ? "Update this lesson's details." : "Create a new CBT lesson."}
+          fields={LESSON_FIELDS}
+          initial={formItem}
+          submitLabel={formItem.id ? "Save changes" : "Create lesson"}
+          onSubmit={handleFormSubmit}
+          onClose={() => setFormItem(null)}
+        />
+      )}
     </div>
   );
 }

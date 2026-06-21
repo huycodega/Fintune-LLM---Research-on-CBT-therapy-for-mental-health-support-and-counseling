@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    String, Text, Integer, SmallInteger, Boolean, DateTime, LargeBinary,
+    String, Text, Integer, SmallInteger, Boolean, DateTime, Date, LargeBinary,
     ForeignKey, CheckConstraint, Index, JSON, Float, func,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET, ARRAY
@@ -426,3 +426,82 @@ class Resource(Base):
 
 Index("idx_resources_status", Resource.status, Resource.created_at.desc())
 Index("idx_resources_type", Resource.type)
+
+
+# ============================================================
+# per-user lesson progress  (NOT PHI — learning completion only)
+# ============================================================
+class UserLessonProgress(Base):
+    """One row per (user, lesson). Tracks how far a user has got through a
+    lesson. `completed_steps` holds the checked objective indices; `progress_pct`
+    is the derived 0–100 percentage shown on the lesson card."""
+    __tablename__ = "user_lesson_progress"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    lesson_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lessons.id", ondelete="CASCADE"), primary_key=True)
+    progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_steps: Mapped[Optional[list]] = mapped_column(JSONB)  # [0, 2, ...]
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="in_progress")  # in_progress|completed
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+
+
+Index("idx_user_lesson_progress_user", UserLessonProgress.user_id)
+
+
+# ============================================================
+# psychologists + appointments  (expert consultation booking)
+# ============================================================
+class Psychologist(Base):
+    """A counselling expert users can book a consultation with. NOT PHI —
+    public professional profile. `slots` are the daily time options offered."""
+    __tablename__ = "psychologists"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String)
+    experience: Mapped[Optional[str]] = mapped_column(Text)   # e.g. "8 yrs · anxiety, trauma"
+    specialty: Mapped[Optional[str]] = mapped_column(String)
+    bio: Mapped[Optional[str]] = mapped_column(Text)
+    slots: Mapped[Optional[list]] = mapped_column(JSONB)      # ["09:00","10:00",...]
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+
+
+Index("idx_psychologists_active", Psychologist.active)
+
+
+class Appointment(Base):
+    """A user's consultation booking with a psychologist for a date + time slot.
+    status: pending (awaiting expert) | accepted | cancelled | declined."""
+    __tablename__ = "appointments"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False)
+    psychologist_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("psychologists.id", ondelete="CASCADE"),
+        nullable=False)
+    date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    slot: Mapped[str] = mapped_column(String, nullable=False)   # "09:00"
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending")
+    note: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','accepted','cancelled','declined')",
+            name="appointments_status_check"),
+    )
+
+
+Index("idx_appointments_user", Appointment.user_id)
+Index("idx_appointments_expert_date", Appointment.psychologist_id, Appointment.date)

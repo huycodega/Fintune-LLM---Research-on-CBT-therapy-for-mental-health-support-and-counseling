@@ -1,5 +1,6 @@
 """Pydantic schemas — request / response bodies for the API."""
 from typing import Optional, List
+from datetime import date as _date
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +25,12 @@ class LoginIn(BaseModel):
     # `username` accepts either the chosen handle or the Gmail address.
     username: str
     password: str
+    expected_role: Optional[str] = None       # "user" or "admin"
+
+
+class GoogleAuthIn(BaseModel):
+    # The Google Identity Services ID token (JWT) issued in the browser.
+    credential: str = Field(min_length=20)
     expected_role: Optional[str] = None       # "user" or "admin"
 
 
@@ -133,3 +140,45 @@ class ResourceUpdateIn(BaseModel):
     urgent: Optional[bool] = None
     owner: Optional[str] = None
     tags: Optional[List[str]] = None
+
+
+class LessonProgressIn(BaseModel):
+    progress_pct: int = Field(ge=0, le=100)
+    completed_steps: List[int] = []
+
+
+# ---- Expert consultation booking ----
+class PsychologistIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    phone: str = ""
+    experience: str = ""
+    specialty: str = ""
+    bio: str = ""
+    slots: List[str] = []        # ["09:00","10:00",...]
+    active: bool = True
+
+
+class PsychologistUpdateIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = None
+    experience: Optional[str] = None
+    specialty: Optional[str] = None
+    bio: Optional[str] = None
+    slots: Optional[List[str]] = None
+    active: Optional[bool] = None
+
+
+class AppointmentIn(BaseModel):
+    psychologist_id: str
+    date: _date
+    slot: str = Field(min_length=1, max_length=10)
+    note: str = ""
+
+
+class AppointmentUpdateIn(BaseModel):
+    date: Optional[_date] = None
+    slot: Optional[str] = Field(default=None, max_length=10)
+
+
+class AppointmentStatusIn(BaseModel):
+    status: str = Field(pattern="^(pending|accepted|cancelled|declined)$")

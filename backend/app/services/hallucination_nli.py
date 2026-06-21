@@ -22,6 +22,7 @@ If the model can't be loaded (offline / OOM / etc.), we fall back to
 the lexical-overlap baseline so the pipeline stays alive.
 """
 import logging
+import os
 import re
 import threading
 from typing import List, Optional, Tuple
@@ -43,6 +44,16 @@ def _load() -> Optional[Tuple[object, int]]:
     global _model
     with _lock:
         if _model is not None:
+            return _model
+        # Memory-constrained hosts (e.g. small Railway containers) OOM when the
+        # ~184M cross-encoder loads on top of the app. Set
+        # HALLUCINATION_NLI_ENABLED=false there to skip the model entirely and
+        # use the lexical-overlap fallback instead.
+        if os.getenv("HALLUCINATION_NLI_ENABLED", "true").strip().lower() in (
+                "0", "false", "no", "off"):
+            log.info("NLI hallucination check disabled via env "
+                     "(HALLUCINATION_NLI_ENABLED) — using lexical fallback")
+            _model = (None, -1)
             return _model
         try:
             from sentence_transformers import CrossEncoder
@@ -69,6 +80,12 @@ def _load() -> Optional[Tuple[object, int]]:
                         e)
             _model = (None, -1)
             return _model
+
+
+def preload() -> None:
+    """Load the NLI model at app startup so it never blocks the first chat
+    request mid-pipeline. Best-effort; safe to call when disabled (no-op)."""
+    _load()
 
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")

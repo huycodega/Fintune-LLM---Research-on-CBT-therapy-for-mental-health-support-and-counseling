@@ -9,6 +9,9 @@ import UsersAdmin from "./pages/UsersAdmin.jsx";
 import ModerationAdmin from "./pages/ModerationAdmin.jsx";
 import LessonsAdmin from "./pages/LessonsAdmin.jsx";
 import ResourcesAdmin from "./pages/ResourcesAdmin.jsx";
+import ExpertsAdmin from "./pages/ExpertsAdmin.jsx";
+import LaSidebar from "./admin/Sidebar.jsx";
+import LaTopBar from "./admin/TopBar.jsx";
 
 /* Self-contained la-* pages bring their own dark-navy shell. */
 const LA_PAGES = {
@@ -26,6 +29,7 @@ const NAV = [
   { id: "moderation", icon: "🤖", label: "AI Moderation" },
   { id: "lessons",    icon: "📚", label: "CBT Lessons" },
   { id: "resources",  icon: "🗂️", label: "Resources" },
+  { id: "experts",    icon: "🧑‍⚕️", label: "Psychologists" },
 ];
 
 const PAGE_META = {
@@ -33,6 +37,7 @@ const PAGE_META = {
   users:    { title: "User management", sub: "Accounts, status & per-user case history" },
   cases:    { title: "Cases to handle", sub: "Human-in-the-loop review queue" },
   crisis:   { title: "Crisis control", sub: "L0/L1 escalations across all accounts" },
+  experts:  { title: "Psychologists", sub: "Experts & consultation appointments" },
 };
 
 function Sidebar({ page, onNav, badges }) {
@@ -150,17 +155,22 @@ export default function App() {
     return <LaPage onLogout={logout} onNav={nav} />;
   }
 
-  const knownOld = ["overview", "cases", "crisis"];
+  const knownOld = ["overview", "cases", "crisis", "experts"];
   return (
-    <div className="admin-shell">
-      <Sidebar page={page} onNav={nav} badges={badges} />
-      <div className="admin-main">
-        <Topbar page={page} user={user} onLogout={logout}
-                search={search} onSearch={setSearch} />
+    <div className="la-shell">
+      <LaSidebar active={page} onNav={nav} />
+      <div className="la-main">
+        <LaTopBar
+          title={PAGE_META[page]?.title || ""}
+          subtitle={PAGE_META[page]?.sub || ""}
+          onLogout={logout}
+          onNav={nav}
+        />
         <div className="admin-content">
           {page === "overview" && <Overview onNav={nav} />}
           {page === "cases" && <Cases />}
-          {page === "crisis" && <Crisis search={search} />}
+          {page === "crisis" && <Crisis search="" />}
+          {page === "experts" && <ExpertsAdmin />}
           {!knownOld.includes(page) && (
             <div className="admin-placeholder">
               <div className="admin-placeholder-icon">🚧</div>

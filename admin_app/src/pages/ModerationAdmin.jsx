@@ -476,6 +476,7 @@ export default function ModerationAdmin({ onLogout, onNav }) {
           subtitle={loading ? "Loading…" : `${stats.pending} pending · ${stats.escalations} escalations`}
           searchPlaceholder="Search messages, users, risk…"
           onLogout={onLogout}
+          onNav={onNav}
         />
 
         <div className="la-content">

@@ -13,11 +13,14 @@ are already PDF-ready.
 """
 from datetime import datetime
 from typing import Optional
+import logging
 import uuid
 
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models
 from app.services import minio_client
+
+log = logging.getLogger("cbt")
 
 
 def synthesize(session: models.Session,
@@ -84,8 +87,16 @@ def export(db, session: models.Session,
     soap = synthesize(session, intake)
     body = render_text(soap)
     key = f"{session.user_id}/{session.id}.txt"
-    minio_client.put_bytes("cbt-soap-notes", key, body.encode("utf-8"),
-                            content_type="text/plain")
+    # Archiving the SOAP artifact to object storage is best-effort: when MinIO
+    # isn't deployed (e.g. on the managed host) we still keep the full SOAP in
+    # the DB so the review/approve never fails over an optional archive step.
+    uploaded = False
+    try:
+        minio_client.put_bytes("cbt-soap-notes", key, body.encode("utf-8"),
+                               content_type="text/plain")
+        uploaded = True
+    except Exception as e:
+        log.warning("SOAP artifact upload skipped (object store unavailable): %s", e)
 
     row = models.SoapNote(
         session_id=session.id,
@@ -94,7 +105,7 @@ def export(db, session: models.Session,
         assessment=soap["assessment"],
         plan=soap["plan"],
         exported_to_ehr=False,
-        pdf_s3_key=key,
+        pdf_s3_key=key if uploaded else "",
     )
     db.add(row)
     return row

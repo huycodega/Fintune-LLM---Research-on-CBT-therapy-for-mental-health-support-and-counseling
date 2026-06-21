@@ -50,6 +50,11 @@ export const api = {
       method: "POST",
       body: { username, password, expected_role: EXPECTED_ROLE },
     }),
+  googleAuth: (credential) =>
+    req("/auth/google", {
+      method: "POST",
+      body: { credential, expected_role: EXPECTED_ROLE },
+    }),
   register: (email, password) =>
     req("/register", { method: "POST", body: { email, password } }),
   verifyOtp: (email, otp) =>
@@ -103,4 +108,20 @@ export const api = {
     return req(`/resources${q ? `?${q}` : ""}`);
   },
   resource: (rid) => req(`/resources/${rid}`),
+
+  // ---- per-user lesson progress ----
+  lessonProgress: () => req("/my/lesson-progress"),
+  setLessonProgress: (lid, body) =>
+    req(`/my/lesson-progress/${lid}`, { method: "POST", body }),
+
+  // ---- expert consultation ----
+  experts: () => req("/experts"),
+  expertAvailability: (eid) => req(`/experts/${eid}/availability`),
+  bookAppointment: (body) =>
+    req("/appointments", { method: "POST", body }),
+  myAppointments: () => req("/my/appointments"),
+  changeAppointment: (aid, body) =>
+    req(`/my/appointments/${aid}`, { method: "PATCH", body }),
+  cancelAppointment: (aid) =>
+    req(`/my/appointments/${aid}`, { method: "DELETE" }),
 };
