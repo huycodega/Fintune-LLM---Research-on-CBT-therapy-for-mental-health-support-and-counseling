@@ -29,7 +29,6 @@ const PATHS = {
   checkCircle: <><circle cx="12" cy="12" r="9" /><path d="M8 12l3 3 5-6" /></>,
   file:    <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /></>,
   clock:   <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-  alert:   <><path d="M12 3.5l9 16.5H3z" /><path d="M12 10v4.5M12 17.5h.01" /></>,
   arrowUp: <><path d="M12 19V6" /><path d="M6 12l6-6 6 6" /></>,
   arrowDown: <><path d="M12 5v13" /><path d="M6 12l6 6 6-6" /></>,
   download: <><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" /></>,

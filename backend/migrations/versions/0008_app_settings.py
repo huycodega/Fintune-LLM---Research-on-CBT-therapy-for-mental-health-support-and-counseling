@@ -9,7 +9,10 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0008_app_settings"
-down_revision = "0007_seed_admin_rbac"
+# Chained after the local experts/appointments migration so Alembic keeps a
+# single linear head (both this and 0008_user_lesson_progress originally
+# branched off 0007).
+down_revision = "0009_experts_appointments"
 branch_labels = None
 depends_on = None
 
