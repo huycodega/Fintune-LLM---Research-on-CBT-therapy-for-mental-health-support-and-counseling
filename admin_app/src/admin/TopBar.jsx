@@ -1,9 +1,87 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "./Icon.jsx";
+import { api } from "../api.js";
 
-export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, notificationCount = 3, onMenu, filterPanel, avatarSrc = "/admin-avatar.svg", onRefresh, refreshing = false, searchValue, onSearch }) {
+/* Danger level → label + colour tone for the notification pill. */
+const LEVEL = {
+  L0: { tone: "crisis", label: "Crisis" },
+  L1: { tone: "high", label: "High" },
+  L2: { tone: "mod", label: "Moderate" },
+  L3: { tone: "low", label: "Low" },
+};
+const ACK_KEY = "mc_admin_notif_ack";    // ids the admin has opened/read
+const SEEN_KEY = "mc_admin_notif_seen";  // ids the bell has already rung for
+
+function loadSet(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); }
+  catch { return new Set(); }
+}
+function saveSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* ignore */ }
+}
+function relTime(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, onMenu, filterPanel, avatarSrc = "/admin-avatar.svg", onRefresh, refreshing = false, searchValue, onSearch, onNav }) {
   const [menu, setMenu] = useState(false);
   const [filters, setFilters] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [shake, setShake] = useState(false);
+  const ackRef = useRef(loadSet(ACK_KEY));
+  const seenRef = useRef(loadSet(SEEN_KEY));
+  const shakeTimer = useRef(null);
+
+  // Poll the review queue — each pending item is one user input awaiting a
+  // clinician, carrying its danger level. A brand-new item rings the bell once.
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const r = await api.queue();
+        if (!alive) return;
+        const q = r.queue || [];
+        setItems(q);
+        const fresh = q.filter((x) => !seenRef.current.has(x.session_id));
+        if (fresh.length) {
+          fresh.forEach((x) => seenRef.current.add(x.session_id));
+          saveSet(SEEN_KEY, seenRef.current);
+          if (fresh.some((x) => !ackRef.current.has(x.session_id))) {
+            setShake(true);
+            clearTimeout(shakeTimer.current);
+            shakeTimer.current = setTimeout(() => setShake(false), 1500);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    poll();
+    const t = setInterval(poll, 12000);
+    return () => { alive = false; clearInterval(t); clearTimeout(shakeTimer.current); };
+  }, []);
+
+  const unreadCount = items.filter((x) => !ackRef.current.has(x.session_id)).length;
+
+  function openNotif() {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    setMenu(false);
+    if (next && items.length) {
+      items.forEach((x) => ackRef.current.add(x.session_id));
+      saveSet(ACK_KEY, ackRef.current);
+      setShake(false);
+    }
+  }
+  function goCase() {
+    setNotifOpen(false);
+    onNav && onNav("cases");
+  }
+
   return (
     <header className="la-topbar">
       {onMenu && <button className="la-icon-btn la-mobile-menu" onClick={onMenu} aria-label="Open navigation"><Icon name="menu" size={20} /></button>}
@@ -29,13 +107,52 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, n
         {filters && filterPanel && <div className="la-filter-menu">{filterPanel}</div>}
       </div>
 
-      <button className="la-icon-btn la-notif" aria-label="Notifications">
-        <Icon name="bell" size={19} />
-        <span className="la-notif-badge">{notificationCount}</span>
-      </button>
+      <div className="la-notif-wrap">
+        <button className={`la-icon-btn la-notif ${shake ? "ring" : ""}`} onClick={openNotif}
+                aria-label={`Notifications${unreadCount ? ` (${unreadCount} new)` : ""}`}>
+          <Icon name="bell" size={19} />
+          {unreadCount > 0 && <span className="la-notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+        </button>
+        {notifOpen && (
+          <>
+            <div className="la-overlay" onClick={() => setNotifOpen(false)} />
+            <div className="la-notif-menu" role="dialog" aria-label="Notifications">
+              <div className="la-notif-head">
+                <span>Pending reviews</span>
+                <span className="la-notif-count">{items.length}</span>
+              </div>
+              {items.length === 0 ? (
+                <div className="la-notif-empty">🎉 No drafts waiting for review.</div>
+              ) : (
+                <div className="la-notif-list">
+                  {items.slice(0, 8).map((x) => {
+                    const lv = LEVEL[x.triage_level] || { tone: "mod", label: x.triage_level || "—" };
+                    return (
+                      <button key={x.session_id} className="la-notif-item" onClick={goCase}>
+                        <span className={`la-notif-dot ${lv.tone}`} />
+                        <span className="la-notif-body">
+                          <span className="la-notif-row1">
+                            <b className="la-notif-user">{x.username}</b>
+                            <span className={`la-notif-pill ${lv.tone}`}>{x.triage_level} · {lv.label}</span>
+                          </span>
+                          <span className="la-notif-text">{x.user_input}</span>
+                          <span className="la-notif-time">{relTime(x.created_at)}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {items.length > 0 && (
+                <button className="la-notif-foot" onClick={goCase}>View all in Cases →</button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="la-user-wrap">
-        <button className={`la-user ${menu ? "open" : ""}`} onClick={() => setMenu((m) => !m)}>
+        <button className={`la-user ${menu ? "open" : ""}`} onClick={() => { setMenu((m) => !m); setNotifOpen(false); }}>
           <span className="la-avatar">{avatarSrc ? <img src={avatarSrc} alt="Admin avatar" /> : "A"}</span>
           <span className="la-user-text"><b>Admin</b><small>Administrator</small></span>
           <Icon name="chevronDown" size={15} />

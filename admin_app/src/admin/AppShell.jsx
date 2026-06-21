@@ -34,6 +34,7 @@ export default function AppShell({
           searchValue={searchValue}
           onSearch={onSearch}
           onLogout={onLogout}
+          onNav={onNav}
           onMenu={() => setMobileOpen(true)}
           filterPanel={filterPanel}
           onRefresh={onRefresh}

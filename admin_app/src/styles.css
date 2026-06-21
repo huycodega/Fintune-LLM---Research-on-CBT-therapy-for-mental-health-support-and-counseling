@@ -2648,3 +2648,149 @@ button { font-family: inherit; cursor: pointer; }
     width: 100%;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Re-applied admin features after merging dev-no-deloy
+   (notifications, rec-editor, psychologists page) + portal modal vars
+   ════════════════════════════════════════════════════════════════ */
+
+/* la-* tokens also on :root so portaled la-modal (rendered into <body>,
+   outside .la-shell) still resolves its colours. */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --shadow-sm: 0 1px 3px rgba(16,24,40,.06);
+  --la-indigo: #6366f1; --la-indigo-dark: #4f46e5;
+  --la-navy: #0f172a; --la-navy-2: #1e293b;
+  --la-bg: #f8fafc; --la-surface: #ffffff;
+  --la-ink: #1e293b; --la-ink-soft: #64748b; --la-line: #e9edf3;
+  --la-green: #10b981; --la-green-soft: #d1fae5; --la-green-ink: #047857;
+  --la-amber: #f59e0b; --la-amber-soft: #fef3c7; --la-amber-ink: #b45309;
+  --la-red: #ef4444; --la-red-soft: #fee2e2; --la-red-ink: #b91c1c;
+}
+
+/* ── Notifications (bell + dropdown) ── */
+.la-notif-wrap { position: relative; flex-shrink: 0; }
+
+/* Bell shakes when a fresh draft lands. */
+.la-notif.ring { animation: la-bell-ring 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0s 2; color: var(--la-indigo); border-color: var(--la-indigo); }
+@keyframes la-bell-ring {
+  0%, 100% { transform: rotate(0); }
+  10%, 30%, 50%, 70% { transform: rotate(-12deg); }
+  20%, 40%, 60%, 80% { transform: rotate(12deg); }
+}
+
+.la-notif-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 51;
+  width: 360px; max-width: 86vw; max-height: 70vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: #fff; border: 1px solid var(--la-line); border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(15,23,42,0.18);
+  animation: la-pop 0.16s ease;
+}
+.la-notif-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-bottom: 1px solid var(--la-line);
+  font-size: 13px; font-weight: 800; color: var(--la-ink);
+}
+.la-notif-count {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: var(--la-bg); color: var(--la-ink-soft);
+  font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.la-notif-empty { padding: 26px 16px; text-align: center; font-size: 13px; color: var(--la-ink-soft); }
+.la-notif-list { overflow-y: auto; padding: 6px; }
+.la-notif-item {
+  display: flex; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 10px; border: none; background: none; border-radius: 10px;
+  cursor: pointer; font-family: var(--font); transition: background 0.12s;
+}
+.la-notif-item:hover { background: var(--la-bg); }
+.la-notif-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.la-notif-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.la-notif-row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.la-notif-user { font-size: 13px; font-weight: 700; color: var(--la-ink); }
+.la-notif-pill {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  white-space: nowrap;
+}
+.la-notif-text {
+  font-size: 12.5px; color: var(--la-ink-soft); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.la-notif-time { font-size: 11px; color: var(--la-ink-soft); opacity: 0.8; }
+.la-notif-foot {
+  border: none; border-top: 1px solid var(--la-line); background: none;
+  padding: 12px 16px; font-family: var(--font); font-size: 12.5px; font-weight: 700;
+  color: var(--la-indigo); cursor: pointer; text-align: center;
+}
+.la-notif-foot:hover { background: var(--la-bg); }
+
+/* Danger-level tones (dot + pill) */
+.la-notif-dot.crisis { background: var(--la-red); }
+.la-notif-dot.high   { background: var(--la-amber); }
+.la-notif-dot.mod    { background: var(--la-indigo); }
+.la-notif-dot.low    { background: var(--la-green); }
+.la-notif-pill.crisis { background: var(--la-red-soft); color: var(--la-red-ink); }
+.la-notif-pill.high   { background: var(--la-amber-soft); color: var(--la-amber-ink); }
+.la-notif-pill.mod    { background: #e0e7ff; color: var(--la-indigo-dark); }
+.la-notif-pill.low    { background: var(--la-green-soft); color: var(--la-green-ink); }
+
+/* ── Recommendation chip editor in the review panel ── */
+.rec-editor { margin-top: 14px; }
+.rec-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.rec-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 11px; border-radius: 999px;
+  background: var(--la-bg); border: 1px solid var(--la-line);
+  font-size: 12.5px; color: var(--la-ink); max-width: 100%;
+}
+.rec-chip-x {
+  border: none; background: none; cursor: pointer;
+  color: var(--la-ink-soft); font-size: 12px; line-height: 1; padding: 2px 3px;
+  border-radius: 6px;
+}
+.rec-chip-x:hover { color: var(--la-red); background: var(--la-red-soft); }
+.rec-empty { font-size: 12.5px; color: var(--la-ink-soft); }
+.rec-hint { font-size: 11.5px; color: var(--la-ink-soft); margin-top: 6px; }
+
+/* ── Psychologists / appointments admin page ── */
+.admin-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border-radius: 10px; font: inherit; font-size: 13px;
+  font-weight: 700; cursor: pointer; border: 1px solid var(--la-line);
+  background: var(--la-surface); color: var(--la-ink); transition: all 0.15s;
+}
+.admin-btn:hover { border-color: var(--la-indigo); color: var(--la-indigo-dark); }
+.admin-btn.primary { background: var(--la-indigo); border-color: var(--la-indigo); color: #fff; }
+.admin-btn.primary:hover { background: var(--la-indigo-dark); color: #fff; }
+.admin-btn.sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+.admin-btn.danger { color: var(--la-red); }
+.admin-btn.danger:hover { border-color: var(--la-red); background: var(--la-red-soft); color: var(--la-red-ink); }
+
+.ex-wrap { padding: 4px 2px 32px; }
+.ex-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ex-section-head h2 { font-size: 17px; font-weight: 800; color: var(--la-ink); }
+.ex-muted { color: var(--la-ink-soft); font-size: 13.5px; }
+.ex-err { color: var(--la-red-ink); background: var(--la-red-soft); padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; }
+.ex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.ex-card { background: var(--la-surface); border: 1px solid var(--la-line); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); }
+.ex-card-top { display: flex; align-items: center; gap: 11px; margin-bottom: 10px; }
+.ex-avatar { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--la-indigo), var(--la-indigo-dark)); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ex-name { font-weight: 800; color: var(--la-ink); }
+.ex-inactive { color: var(--la-ink-soft); font-weight: 600; font-size: 12px; }
+.ex-spec { font-size: 12.5px; color: var(--la-indigo-dark); font-weight: 600; }
+.ex-exp { font-size: 13px; color: var(--la-ink-soft); line-height: 1.5; margin-bottom: 8px; }
+.ex-meta { font-size: 12.5px; color: var(--la-ink-soft); margin-bottom: 8px; }
+.ex-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.ex-slot { font-size: 11.5px; font-weight: 700; color: var(--la-ink); background: var(--la-bg); border: 1px solid var(--la-line); border-radius: 7px; padding: 3px 7px; }
+.ex-card-actions { display: flex; gap: 8px; }
+.ex-table-wrap { background: var(--la-surface); border: 1px solid var(--la-line); border-radius: 14px; overflow: hidden; }
+.ex-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ex-table th { text-align: left; padding: 12px 14px; background: var(--la-bg); color: var(--la-ink-soft); font-weight: 700; font-size: 12px; }
+.ex-table td { padding: 11px 14px; border-top: 1px solid var(--la-line); color: var(--la-ink); }
+.ex-row-actions { display: flex; gap: 6px; }
+.ex-pill { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; text-transform: capitalize; }
+.ex-pill.amber { background: var(--la-amber-soft); color: var(--la-amber-ink); }
+.ex-pill.green { background: var(--la-green-soft); color: var(--la-green-ink); }
+.ex-pill.red { background: var(--la-red-soft); color: var(--la-red-ink); }
+.ex-pill.gray { background: var(--la-bg); color: var(--la-ink-soft); }
