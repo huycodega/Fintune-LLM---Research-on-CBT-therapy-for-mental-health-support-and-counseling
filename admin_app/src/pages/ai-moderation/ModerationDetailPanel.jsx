@@ -96,7 +96,7 @@ export default function ModerationDetailPanel({
   }
 
   if (loading) {
-    return <aside className="am-detail-panel"><div className="am-state">Đang tải chi tiết phiên...</div></aside>;
+    return <aside className="am-detail-panel"><div className="am-state">Loading session details...</div></aside>;
   }
 
   if (error) {
@@ -104,7 +104,7 @@ export default function ModerationDetailPanel({
   }
 
   if (!detail) {
-    return <aside className="am-detail-panel"><div className="am-state">Chọn một phiên để xem chi tiết kiểm duyệt.</div></aside>;
+    return <aside className="am-detail-panel"><div className="am-state">Select a session to view moderation details.</div></aside>;
   }
 
   const user = detail.user || {};
@@ -138,12 +138,12 @@ export default function ModerationDetailPanel({
       </section>
 
       <section className="am-detail-card">
-        <h3>Nội dung người dùng</h3>
+        <h3>User content</h3>
         <p className="am-copy-block">{detail.userContent}</p>
       </section>
 
       <section className="am-detail-card">
-        <h3>Phản hồi AI</h3>
+        <h3>AI response</h3>
         <p className="am-copy-block">{detail.aiResponse}</p>
         {detail.editedResponse && (
           <>
@@ -154,7 +154,7 @@ export default function ModerationDetailPanel({
       </section>
 
       <section className="am-detail-card">
-        <h3>Checklist kiểm duyệt</h3>
+        <h3>Moderation checklist</h3>
         <Checklist checklist={detail.checklist} />
       </section>
 
@@ -198,7 +198,7 @@ export default function ModerationDetailPanel({
       )}
 
       <section className="am-detail-card">
-        <h3>Lịch sử kiểm duyệt</h3>
+        <h3>Moderation history</h3>
         <div className="am-history">
           {(detail.histories || []).map((item) => (
             <div className="am-history-item" key={item.id}>
@@ -207,7 +207,7 @@ export default function ModerationDetailPanel({
               <p>{item.note || "No note"}</p>
             </div>
           ))}
-          {!(detail.histories || []).length && <p className="am-muted">Chưa có lịch sử kiểm duyệt.</p>}
+          {!(detail.histories || []).length && <p className="am-muted">No moderation history.</p>}
         </div>
       </section>
 

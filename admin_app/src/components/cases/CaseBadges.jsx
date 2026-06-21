@@ -1,9 +1,9 @@
 const riskLabels = { L0: "Crisis", L1: "High Risk", L2: "Medium Risk", L3: "Low Risk" };
 const statusLabels = {
-  new: "Mới", viewed: "Đã xem", assigned: "Đã phân công",
-  monitoring: "Đang theo dõi", escalated: "Đã chuyển cấp", closed: "Đã đóng",
+  new: "New", viewed: "Viewed", assigned: "Assigned",
+  monitoring: "Monitoring", escalated: "Escalated", closed: "Closed",
 };
-const priorityLabels = { critical: "Khẩn cấp", high: "Cao", medium: "Trung bình", low: "Thấp" };
+const priorityLabels = { critical: "Urgent", high: "Cao", medium: "Medium", low: "Low" };
 
 export function CaseRiskBadge({ value }) {
   return <span className={`case-badge risk-${String(value || "L3").toLowerCase()}`}>

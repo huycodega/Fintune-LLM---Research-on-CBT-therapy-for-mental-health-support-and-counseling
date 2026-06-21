@@ -67,7 +67,7 @@ export default function CaseManagementPage({ onNav }) {
       });
       if (action === "reopen") await casesApi.reopen(selectedId, { reason: "Reopened by admin", version });
       if (action === "note") await casesApi.addNote(selectedId, { note_type: "internal", content: payload });
-      setModal(null); setNotice("Đã cập nhật Case thành công.");
+      setModal(null); setNotice("Case updated successfully.");
       await Promise.all([loadList(), loadStats(), loadDetail(selectedId)]);
     } catch (err) {
       setNotice(err.status === 409 ? "Case has been updated by another user. Please refresh."
@@ -81,24 +81,24 @@ export default function CaseManagementPage({ onNav }) {
   const specialists = stats.specialists || [];
 
   return <div className="module-page cases-page">
-    <div className="module-toolbar"><div><h1>Ca cần xử lý</h1>
-      <p>Phân công, theo dõi và xử lý các tín hiệu rủi ro</p></div>
+    <div className="module-toolbar"><div><h1>Cases to handle</h1>
+      <p>Assign, track and resolve risk signals</p></div>
       <div className="module-toolbar-actions"><div className="inline-search"><span>⌕</span>
         <input value={search} onChange={event => setSearch(event.target.value)}
-          placeholder="Tìm user, email, phone, case code…" /></div>
-        <button className="btn" onClick={() => { loadList(); loadStats(); }}>↻ Làm mới</button></div></div>
+          placeholder="Search user, email, phone, case code…" /></div>
+        <button className="btn" onClick={() => { loadList(); loadStats(); }}>↻ Refresh</button></div></div>
     <CaseStatsCards stats={stats} />
     {notice && <div className="case-notice">{notice}<button onClick={() => setNotice("")}>×</button></div>}
     <section className="panel case-list-panel">
       <div className="panel-head filter-head"><CaseFilters value={filters} specialists={specialists}
         onChange={setFilters} /></div>
-      {loading ? <LoadingState label="Đang tải danh sách ca…" /> :
+      {loading ? <LoadingState label="Loading cases…" /> :
         error ? <ErrorState message={error.message} forbidden={error.status === 403} onRetry={loadList} /> :
         <><CaseTable rows={pageData?.items || []} selectedId={selectedId} onSelect={setSelectedId} />
           <Pagination page={filters.page} pageSize={filters.page_size} total={pageData?.total || 0}
             onChange={page => setFilters(value => ({ ...value, page }))} /></>}
     </section>
-    {selectedId && <button className="drawer-scrim" onClick={() => setSelectedId(null)} aria-label="Đóng chi tiết" />}
+    {selectedId && <button className="drawer-scrim" onClick={() => setSelectedId(null)} aria-label="Close details" />}
     <CaseDetailPanel open={!!selectedId} detail={detail} history={history} loading={detailLoading}
       error={detailError} busy={busy} onClose={() => setSelectedId(null)} onAction={action}
       onProfile={(userId) => onNav?.("users", userId)} />

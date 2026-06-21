@@ -1,12 +1,12 @@
 const cards = [
-  ["total_users", "👥", "Tổng người dùng", "purple"],
-  ["active_users", "●", "Người dùng hoạt động", "green"],
-  ["high_risk_users", "⚠", "Người dùng rủi ro cao", "red"],
-  ["today_screenings", "📝", "Sàng lọc hôm nay", "blue"],
-  ["pending_ai_moderations", "🤖", "AI chờ kiểm duyệt", "amber"],
-  ["open_cases", "📋", "Ca đang mở", "red"],
-  ["published_resources", "📚", "Tài nguyên đã xuất bản", "green"],
-  ["active_cbt_lessons", "◫", "Bài CBT hoạt động", "purple"],
+  ["total_users", "👥", "Total users", "purple"],
+  ["active_users", "●", "Active users", "green"],
+  ["high_risk_users", "⚠", "High-risk users", "red"],
+  ["today_screenings", "📝", "Today's screenings", "blue"],
+  ["pending_ai_moderations", "🤖", "AI pending moderation", "amber"],
+  ["open_cases", "📋", "Open cases", "red"],
+  ["published_resources", "📚", "Published resources", "green"],
+  ["active_cbt_lessons", "◫", "Active CBT lessons", "purple"],
 ];
 
 function metric(value) {
@@ -42,16 +42,16 @@ export function AttentionRequired({ items = [], onNavigate }) {
   return (
     <section className="panel attention-panel">
       <div className="panel-head">
-        <div><div className="panel-title">Cần chú ý ngay</div>
-          <div className="panel-caption">Các tín hiệu ưu tiên cao và quá SLA</div></div>
+        <div><div className="panel-title">Needs immediate attention</div>
+          <div className="panel-caption">High-priority signals past SLA</div></div>
         <span className="attention-count">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <div className="compact-empty">Không có cảnh báo cần xử lý ngay.</div>
+        <div className="compact-empty">No alerts needing immediate action.</div>
       ) : items.slice(0, 6).map((item) => (
         <button className="attention-item" key={item.id} onClick={() => onNavigate?.(item)}>
           <span className={`attention-mark ${item.risk_level || "L1"}`} />
-          <span><b>{item.label || item.type}</b><small>{item.user_masked || "Người dùng đã ẩn danh"}</small></span>
+          <span><b>{item.label || item.type}</b><small>{item.user_masked || "Anonymized user"}</small></span>
           <span className={`case-badge risk-${(item.risk_level || "L1").toLowerCase()}`}>
             {item.risk_level || "L1"}
           </span>

@@ -13,7 +13,7 @@ export default function ModerationFilters({
   return (
     <section className="am-filter-card">
       <label className="am-filter-field am-filter-search">
-        <span>Tìm kiếm phiên</span>
+        <span>Search sessions</span>
         <input
           value={search}
           onChange={(event) => onSearch(event.target.value)}

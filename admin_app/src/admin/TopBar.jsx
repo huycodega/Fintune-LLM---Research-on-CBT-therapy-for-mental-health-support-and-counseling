@@ -79,7 +79,7 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, o
   }
   function goCase() {
     setNotifOpen(false);
-    onNav && onNav("cases");
+    onNav && onNav("moderation");
   }
 
   return (
@@ -144,7 +144,7 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, o
                 </div>
               )}
               {items.length > 0 && (
-                <button className="la-notif-foot" onClick={goCase}>View all in Cases →</button>
+                <button className="la-notif-foot" onClick={goCase}>View all in AI Moderation →</button>
               )}
             </div>
           </>

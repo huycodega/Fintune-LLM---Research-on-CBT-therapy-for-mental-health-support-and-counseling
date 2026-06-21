@@ -4,7 +4,7 @@ export default function Pagination({ page, pageSize, total, onChange }) {
   return (
     <div className="pager">
       <button className="pager-btn" disabled={page <= 1} onClick={() => onChange(page - 1)}>‹</button>
-      <span className="pager-summary">Trang {page}/{pages} · {total} kết quả</span>
+      <span className="pager-summary">Page {page}/{pages} · {total} results</span>
       <button className="pager-btn" disabled={page >= pages} onClick={() => onChange(page + 1)}>›</button>
     </div>
   );

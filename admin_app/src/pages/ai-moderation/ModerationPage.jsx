@@ -145,7 +145,7 @@ export default function ModerationPage() {
       <header className="am-header">
         <div>
           <h1>AI Moderation</h1>
-          <p>Cập nhật lúc {lastUpdated}</p>
+          <p>Updated {lastUpdated}</p>
         </div>
         <div className="am-header-tools">
           <div className="am-header-search">
@@ -157,7 +157,7 @@ export default function ModerationPage() {
             />
           </div>
           <button type="button" className="am-filter-button" onClick={() => document.getElementById("am-risk-filter")?.focus()}>
-            Bộ lọc
+            Filters
           </button>
           <div className="am-admin-chip">
             <Avatar name={admin?.username || "Admin"} size={36} className="am-avatar" />

@@ -36,12 +36,12 @@ export default function DashboardPage({ onNav }) {
   return (
     <div className="module-page">
       <div className="module-toolbar">
-        <div><h1>Tổng quan</h1><p>Theo dõi sức khỏe vận hành của MindCare AI</p></div>
+        <div><h1>Overview</h1><p>Monitor the operational health of MindCare AI</p></div>
         <div className="module-toolbar-actions"><DateRangePicker value={range} onChange={setRange} />
-          <button className="btn" onClick={load}>↻ Làm mới</button></div>
+          <button className="btn" onClick={load}>↻ Refresh</button></div>
       </div>
       {error ? <ErrorState message={error.message} forbidden={error.status === 403} onRetry={load} />
-        : !data ? <LoadingState label="Đang tổng hợp Dashboard…" /> : <>
+        : !data ? <LoadingState label="Building dashboard…" /> : <>
           <DashboardSummaryCards summary={data.summary} />
           <AttentionRequired items={[...data.cases, ...data.moderations, ...data.screenings]
             .filter(item => ["L0", "L1"].includes(item.risk_level) &&

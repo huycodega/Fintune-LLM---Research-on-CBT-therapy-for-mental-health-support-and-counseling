@@ -72,7 +72,7 @@ export const mockActivities = [
 export const mockCharts = {
   screening_trend: { available: true, series: [{ label: "T2", value: 3 }, { label: "T3", value: 5 }, { label: "T4", value: 4 }, { label: "T5", value: 7 }, { label: "T6", value: 6 }, { label: "T7", value: 8 }] },
   risk_distribution: { available: true, series: [{ label: "L0", value: 1 }, { label: "L1", value: 2 }, { label: "L2", value: 4 }, { label: "L3", value: 9 }] },
-  case_status_distribution: { available: true, series: [{ label: "Mới", value: 1 }, { label: "Theo dõi", value: 1 }, { label: "Đóng", value: 1 }] },
+  case_status_distribution: { available: true, series: [{ label: "New", value: 1 }, { label: "Theo dõi", value: 1 }, { label: "Close", value: 1 }] },
   ai_moderation_statistics: { available: true, series: [{ label: "Chờ", value: 2 }, { label: "Duyệt", value: 8 }, { label: "Cải thiện", value: 3 }] },
   resource_usage: { available: false, series: [] },
   cbt_completion: { available: false, series: [] },

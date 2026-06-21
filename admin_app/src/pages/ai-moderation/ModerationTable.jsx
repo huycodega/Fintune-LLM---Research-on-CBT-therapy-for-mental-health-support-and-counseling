@@ -14,15 +14,15 @@ export default function ModerationTable({
     <section className="am-table-card">
       <div className="am-table-head">
         <div>
-          <h2>Danh sách phiên kiểm duyệt</h2>
+          <h2>Moderation sessions</h2>
           <p>{pagination?.total ?? 0} sessions found</p>
         </div>
       </div>
 
       {error && <div className="am-state error">{error}</div>}
-      {loading && <div className="am-state">Đang tải danh sách phiên...</div>}
+      {loading && <div className="am-state">Loading sessions...</div>}
       {!loading && !error && sessions.length === 0 && (
-        <div className="am-state">Không có phiên kiểm duyệt phù hợp.</div>
+        <div className="am-state">No matching moderation sessions.</div>
       )}
 
       {!loading && !error && sessions.length > 0 && (

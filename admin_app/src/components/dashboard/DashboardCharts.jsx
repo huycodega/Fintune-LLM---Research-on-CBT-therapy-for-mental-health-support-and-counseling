@@ -1,10 +1,10 @@
 const configs = [
-  ["screening_trend", "Xu hướng sàng lọc"],
-  ["risk_distribution", "Phân bố rủi ro"],
-  ["case_status_distribution", "Trạng thái ca"],
-  ["ai_moderation_statistics", "Thống kê AI Moderation"],
-  ["resource_usage", "Mức sử dụng tài nguyên"],
-  ["cbt_completion", "Hoàn thành CBT"],
+  ["screening_trend", "Screening trend"],
+  ["risk_distribution", "Risk distribution"],
+  ["case_status_distribution", "Case status"],
+  ["ai_moderation_statistics", "AI Moderation statistics"],
+  ["resource_usage", "Resource usage"],
+  ["cbt_completion", "CBT completion"],
 ];
 
 function valueOf(item) {
@@ -14,7 +14,7 @@ function valueOf(item) {
 function MiniChart({ chart }) {
   if (!chart?.available) return <div className="chart-unavailable">Data not available yet</div>;
   const series = chart.series || [];
-  if (!series.length) return <div className="chart-unavailable">Chưa có dữ liệu trong kỳ</div>;
+  if (!series.length) return <div className="chart-unavailable">No data in this period</div>;
   const max = Math.max(...series.map(valueOf), 1);
   return (
     <div className="mini-chart">

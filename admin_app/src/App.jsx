@@ -11,7 +11,6 @@ import ModerationPage from "./pages/ai-moderation/ModerationPage.jsx";
 import ExpertsAdmin from "./pages/ExpertsAdmin.jsx";
 
 // Self-shell pages (bring their own AppShell / la-shell + nav).
-import Cases from "./pages/Cases.jsx";
 import LessonsAdmin from "./pages/LessonsAdmin.jsx";
 import ResourcesAdmin from "./pages/ResourcesAdmin.jsx";
 import Crisis from "./pages/Crisis.jsx";
@@ -21,7 +20,6 @@ import LogsAdmin from "./pages/LogsAdmin.jsx";
 
 // Pages that render their own full shell — App just hands them nav + logout.
 const SELF_SHELL = {
-  cases: Cases,          // human-in-the-loop AI draft review (queue + ReviewPanel)
   lessons: LessonsAdmin,
   resources: ResourcesAdmin,
   crisis: Crisis,

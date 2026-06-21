@@ -4,7 +4,6 @@ import Icon from "./Icon.jsx";
 export const NAV = [
   { id: "overview",  icon: "grid",    label: "Overview" },
   { id: "users",     icon: "users",   label: "Users" },
-  { id: "cases",     icon: "cases",   label: "Intervention Cases" },
   { id: "casemgmt",  icon: "sliders", label: "Case Management" },
   { id: "crisis",    icon: "alert",   label: "Crisis Control" },
   { id: "screening", icon: "shield",  label: "Screening" },
