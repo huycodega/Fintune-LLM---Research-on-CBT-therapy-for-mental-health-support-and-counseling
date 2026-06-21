@@ -11,7 +11,7 @@ const STATUS_TABS = [
   { id: "suspended", label: "Suspended" },
 ];
 
-export default function Users({ search }) {
+export default function Users({ search, selectedUserId }) {
   const me = getUser();
   const isAdmin = me?.role === "admin";
 
@@ -19,7 +19,7 @@ export default function Users({ search }) {
   const [status, setStatus] = useState("");
   const [risk, setRisk] = useState("");
   const [page, setPage] = useState(1);
-  const [selId, setSelId] = useState(null);
+  const [selId, setSelId] = useState(selectedUserId || null);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,6 +35,7 @@ export default function Users({ search }) {
       .catch(() => setData({ users: [], total: 0 }));
   }, [search, status, risk, page, selId]);
 
+  useEffect(() => { if (selectedUserId) setSelId(selectedUserId); }, [selectedUserId]);
   useEffect(() => { setPage(1); }, [search, status, risk]);
   useEffect(() => { load(); }, [search, status, risk, page]); // eslint-disable-line
 

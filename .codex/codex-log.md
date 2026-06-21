@@ -9,31 +9,45 @@ Short repo-local log of changes made by Codex.
 - Verification: Created helper and project instructions
 - Notes: Backend AI pipeline logging from the previous misread was removed.
 
-## 2026-06-20 14:38:59 +07:00
+## 2026-06-21 18:25:00 +07:00
 
-- Summary: Built the responsive Reports and Analytics admin dashboard with animated KPI cards, SVG charts, monthly table, insights, filters, export, and mobile navigation.
-- Files: admin_app/src/pages/ReportsAdmin.jsx, admin_app/src/styles.css, admin_app/src/App.jsx, admin_app/src/admin/TopBar.jsx, admin_app/src/admin/Sidebar.jsx, admin_app/src/admin/Icon.jsx, admin_app/public/admin-avatar.svg, admin_app/public/mindcare-mascot.svg
-- Verification: npm.cmd run build; git diff --check
-- Notes: Reused the existing inline SVG icon system; no Flaticon assets or attribution were required.
+- Summary: Designed backend/database for Dashboard and Case Management
+- Files: docs/DB-DASHBOARD-CASE.md
+- Verification: Checked 13 required sections, Markdown fences, UTF-8 content, and git status
+- Notes: Design only; no backend implementation or existing schema changed
 
-## 2026-06-20 14:58:08 +07:00
+## 2026-06-21 19:05:14 +07:00
 
-- Summary: Implemented the Reports backend API, privacy-conscious analytics aggregation, CSV export, and live frontend data wiring.
-- Files: backend/app/api/admin_reports.py, backend/app/services/reporting.py, backend/app/main.py, backend/tests/test_reporting.py, admin_app/src/api.js, admin_app/src/pages/ReportsAdmin.jsx, admin_app/src/styles.css, FRONTEND-UI-CHANGES.md
-- Verification: 7 Reports tests passed; Python py_compile passed; admin npm build passed; git diff --check passed; docker compose config passed
-- Notes: Full legacy backend suite reaches a native pyarrow access violation in test_post_process_parse on the local Python Store environment; first six legacy tests passed. Docker daemon was not running, so live container endpoint verification was unavailable.
+- Summary: Built Dashboard and Case Management admin UI
+- Files: admin_app/src/App.jsx, admin_app/src/styles.css, admin_app/src/components/dashboard, admin_app/src/components/cases, admin_app/src/components/shared, admin_app/src/services, admin_app/src/types
+- Verification: npm ci; npm run build (Vite production build passed, 52 modules)
+- Notes: Uses live API by default; VITE_ADMIN_DATA_MODE=mock provides empty-state contract while new backend endpoints are unavailable
 
-## 2026-06-20 15:07:10 +07:00
+## 2026-06-21 19:27:49 +07:00
 
-- Summary: Built the responsive System Logs admin page with audit API loading, animated KPI cards, filters, table interactions, event details, critical events, and mobile drawers.
-- Files: admin_app/src/pages/LogsAdmin.jsx, admin_app/src/App.jsx, admin_app/src/admin/Icon.jsx, admin_app/src/admin/TopBar.jsx, admin_app/src/styles.css, FRONTEND-UI-CHANGES.md
-- Verification: npm.cmd run build; git diff --check
-- Notes: Reused the existing project SVG icon system, so no Flaticon assets or attribution were added. Backend contracts were unchanged.
+- Summary: Added populated mock data for Dashboard and Case Management
+- Files: admin_app/src/services/mockAdminData.js, admin_app/src/services/dashboardApi.js, admin_app/src/services/casesApi.js
+- Verification: npm run build passed (53 modules)
+- Notes: Mock cases reuse existing demo usernames and support filters plus assign/escalate/close/reopen/note in memory
 
-## 2026-06-20 15:15:56 +07:00
+## 2026-06-21 20:03:00 +07:00
 
-- Summary: Built the responsive System Settings admin page with animated settings cards, controlled forms, toggles, role menus, AI rules, integrations, backup actions, and save feedback.
-- Files: admin_app/src/pages/SettingsAdmin.jsx, admin_app/src/App.jsx, admin_app/src/admin/Icon.jsx, admin_app/src/styles.css, FRONTEND-UI-CHANGES.md
-- Verification: npm.cmd run build; git diff --check
-- Notes: No settings backend/API existed, so the page keeps all settings interactions in local UI state without changing backend contracts. Reused project SVG icons; no Flaticon attribution required.
+- Summary: Linked Dashboard and Case mock data to User Management
+- Files: admin_app/src/services/mockAdminData.js, admin_app/src/services/dashboardApi.js, admin_app/src/services/casesApi.js, admin_app/src/App.jsx, admin_app/src/pages/Users.jsx, admin_app/src/components/cases/CaseManagementPage.jsx
+- Verification: Verified shared user IDs and API linkage; npm run build passed (53 modules)
+- Notes: Dashboard user KPIs read /admin/users/stats; Case profile navigation selects the matching user; assign/close update mock user state
+
+## 2026-06-21 22:44:57 +07:00
+
+- Summary: Integrated AI Moderation into admin dashboard
+- Files: admin_app/src/pages/ai-moderation, admin_app/src/App.jsx, admin_app/src/styles.css, admin_app/src/components/dashboard/DashboardPage.jsx, admin_app/src/services/dashboardApi.js
+- Verification: npm run build passed (61 modules)
+- Notes: Sidebar now includes AI Moderation; Dashboard pending moderation links and mock KPI/list read the moderation mock API
+
+## 2026-06-21 23:01:54 +07:00
+
+- Summary: Removed legacy Crisis Control navigation
+- Files: admin_app/src/App.jsx
+- Verification: Confirmed no Crisis Control route/import; npm run build passed (60 modules)
+- Notes: L0/L1 remain available through Case Management and AI Moderation
 
