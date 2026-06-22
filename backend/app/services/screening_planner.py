@@ -13,6 +13,7 @@ Scoring stays the standard instrument — this only steers the choice + framing.
 import logging
 from datetime import datetime, timezone, timedelta
 
+from app.core.crypto import decrypt_str
 from app.db import models
 from app.db.session import db_session
 
@@ -23,19 +24,39 @@ _DEP = ("depress", "sad", "hopeless", "empty", "worthless", "numb", "low mood", 
 
 TITLES = {"phq9": "Depression check-in (PHQ-9)", "gad7": "Anxiety check-in (GAD-7)"}
 
+# The generic, no-signal fallback. Recorded verbatim so get_or_create can tell
+# "this plan was the default" and refresh it if real signals appear later today.
+_DEFAULT_REASON = "A regular check-in helps you and your clinician see how you're doing over time."
+
 
 def _signals(db, uid):
     mem = db.query(models.UserMemory).filter_by(user_id=uid).first()
     summary = (mem.summary or "") if mem else ""
-    low = summary.lower()
     recent = (db.query(models.Session).filter_by(user_id=uid)
               .order_by(models.Session.created_at.desc()).limit(10).all())
     last = (db.query(models.Screening).filter_by(user_id=uid)
             .order_by(models.Screening.created_at.desc()).first())
+
+    # Build a corpus from the memory gist PLUS the actual recent user inputs
+    # (decrypted in-backend). Relying on the analyzer's theme wording landing in
+    # the summary string was too fragile — scan what the user really wrote.
+    corpus = [summary.lower()]
+    for s in recent:
+        try:
+            if s.user_input_enc:
+                corpus.append(decrypt_str(s.user_input_enc).lower())
+        except Exception:                                    # noqa: BLE001
+            pass
+    blob = " ".join(corpus)
+    anx_score = sum(blob.count(w) for w in _ANX)
+    dep_score = sum(blob.count(w) for w in _DEP)
+
     return {
         "summary": summary,
-        "anx": any(w in low for w in _ANX),
-        "dep": any(w in low for w in _DEP),
+        "anx": anx_score > 0,
+        "dep": dep_score > 0,
+        "anx_score": anx_score,
+        "dep_score": dep_score,
         "high_risk": any(s.triage_level in ("L0", "L1") for s in recent),
         "last": last,
     }
@@ -43,15 +64,22 @@ def _signals(db, uid):
 
 def _choose(sig) -> tuple[str, str]:
     last = sig["last"]
-    if sig["dep"] and not sig["anx"]:
-        return "phq9", "Recent chats touched on low mood, so a quick depression check helps track it."
-    if sig["anx"] and not sig["dep"]:
-        return "gad7", "Recent chats touched on anxiety, so a quick anxiety check helps track it."
+    a, d = sig.get("anx_score", 0), sig.get("dep_score", 0)
+    if a or d:
+        if a > d:
+            return "gad7", "Your recent chats leaned toward anxiety, so an anxiety check helps you track it."
+        if d > a:
+            return "phq9", "Your recent chats leaned toward low mood, so a depression check helps you track it."
+        # Both present, equal weight → alternate against last time, mention both.
+        if last and last.gad7_score is not None and last.phq9_score is None:
+            return "phq9", "Recent chats touched on both anxiety and low mood — last time was anxiety, so let's check your mood today."
+        return "gad7", "Recent chats touched on both anxiety and low mood — let's start with an anxiety check today."
+    # No content signal → alternate with the last instrument so coverage rotates.
     if last and last.gad7_score is not None and last.phq9_score is None:
         return "phq9", "Last time you did an anxiety check — let's balance it with a depression check today."
     if last and last.phq9_score is not None and last.gad7_score is None:
         return "gad7", "Last time you did a depression check — let's balance it with an anxiety check today."
-    return "phq9", "A regular check-in helps you and your clinician see how you're doing over time."
+    return "phq9", _DEFAULT_REASON
 
 
 def _intro(sig) -> str:
@@ -62,20 +90,34 @@ def _intro(sig) -> str:
     return "Here's a short, private check-in to see how you're doing today."
 
 
+def _apply(plan, sig):
+    instrument, reason = _choose(sig)
+    if sig["high_risk"]:
+        reason = "Some recent messages raised a safety concern — a check-in now is especially helpful."
+    plan.instrument = instrument
+    plan.reason = reason
+    plan.intro = _intro(sig)
+    return plan
+
+
 def get_or_create(db, uid, day=None):
     day = day or datetime.now(timezone.utc).date()
     plan = (db.query(models.ScreeningPlan)
             .filter_by(user_id=uid, plan_date=day).first())
     if plan:
+        # A plan created before the user chatted gets cached as the generic
+        # default. If real signals have since appeared today, refresh it once so
+        # the recommendation actually reflects them (and let the AI intro
+        # regenerate for the new focus).
+        if plan.reason == _DEFAULT_REASON:
+            sig = _signals(db, uid)
+            if sig["anx"] or sig["dep"] or sig["high_risk"]:
+                _apply(plan, sig)
+                plan.ai_intro = None
+                db.flush()
         return plan
-    sig = _signals(db, uid)
-    instrument, reason = _choose(sig)
-    if sig["high_risk"]:
-        reason = "Some recent messages raised a safety concern — a check-in now is especially helpful."
-    plan = models.ScreeningPlan(
-        user_id=uid, plan_date=day, instrument=instrument,
-        reason=reason, intro=_intro(sig),
-    )
+    plan = models.ScreeningPlan(user_id=uid, plan_date=day, instrument="phq9")
+    _apply(plan, _signals(db, uid))
     db.add(plan)
     db.flush()
     return plan
