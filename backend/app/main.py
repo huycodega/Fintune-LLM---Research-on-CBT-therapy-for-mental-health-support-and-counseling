@@ -125,6 +125,15 @@ def boot():
         log.info("Seed content ready")
     except Exception as e:
         log.warning("Content seed skipped: %s — run `alembic upgrade head`?", e)
+    # Seed demo screenings (idempotent — only when the table is near-empty) so
+    # the Screening page / Reports show real rows tied to existing users.
+    try:
+        from app.db.seed_demo import seed_demo_screenings
+        with db_session() as s:
+            n = seed_demo_screenings(s)
+        log.info("Demo screenings seeded: %s", n)
+    except Exception as e:
+        log.warning("Demo screening seed skipped: %s", e)
     # Preload the NLI grounding model so the first chat doesn't pay the load
     # cost mid-request (which pushed long agent turns past the gateway timeout).
     try:
