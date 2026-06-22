@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../api.js";
 import MascotCard from "../components/MascotCard.jsx";
 import PageHero from "../components/PageHero.jsx";
@@ -52,6 +52,17 @@ export default function SangLoc() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [rec, setRec] = useState(null);   // today's personalised recommendation
+  const [recStarted, setRecStarted] = useState(false);
+  const stepsRef = useRef(null);
+
+  // Jump into the recommended instrument. PHQ-9 is already step 0, so without
+  // this the click looked like a no-op — we dismiss the card and scroll the
+  // questionnaire into view so it's clear the check-in has begun.
+  function startRecommended() {
+    setStep(rec?.instrument === "gad7" ? 1 : 0);
+    setRecStarted(true);
+    setTimeout(() => stepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
 
   // Memory/context-aware suggestion of which check-in to focus on today.
   useEffect(() => {
@@ -217,22 +228,21 @@ export default function SangLoc() {
       <div className="screening-layout">
       {/* Left: questions */}
       <div>
-        {rec && (
+        {rec && !recStarted && (
           <div className="screening-rec card" style={{ marginBottom: 20 }}>
             <div className="screening-rec-label">✨ Recommended for you today</div>
             <div className="screening-rec-title">{rec.title}</div>
             <p className="screening-rec-intro">{rec.intro}</p>
             <p className="screening-rec-reason">{rec.reason}</p>
             <div className="screening-rec-actions">
-              <button className="btn btn-primary"
-                      onClick={() => setStep(rec.instrument === "gad7" ? 1 : 0)}>
+              <button className="btn btn-primary" onClick={startRecommended}>
                 Start {rec.instrument === "gad7" ? "GAD-7" : "PHQ-9"} →
               </button>
               {rec.done_today && <span className="screening-rec-done">✓ You already checked in today</span>}
             </div>
           </div>
         )}
-        <div className="screening-steps" style={{ marginBottom: 24 }}>
+        <div className="screening-steps" ref={stepsRef} style={{ marginBottom: 24, scrollMarginTop: 16 }}>
           {STEP_LABELS.map((label, i) => (
             <div key={i} className={`step-item ${i === step ? "active" : i < step ? "done" : ""}`}>
               <div className="step-circle">

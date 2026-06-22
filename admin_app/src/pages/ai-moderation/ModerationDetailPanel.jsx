@@ -152,11 +152,16 @@ function ReviewEditor({ detail, busy, onApprove, onReject, onEditResponse, onNee
       </label>
 
       <div className="am-action-grid">
+        {/* When the moderator has edited the text or its recommendations, the
+            primary button SENDS THOSE EDITS (what-you-see-is-what-the-user-
+            gets). Only a pristine draft uses the fast approve-as-is path. */}
         <button type="button" className="am-primary-btn" disabled={busy}
-                onClick={() => onApprove(drafts[idx]?.idx)}>
-          Approve option {idx + 1}
+                onClick={() => changed
+                  ? onEditResponse(editText, note || "Approved with edits")
+                  : onApprove(drafts[idx]?.idx)}>
+          {changed ? "Approve with edits ✎" : `Approve option ${idx + 1}`}
         </button>
-        <button type="button" className="am-edit-btn" disabled={busy}
+        <button type="button" className="am-edit-btn" disabled={busy || !changed}
                 onClick={() => onEditResponse(editText, note || "Edited by moderator")}>
           Send edited reply{changed ? " ✎" : ""}
         </button>
