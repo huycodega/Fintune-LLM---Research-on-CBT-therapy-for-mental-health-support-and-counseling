@@ -92,6 +92,7 @@ export const api = {
   screeningHistory: (limit = 20) =>
     req(`/screening/history?limit=${limit}`),
   latestScreening: () => req("/screening/latest"),
+  screeningToday: () => req("/screening/today"),
 
   // ---- learning content (BaiHoc / TaiNguyen) ----
   lessons: (params = {}) => {

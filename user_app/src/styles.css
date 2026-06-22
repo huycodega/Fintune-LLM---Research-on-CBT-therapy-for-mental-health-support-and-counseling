@@ -6828,3 +6828,12 @@ html, body, #root { overflow-x: hidden; }
 .ai-book-day { display: flex; flex-direction: column; gap: 6px; }
 .tv-appt-main { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .tv-day-num { font-weight: 700; font-size: 14px; line-height: 1; }
+
+/* Personalised "today's check-in" recommendation on the Screening page */
+.screening-rec { border-left: 4px solid var(--primary); }
+.screening-rec-label { font-size: 12px; font-weight: 700; color: var(--primary-dark); margin-bottom: 6px; }
+.screening-rec-title { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+.screening-rec-intro { font-size: 14px; color: var(--ink); line-height: 1.55; margin-bottom: 6px; }
+.screening-rec-reason { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 12px; }
+.screening-rec-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.screening-rec-done { font-size: 12.5px; color: var(--ink-soft); }

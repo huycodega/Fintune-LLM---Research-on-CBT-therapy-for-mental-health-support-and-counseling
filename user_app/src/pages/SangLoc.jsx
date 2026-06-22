@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../api.js";
 import MascotCard from "../components/MascotCard.jsx";
 import PageHero from "../components/PageHero.jsx";
@@ -51,6 +51,14 @@ export default function SangLoc() {
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [rec, setRec] = useState(null);   // today's personalised recommendation
+
+  // Memory/context-aware suggestion of which check-in to focus on today.
+  useEffect(() => {
+    let alive = true;
+    api.screeningToday().then((r) => { if (alive) setRec(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const phq9Score = phq9.reduce((a, v) => a + (v ?? 0), 0);
   const gad7Score = gad7.reduce((a, v) => a + (v ?? 0), 0);
@@ -209,6 +217,21 @@ export default function SangLoc() {
       <div className="screening-layout">
       {/* Left: questions */}
       <div>
+        {rec && (
+          <div className="screening-rec card" style={{ marginBottom: 20 }}>
+            <div className="screening-rec-label">✨ Recommended for you today</div>
+            <div className="screening-rec-title">{rec.title}</div>
+            <p className="screening-rec-intro">{rec.intro}</p>
+            <p className="screening-rec-reason">{rec.reason}</p>
+            <div className="screening-rec-actions">
+              <button className="btn btn-primary"
+                      onClick={() => setStep(rec.instrument === "gad7" ? 1 : 0)}>
+                Start {rec.instrument === "gad7" ? "GAD-7" : "PHQ-9"} →
+              </button>
+              {rec.done_today && <span className="screening-rec-done">✓ You already checked in today</span>}
+            </div>
+          </div>
+        )}
         <div className="screening-steps" style={{ marginBottom: 24 }}>
           {STEP_LABELS.map((label, i) => (
             <div key={i} className={`step-item ${i === step ? "active" : i < step ? "done" : ""}`}>
