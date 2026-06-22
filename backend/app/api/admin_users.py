@@ -239,6 +239,29 @@ def user_detail(uid: str, _: dict = Depends(auth.require_admin),
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GET /users/{uid}/screening-history — real screening rows for the Screening page
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/users/{uid}/screening-history")
+def screening_history(uid: str, _: dict = Depends(auth.require_admin),
+                      db: Session = Depends(get_db)):
+    rows = (db.query(models.Screening)
+            .filter_by(user_id=uid)
+            .order_by(models.Screening.created_at.desc()).limit(200).all())
+    return {"items": [{
+        "id": str(s.id),
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "screened_at": s.created_at.isoformat() if s.created_at else None,
+        "phq9_score": s.phq9_score,
+        "gad7_score": s.gad7_score,
+        "phq9_level": s.phq9_level,
+        "gad7_level": s.gad7_level,
+        "mood_score": s.mood_score,
+        "note": s.notes,
+        "status": "completed",
+    } for s in rows]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # POST /users/{uid}/status — suspend / activate
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/users/{uid}/status")

@@ -8,6 +8,7 @@ import DashboardPage from "./components/dashboard/DashboardPage.jsx";
 import Users from "./pages/Users.jsx";
 import CaseManagementPage from "./components/cases/CaseManagementPage.jsx";
 import ModerationPage from "./pages/ai-moderation/ModerationPage.jsx";
+import ScreeningManagementPage from "./components/screenings/ScreeningManagementPage.jsx";
 import ExpertsAdmin from "./pages/ExpertsAdmin.jsx";
 
 // Self-shell pages (bring their own AppShell / la-shell + nav).
@@ -75,12 +76,7 @@ export default function App() {
       {page === "casemgmt" && <CaseManagementPage onNav={nav} />}
       {page === "moderation" && <ModerationPage />}
       {page === "experts" && <ExpertsAdmin />}
-      {page === "screening" && (
-        <div className="admin-placeholder">
-          <h2>Screening</h2>
-          <p>PHQ-9 / GAD-7 results — coming soon.</p>
-        </div>
-      )}
+      {page === "screening" && <ScreeningManagementPage />}
     </AppShell>
   );
 }
