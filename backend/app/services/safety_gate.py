@@ -45,6 +45,22 @@ _L0_PAT = re.compile(
     r"(method|way)s?\s+to\s+(die|kill\s+my|end\s+(it|my)|hurt\s+my|harm\s+my)|"
     r"how\s+to\s+(kill\s+my|end\s+my\s+life|end\s+it))\b", re.I)
 
+# Overdose / means-with-intent preparation behaviour the keyword net misses.
+# High precision: needs an explicit "overdose", OR a medication noun AND a
+# "take/swallow all/whole" phrase in close proximity (either order) — so it
+# catches "looked at the pills … thought about taking all of them" and
+# "swallow the whole bottle of pills" without tripping on ordinary
+# medication talk ("I take my pills every morning").
+_L0_MEANS_PAT = re.compile(
+    r"overdos\w*"
+    r"|\b(?:pills?|tablets?|sleeping\s+pills?|medication|meds)\b"
+    r"[^.?!]{0,60}\b(?:tak(?:e|ing)|took|swallow\w*)\s+"
+    r"(?:all|the\s+whole|the\s+entire|a\s+whole)\b"
+    r"|\b(?:tak(?:e|ing)|took|swallow\w*)\s+"
+    r"(?:all|the\s+whole|the\s+entire|a\s+whole|a\s+handful)\b"
+    r"[^.?!]{0,40}\b(?:pills?|tablets?|sleeping\s+pills?|medication|meds)\b",
+    re.I)
+
 _L1_PAT = re.compile(
     r"\b(self.?harm|cut\s+my\s*self|hurt\s+my\s*self|hurt\s+(someone|him|her|them)|"
     r"hopeless|worthless|can'?t\s+go\s+on|burden\s+(to|on)\s+\w+|"
@@ -57,7 +73,7 @@ _L2_PAT = re.compile(
 
 
 def _heuristic(text: str) -> Dict:
-    if _L0_PAT.search(text):
+    if _L0_PAT.search(text) or _L0_MEANS_PAT.search(text):
         return {"triage_level": "L0", "severity": "critical",
                 "confidence": 0.95, "reason": "Crisis language detected",
                 "source": "heuristic"}
@@ -111,8 +127,8 @@ def has_acute_risk(text: str) -> bool:
     defense-in-depth re-check before letting an L2/L3 turn auto-generate."""
     if not text:
         return False
-    return bool(_L0_PAT.search(text) or _L1_PAT.search(text)
-                or _PASSIVE_RISK_PAT.search(text))
+    return bool(_L0_PAT.search(text) or _L0_MEANS_PAT.search(text)
+                or _L1_PAT.search(text) or _PASSIVE_RISK_PAT.search(text))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

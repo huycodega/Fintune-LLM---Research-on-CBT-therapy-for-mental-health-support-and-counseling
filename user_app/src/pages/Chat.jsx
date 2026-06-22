@@ -238,7 +238,10 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt }) {
               ))}
             </div>
           )}
-          {(msg.resources || msg.crisis) && onTalkExpert && (
+          {/* In-chat psychologist booking is an L0 CRISIS affordance only.
+              For L1 (pending_review) we just say a clinician is reviewing —
+              the psychologist offer, if any, comes from the clinician's reply. */}
+          {msg.crisis && onTalkExpert && (
             <button className="ai-expert-cta" onClick={onTalkExpert}>
               🧑‍⚕️ Talk to a psychologist →
             </button>
