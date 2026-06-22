@@ -4,6 +4,20 @@ import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
+import ContentFormModal from "../admin/ContentFormModal.jsx";
+
+const LESSON_FIELDS = [
+  { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Identifying cognitive distortions" },
+  { name: "level", label: "Level", type: "select", half: true, options: ["basic", "intermediate", "advanced"] },
+  { name: "status", label: "Status", type: "select", half: true, options: ["draft", "published"] },
+  { name: "category", label: "Category", type: "text", half: true, placeholder: "e.g. Cognitive restructuring" },
+  { name: "duration", label: "Duration", type: "text", half: true, placeholder: "e.g. 15 min" },
+  { name: "author", label: "Author", type: "text", half: true, placeholder: "e.g. Clinical team" },
+  { name: "tags", label: "Tags", type: "tags", half: true, help: "Comma-separated", placeholder: "distortions, thoughts" },
+  { name: "objectives", label: "Learning objectives", type: "tags", help: "Comma-separated — one objective per item", placeholder: "Spot all-or-nothing thinking, Reframe a thought" },
+  { name: "description", label: "Short description", type: "textarea", rows: 2, placeholder: "One-line summary shown in the list." },
+  { name: "content", label: "Lesson content", type: "textarea", rows: 6, placeholder: "Full lesson body / script." },
+];
 
 /* Thumb art is keyed 1..8; map any row to one by its position so DB-backed
    rows (UUID ids) still get a stable icon. */
@@ -377,6 +391,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
   const [loading, setLoading] = useState(true);
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
+  const [formItem, setFormItem] = useState(null);   // null | {} (add) | lesson (edit)
 
   async function load() {
     setLoading(true);
@@ -426,15 +441,23 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     }));
   }
 
-  async function handleAdd() {
-    const title = window.prompt("New lesson title:");
-    if (!title) return;
+  function handleAdd() { setFormItem({}); }
+
+  async function handleFormSubmit(payload) {
+    const editingId = formItem && formItem.id;
     if (mock) {
-      const item = { id: `m${Date.now()}`, title, desc: "Newly added lesson.", description: "Newly added lesson — add objectives and content next.", category: "General", level: "basic", duration: "—", status: "draft", author: "You", updated_at: new Date().toISOString(), tags: ["new"] };
-      commitLocal([item, ...lessons]); setSelected(item.id); return;
+      if (editingId) {
+        commitLocal(lessons.map((l) => l.id === editingId
+          ? { ...l, ...payload, desc: payload.description, updated_at: new Date().toISOString() } : l));
+      } else {
+        const item = { id: `m${Date.now()}`, ...payload, desc: payload.description, updated_at: new Date().toISOString() };
+        commitLocal([item, ...lessons]); setSelected(item.id);
+      }
+      return;
     }
-    try { await api.createLesson({ title, status: "draft" }); await load(); }
-    catch (e) { alert(e.message); }
+    if (editingId) await api.updateLesson(editingId, payload);
+    else await api.createLesson(payload);
+    await load();
   }
 
   async function handleDelete(lesson) {
@@ -451,12 +474,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     catch (e) { alert(e.message); }
   }
 
-  async function handleEdit(lesson) {
-    const title = window.prompt("Edit title:", lesson.title);
-    if (title == null) return;
-    if (mock) { commitLocal(lessons.map((l) => l.id === lesson.id ? { ...l, title } : l)); return; }
-    try { await api.updateLesson(lesson.id, { title }); await load(); }
-    catch (e) { alert(e.message); }
+  function handleEdit(lesson) {
+    setFormItem({ ...lesson, description: lesson.description ?? lesson.desc ?? "" });
   }
 
   const selectedLesson = lessons.find((l) => l.id === selected) || lessons[0] || null;
@@ -529,6 +548,18 @@ export default function LessonsAdmin({ onLogout, onNav }) {
             )}
         </div>
       </div>
+
+      {formItem && (
+        <ContentFormModal
+          title={formItem.id ? "Edit Lesson" : "Add Lesson"}
+          subtitle={formItem.id ? "Update this lesson's details." : "Create a new CBT lesson."}
+          fields={LESSON_FIELDS}
+          initial={formItem}
+          submitLabel={formItem.id ? "Save changes" : "Create lesson"}
+          onSubmit={handleFormSubmit}
+          onClose={() => setFormItem(null)}
+        />
+      )}
     </div>
   );
 }

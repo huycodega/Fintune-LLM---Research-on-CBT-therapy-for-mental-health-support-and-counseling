@@ -6823,3 +6823,8 @@ html, body, #root { overflow-x: hidden; }
 
 /* Center small dialogs vertically (confirm boxes) */
 .lx-overlay-center { align-items: center; }
+
+/* small wrappers in the in-chat booking + counselling calendar */
+.ai-book-day { display: flex; flex-direction: column; gap: 6px; }
+.tv-appt-main { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.tv-day-num { font-weight: 700; font-size: 14px; line-height: 1; }

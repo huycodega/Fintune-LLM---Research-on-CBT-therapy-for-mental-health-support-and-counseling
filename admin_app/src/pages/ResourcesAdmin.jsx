@@ -4,6 +4,20 @@ import Sidebar from "../admin/Sidebar.jsx";
 import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
+import ContentFormModal from "../admin/ContentFormModal.jsx";
+
+const RESOURCE_FIELDS = [
+  { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Grounding techniques for panic" },
+  { name: "type", label: "Type", type: "select", half: true, options: ["Article", "Audio", "Video", "CBT Tool"] },
+  { name: "status", label: "Status", type: "select", half: true, options: ["published", "draft", "update", "urgent"] },
+  { name: "category", label: "Category", type: "text", half: true, placeholder: "e.g. Anxiety" },
+  { name: "duration", label: "Duration", type: "text", half: true, placeholder: "e.g. 8 min read" },
+  { name: "url", label: "URL", type: "url", placeholder: "https://… (link to the resource)" },
+  { name: "owner", label: "Owner", type: "text", half: true, placeholder: "e.g. Clinical team" },
+  { name: "tags", label: "Tags", type: "tags", half: true, help: "Comma-separated", placeholder: "anxiety, breathing" },
+  { name: "description", label: "Short description", type: "textarea", rows: 2, placeholder: "One-line summary shown in the list." },
+  { name: "content", label: "Content / notes", type: "textarea", rows: 5, placeholder: "Full body, transcript or clinician notes." },
+];
 
 /* Thumb art is keyed 1..8; map any row to one by position so DB-backed rows
    (UUID ids) still render a stable icon. */
@@ -376,6 +390,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
   const [loading, setLoading] = useState(true);
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
+  const [formItem, setFormItem] = useState(null);   // null | {} (add) | resource (edit)
 
   async function load() {
     setLoading(true);
@@ -415,16 +430,25 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     setStats((s) => ({ ...s, total: list.length, urgent: list.filter((x) => x.urgent || x.status === "urgent").length }));
   }
 
-  async function handleAdd() {
-    const title = window.prompt("New resource title:");
-    if (!title) return;
-    const type = window.prompt("Type (Audio / Article / Video / CBT Tool):", "Article") || "Article";
+  function handleAdd() { setFormItem({ type: "Article", status: "published" }); }
+
+  async function handleFormSubmit(payload) {
+    const editingId = formItem && formItem.id;
     if (mock) {
-      const item = { id: `m${Date.now()}`, type, title, desc: "Newly added resource.", description: "Newly added resource — add details next.", category: "General", duration: "", status: "published", owner: "You", resource_code: `RSRC-2026-${String(Date.now()).slice(-4)}`, tags: ["new"], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
-      commitLocal([item, ...resources]); setSelected(item.id); return;
+      if (editingId) {
+        commitLocal(resources.map((x) => x.id === editingId
+          ? { ...x, ...payload, desc: payload.description, updated_at: new Date().toISOString() } : x));
+      } else {
+        const item = { id: `m${Date.now()}`, ...payload, desc: payload.description,
+          resource_code: `RSRC-2026-${String(Date.now()).slice(-4)}`,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(), usage_count: 0 };
+        commitLocal([item, ...resources]); setSelected(item.id);
+      }
+      return;
     }
-    try { await api.createResource({ title, type, status: "published" }); await load(); }
-    catch (e) { alert(e.message); }
+    if (editingId) await api.updateResource(editingId, payload);
+    else await api.createResource(payload);
+    await load();
   }
 
   async function handleDelete(r) {
@@ -439,12 +463,8 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     catch (e) { alert(e.message); }
   }
 
-  async function handleEdit(r) {
-    const title = window.prompt("Edit title:", r.title);
-    if (title == null) return;
-    if (mock) { commitLocal(resources.map((x) => x.id === r.id ? { ...x, title } : x)); return; }
-    try { await api.updateResource(r.id, { title }); await load(); }
-    catch (e) { alert(e.message); }
+  function handleEdit(r) {
+    setFormItem({ ...r, description: r.description ?? r.desc ?? "" });
   }
 
   async function handleTogglePublish(r) {
@@ -539,6 +559,18 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
             : panelOpen && <DetailPanel resource={selectedResource} onClose={() => setSelected(null)} onEdit={handleEdit} onTogglePublish={handleTogglePublish} />}
         </div>
       </div>
+
+      {formItem && (
+        <ContentFormModal
+          title={formItem.id ? "Edit Resource" : "Add Resource"}
+          subtitle={formItem.id ? "Update this resource's details." : "Create a new resource."}
+          fields={RESOURCE_FIELDS}
+          initial={formItem}
+          submitLabel={formItem.id ? "Save changes" : "Create resource"}
+          onSubmit={handleFormSubmit}
+          onClose={() => setFormItem(null)}
+        />
+      )}
     </div>
   );
 }
