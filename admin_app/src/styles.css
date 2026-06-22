@@ -3704,3 +3704,20 @@ textarea.la-input { resize: vertical; line-height: 1.5; }
 .admin-btn.sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
 .admin-btn.danger { color: var(--la-red); }
 .admin-btn.danger:hover { border-color: var(--la-red); background: var(--la-red-soft); color: var(--la-red-ink); }
+
+/* In-app confirm dialog + error toast (replaces native confirm/alert) */
+.la-confirm { max-width: 440px; }
+.la-confirm-msg { font-size: 14px; color: var(--la-ink); line-height: 1.6; }
+.la-btn-danger {
+  display: inline-flex; align-items: center; gap: 7px; font-family: var(--font);
+  font-size: 13.5px; font-weight: 700; color: #fff; background: var(--la-red);
+  border: none; border-radius: 10px; padding: 9px 16px; cursor: pointer; transition: all .15s;
+}
+.la-btn-danger:hover { background: #dc2626; }
+.la-btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+.la-toast-err {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 300;
+  background: var(--la-red-ink); color: #fff; padding: 11px 18px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; box-shadow: 0 12px 32px rgba(0,0,0,.2);
+  cursor: pointer; max-width: 90vw;
+}

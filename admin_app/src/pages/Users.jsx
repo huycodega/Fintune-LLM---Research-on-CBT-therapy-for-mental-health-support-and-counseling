@@ -4,6 +4,7 @@ import {
   Avatar, RiskPill, StatusPill, StatCard, Empty,
   displayName, fmtDate, timeAgo, fmtDateTime,
 } from "../ui.jsx";
+import ConfirmDialog from "../admin/ConfirmDialog.jsx";
 
 const STATUS_TABS = [
   { id: "", label: "All" },
@@ -22,6 +23,7 @@ export default function Users({ search, selectedUserId }) {
   const [selId, setSelId] = useState(selectedUserId || null);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
 
   const load = useCallback(() => {
     api.users({ q: search, status, risk, page, page_size: 12 })
@@ -45,17 +47,21 @@ export default function Users({ search, selectedUserId }) {
     api.userDetail(selId).then(setDetail).catch(() => setDetail(null));
   }, [selId]);
 
+  const [confirmStatus, setConfirmStatus] = useState(null);   // pending status change
+
+  function requestStatus(next) {
+    if (!detail) return;
+    setConfirmStatus(next);
+  }
   async function changeStatus(next) {
     if (!detail) return;
-    const verb = next === "suspended" ? "suspend" : "re-activate";
-    if (!confirm(`Are you sure you want to ${verb} ${displayName(detail.username)}?`)) return;
     setBusy(true);
     try {
       await api.setUserStatus(detail.id, next);
       setDetail({ ...detail, status: next });
       load();
-    } catch (e) { alert("Error: " + e.message); }
-    finally { setBusy(false); }
+    } catch (e) { setErrMsg("Error: " + e.message); }
+    finally { setBusy(false); setConfirmStatus(null); }
   }
 
   async function changeRole(role) {
@@ -65,7 +71,7 @@ export default function Users({ search, selectedUserId }) {
       await api.setUserRole(detail.id, role);
       setDetail({ ...detail, role });
       load();
-    } catch (e) { alert("Error: " + e.message); }
+    } catch (e) { setErrMsg("Error: " + e.message); }
     finally { setBusy(false); }
   }
 
@@ -166,8 +172,22 @@ export default function Users({ search, selectedUserId }) {
 
         {/* ---- detail ---- */}
         <UserDetail detail={detail} isAdmin={isAdmin} busy={busy}
-                    onStatus={changeStatus} onRole={changeRole} />
+                    onStatus={requestStatus} onRole={changeRole} />
       </div>
+
+      <ConfirmDialog
+        open={!!confirmStatus}
+        title={confirmStatus === "suspended" ? "Suspend account?" : "Re-activate account?"}
+        message={detail ? `Are you sure you want to ${confirmStatus === "suspended" ? "suspend" : "re-activate"} ${displayName(detail.username)}?` : ""}
+        confirmLabel={confirmStatus === "suspended" ? "Suspend" : "Re-activate"}
+        danger={confirmStatus === "suspended"}
+        busy={busy}
+        onConfirm={() => changeStatus(confirmStatus)}
+        onCancel={() => setConfirmStatus(null)}
+      />
+      {errMsg && (
+        <div className="la-toast-err" onClick={() => setErrMsg("")}>{errMsg}</div>
+      )}
     </>
   );
 }

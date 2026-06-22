@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
 import ContentFormModal from "../admin/ContentFormModal.jsx";
+import ConfirmDialog from "../admin/ConfirmDialog.jsx";
 
 const DEFAULT_SLOTS = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00"];
 
@@ -22,6 +23,8 @@ export default function ExpertsAdmin() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [formItem, setFormItem] = useState(null);   // null|{}|expert
+  const [confirmDel, setConfirmDel] = useState(null);  // expert pending delete
+  const [delBusy, setDelBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -52,15 +55,18 @@ export default function ExpertsAdmin() {
     else await api.createExpert(payload);
     await refreshExperts();
   }
-  async function handleDelete(e) {
-    if (!window.confirm(`Delete psychologist "${e.name}"? Their appointments will be removed too.`)) return;
+  function handleDelete(e) { setConfirmDel(e); }
+  async function doDelete() {
+    if (!confirmDel) return;
+    setDelBusy(true);
     // Deleting an expert also removes their appointments, so refresh both.
-    try { await api.deleteExpert(e.id); await Promise.all([refreshExperts(), refreshAppts()]); }
-    catch (ex) { alert(ex.message); }
+    try { await api.deleteExpert(confirmDel.id); await Promise.all([refreshExperts(), refreshAppts()]); }
+    catch (ex) { setErr(ex.message); }
+    finally { setDelBusy(false); setConfirmDel(null); }
   }
   async function setStatus(a, status) {
     try { await api.setAppointmentStatus(a.id, status); await refreshAppts(); }
-    catch (ex) { alert(ex.message); }
+    catch (ex) { setErr(ex.message); }
   }
 
   return (
@@ -140,6 +146,17 @@ export default function ExpertsAdmin() {
           onClose={() => setFormItem(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDel}
+        title="Delete psychologist?"
+        message={confirmDel ? `Delete "${confirmDel.name}"? Their appointments will be removed too.` : ""}
+        confirmLabel="Delete"
+        danger
+        busy={delBusy}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(null)}
+      />
     </div>
   );
 }

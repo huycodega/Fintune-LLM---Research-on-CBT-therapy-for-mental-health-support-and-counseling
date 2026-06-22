@@ -5,6 +5,7 @@ import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
 import ContentFormModal from "../admin/ContentFormModal.jsx";
+import ConfirmDialog from "../admin/ConfirmDialog.jsx";
 
 const LESSON_FIELDS = [
   { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Identifying cognitive distortions" },
@@ -392,6 +393,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
   const [formItem, setFormItem] = useState(null);   // null | {} (add) | lesson (edit)
+  const [confirmDel, setConfirmDel] = useState(null);  // lesson pending delete
+  const [delBusy, setDelBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -460,18 +463,21 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     await load();
   }
 
-  async function handleDelete(lesson) {
-    if (!window.confirm(`Delete lesson "${lesson.title}"?`)) return;
-    if (mock) { commitLocal(lessons.filter((l) => l.id !== lesson.id)); return; }
-    try { await api.deleteLesson(lesson.id); await load(); }
-    catch (e) { alert(e.message); }
+  function handleDelete(lesson) { setConfirmDel(lesson); }
+  async function doDelete() {
+    if (!confirmDel) return;
+    setDelBusy(true);
+    if (mock) { commitLocal(lessons.filter((l) => l.id !== confirmDel.id)); setDelBusy(false); setConfirmDel(null); return; }
+    try { await api.deleteLesson(confirmDel.id); await load(); }
+    catch (e) { setErr(e.message); }
+    finally { setDelBusy(false); setConfirmDel(null); }
   }
 
   async function handleTogglePublish(lesson) {
     const status = lesson.status === "published" ? "draft" : "published";
     if (mock) { commitLocal(lessons.map((l) => l.id === lesson.id ? { ...l, status } : l)); return; }
     try { await api.updateLesson(lesson.id, { status }); await load(); }
-    catch (e) { alert(e.message); }
+    catch (e) { setErr(e.message); }
   }
 
   function handleEdit(lesson) {
@@ -560,6 +566,17 @@ export default function LessonsAdmin({ onLogout, onNav }) {
           onClose={() => setFormItem(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDel}
+        title="Delete lesson?"
+        message={confirmDel ? `Delete "${confirmDel.title}"? This can't be undone.` : ""}
+        confirmLabel="Delete"
+        danger
+        busy={delBusy}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(null)}
+      />
     </div>
   );
 }

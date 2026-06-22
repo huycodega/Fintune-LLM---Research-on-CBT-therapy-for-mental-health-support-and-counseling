@@ -5,6 +5,7 @@ import TopBar from "../admin/TopBar.jsx";
 import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
 import ContentFormModal from "../admin/ContentFormModal.jsx";
+import ConfirmDialog from "../admin/ConfirmDialog.jsx";
 
 const RESOURCE_FIELDS = [
   { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Grounding techniques for panic" },
@@ -391,6 +392,8 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
   const [mock, setMock] = useState(false);
   const [err, setErr] = useState("");
   const [formItem, setFormItem] = useState(null);   // null | {} (add) | resource (edit)
+  const [confirmDel, setConfirmDel] = useState(null);  // resource pending delete
+  const [delBusy, setDelBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -451,16 +454,20 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     await load();
   }
 
-  async function handleDelete(r) {
-    if (!window.confirm(`Delete resource "${r.title}"?`)) return;
+  function handleDelete(r) { setConfirmDel(r); }
+  async function doDelete() {
+    const r = confirmDel;
+    if (!r) return;
+    setDelBusy(true);
     if (mock) {
       const next = resources.filter((x) => x.id !== r.id);
       commitLocal(next);
       if (selected === r.id) setSelected(next[0]?.id ?? null);
-      return;
+      setDelBusy(false); setConfirmDel(null); return;
     }
     try { await api.deleteResource(r.id); if (selected === r.id) setSelected(null); await load(); }
-    catch (e) { alert(e.message); }
+    catch (e) { setErr(e.message); }
+    finally { setDelBusy(false); setConfirmDel(null); }
   }
 
   function handleEdit(r) {
@@ -471,7 +478,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
     const status = r.status === "published" ? "draft" : "published";
     if (mock) { commitLocal(resources.map((x) => x.id === r.id ? { ...x, status } : x)); return; }
     try { await api.updateResource(r.id, { status }); await load(); }
-    catch (e) { alert(e.message); }
+    catch (e) { setErr(e.message); }
   }
 
   const published = stats.total - (resources.filter((r) => r.status === "draft").length);
@@ -571,6 +578,17 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
           onClose={() => setFormItem(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDel}
+        title="Delete resource?"
+        message={confirmDel ? `Delete "${confirmDel.title}"? This can't be undone.` : ""}
+        confirmLabel="Delete"
+        danger
+        busy={delBusy}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(null)}
+      />
     </div>
   );
 }
