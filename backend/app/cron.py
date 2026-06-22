@@ -98,6 +98,19 @@ def job_daily_summary() -> dict:
 
 
 # ============================================================
+# Job 3 — daily personalised screening plans
+# ============================================================
+def job_screening_plans() -> dict:
+    """Pre-create today's personalised screening plan for active users."""
+    from app.db.session import db_session
+    from app.services import screening_planner
+    with db_session() as db:
+        n = screening_planner.sweep(db)
+    log.info("[screening-plans] created/ensured %s plans", n)
+    return {"plans": n}
+
+
+# ============================================================
 # Scheduler
 # ============================================================
 class Schedule:
@@ -133,6 +146,7 @@ def main():
     every_hours = float(os.environ.get("DPO_EXPORT_INTERVAL_HOURS", "24"))
     sched.every(every_hours * 3600.0, job_dpo_export)
     sched.every(24 * 3600.0, job_daily_summary)
+    sched.every(24 * 3600.0, job_screening_plans)
 
     # Graceful shutdown
     def _handler(*_):

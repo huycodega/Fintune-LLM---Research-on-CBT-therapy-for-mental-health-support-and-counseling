@@ -521,3 +521,23 @@ class AppSetting(Base):
     updated_by: Mapped[Optional[str]] = mapped_column(String)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# per-day personalised screening plan  (NOT PHI — recommendation only)
+# ============================================================
+class ScreeningPlan(Base):
+    """One row per (user, day): which validated instrument to focus on today
+    plus a personalised intro/reason derived from the user's memory + recent
+    signals. Scoring still uses the standard PHQ-9/GAD-7; this only steers the
+    choice + framing. `ai_intro` is filled in best-effort by the model."""
+    __tablename__ = "screening_plans"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True)
+    plan_date: Mapped[datetime] = mapped_column(Date, primary_key=True)
+    instrument: Mapped[str] = mapped_column(String, nullable=False)  # phq9|gad7
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    intro: Mapped[Optional[str]] = mapped_column(Text)       # deterministic
+    ai_intro: Mapped[Optional[str]] = mapped_column(Text)    # model-written
+    created_at: Mapped[datetime] = _now()

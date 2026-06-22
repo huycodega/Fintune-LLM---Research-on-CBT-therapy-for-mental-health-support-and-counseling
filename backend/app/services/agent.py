@@ -64,6 +64,7 @@ _REQUIRED_ARGS = {
     "recommend_lesson": ["topic"],
     "recommend_resource": ["topic"],
     "summarize_progress": [],
+    "suggest_screening": ["instrument", "reason"],
     "generate_cbt_response": [],
     "ask_clarification": ["question"],
     "escalate_to_clinician": ["reason"],
@@ -228,6 +229,28 @@ TOOL_SCHEMAS: List[Dict] = [
     {
         "type": "function",
         "function": {
+            "name": "suggest_screening",
+            "description": (
+                "Gently invite the client to take a short, validated self-check "
+                "(PHQ-9 for low mood, GAD-7 for anxiety) when their message shows "
+                "persistent depression or anxiety signals and a quick measure "
+                "would help them and the clinician track it. Adds a soft prompt to "
+                "the reply — it does NOT diagnose. Use at most once."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "instrument": {"type": "string", "enum": ["phq9", "gad7"],
+                                   "description": "phq9 for depression/low mood, gad7 for anxiety."},
+                    "reason": {"type": "string",
+                               "description": "Brief why, in plain language."},
+                },
+                "required": ["instrument", "reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_cbt_response",
             "description": (
                 "TERMINAL. Produce the final CBT response using the fine-tuned "
@@ -308,6 +331,9 @@ _SYSTEM_PROMPT = (
     "sleep, exams, racing thoughts, 'what can I do', 'how do I practise'): call "
     "recommend_lesson(topic=...) and/or recommend_resource(topic=...), then offer "
     "ONE by its EXACT returned title. NEVER invent a lesson/resource.\n"
+    "     • Persistent low mood or anxiety signals (and no recent self-check): call "
+    "suggest_screening(instrument=\"phq9\"|\"gad7\", reason=...) to gently invite a "
+    "validated check-in. At most once; never diagnose.\n"
     "  4. Finish with exactly ONE terminal action:\n"
     "       • generate_cbt_response — the normal path, AFTER retrieving.\n"
     "       • ask_clarification — ONLY if the message is too vague to help.\n"
@@ -657,6 +683,29 @@ def _ensure_enriched(state: Dict) -> None:
     state["recommendations"]["resources"].extend(top["resources"])
 
 
+def _tool_suggest_screening(args: Dict, state: Dict) -> str:
+    """Record a soft suggestion to take a validated self-check. Non-terminal —
+    the CTA is appended to the final reply; scoring stays the standard PHQ-9/GAD-7."""
+    instrument = (args.get("instrument") or "phq9").lower()
+    if instrument not in ("phq9", "gad7"):
+        instrument = "phq9"
+    state["screening_suggestion"] = {
+        "instrument": instrument,
+        "reason": (args.get("reason") or "").strip(),
+    }
+    label = "GAD-7 (anxiety)" if instrument == "gad7" else "PHQ-9 (low mood)"
+    return f"Will invite the client to a quick {label} self-check."
+
+
+def _screening_footer(state: Dict) -> str:
+    s = state.get("screening_suggestion")
+    if not s:
+        return ""
+    label = "GAD-7 anxiety check-in" if s["instrument"] == "gad7" else "PHQ-9 mood check-in"
+    return (f"\n\n💡 When you're ready, a quick {label} on the Screening page can "
+            f"help us track how you're doing.")
+
+
 def _rec_footer(state: Dict) -> str:
     """Render the REAL lessons/resources the agent pulled as a short footer, so
     the reply always names them even when the responder doesn't weave them in.
@@ -820,6 +869,14 @@ def _do_generate(args: Dict, state: Dict,
             if "from your library" in low or any(t and t.lower() in low for t in titles):
                 continue
             d["response"] = resp.rstrip() + footer
+    # Append the optional screening check-in CTA (if the agent suggested one).
+    screen_cta = _screening_footer(state)
+    if screen_cta:
+        for d in drafts:
+            resp = d.get("response") or ""
+            low = resp.lower()
+            if resp and "screening page" not in low and "check-in" not in low:
+                d["response"] = resp.rstrip() + screen_cta
     return {
         "outcome": "drafts",
         "drafts": drafts,
@@ -891,6 +948,7 @@ def run_agent(*, user_scrubbed: str,
         "recommend_lesson": _tool_recommend_lesson,
         "recommend_resource": _tool_recommend_resource,
         "summarize_progress": _tool_summarize_progress,
+        "suggest_screening": _tool_suggest_screening,
     }
 
     for step in range(settings.agent_max_steps):

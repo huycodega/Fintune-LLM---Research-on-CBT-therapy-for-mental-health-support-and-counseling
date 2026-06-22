@@ -142,6 +142,28 @@ def boot():
         log.info("NLI grounding model preloaded")
     except Exception as e:
         log.warning("NLI preload skipped: %s", e)
+    # In-app daily screening-plan sweep. The standalone cron worker isn't
+    # deployed on every host (e.g. Railway runs only the web service), so a tiny
+    # daemon thread pre-creates today's personalised plans once a day here too.
+    if os.environ.get("SCREENING_INAPP_CRON", "1") == "1":
+        import threading
+
+        def _screening_sweep_loop():
+            import time
+            from app.db.session import db_session
+            from app.services import screening_planner
+            time.sleep(45)   # let boot/migrations settle
+            while True:
+                try:
+                    with db_session() as s:
+                        n = screening_planner.sweep(s)
+                    log.info("Screening-plan sweep: %s plans", n)
+                except Exception as e:                      # noqa: BLE001
+                    log.warning("Screening sweep failed: %s", e)
+                time.sleep(24 * 3600)
+
+        threading.Thread(target=_screening_sweep_loop, daemon=True).start()
+        log.info("In-app screening sweep scheduled (daily)")
 
 
 @app.get("/api/health")

@@ -10,7 +10,7 @@ from typing import Optional, List
 def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -154,72 +154,37 @@ def get_latest_screening(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET /screening/today — a context- & memory-aware recommendation for which
-# validated instrument to take today, with a personalised intro. The SCORING
-# stays the standard PHQ-9 / GAD-7; only the choice + framing is personalised.
-# Deterministic + instant (no model call on page load).
+# GET /screening/today — context/memory-aware recommendation of which validated
+# instrument to take today + personalised intro. Cached per (user, day) in
+# screening_plans; deterministic + instant, with a best-effort model-written
+# intro filled in the background (so the page never waits on the model).
 # ─────────────────────────────────────────────────────────────────────────────
-_ANX_WORDS = ("anxi", "panic", "worry", "worried", "nervous", "overwhelm", "stress", "fear")
-_DEP_WORDS = ("depress", "sad", "hopeless", "empty", "worthless", "numb", "low mood", "exhaust")
-
-
 @router.get("/screening/today")
-def screening_today(user: dict = Depends(auth.current_user),
+def screening_today(background: BackgroundTasks,
+                    user: dict = Depends(auth.current_user),
                     db: Session = Depends(get_db)):
+    from app.services import screening_planner
     uid = user["uid"]
-    mem = db.query(models.UserMemory).filter_by(user_id=uid).first()
-    summary = (mem.summary or "").lower() if mem else ""
-    recent = (db.query(models.Session)
-              .filter_by(user_id=uid)
-              .order_by(models.Session.created_at.desc()).limit(10).all())
-    last = (db.query(models.Screening)
-            .filter_by(user_id=uid)
-            .order_by(models.Screening.created_at.desc()).first())
+    today = datetime.now(timezone.utc).date()
+    plan = screening_planner.get_or_create(db, uid, today)
 
+    last = (db.query(models.Screening).filter_by(user_id=uid)
+            .order_by(models.Screening.created_at.desc()).first())
     now = datetime.now(timezone.utc)
-    done_today = bool(last and last.created_at and _as_utc(last.created_at).date() == now.date())
+    done_today = bool(last and last.created_at and _as_utc(last.created_at).date() == today)
     days_since = ((now - _as_utc(last.created_at)).days
                   if last and last.created_at else None)
 
-    # Signals from recent sessions + memory.
-    high_risk = any(s.triage_level in ("L0", "L1") for s in recent)
-    anx = any(w in summary for w in _ANX_WORDS)
-    dep = any(w in summary for w in _DEP_WORDS)
-
-    # Choose the instrument: lean to the signalled area; otherwise alternate from
-    # the last one taken so we track both over time.
-    if dep and not anx:
-        instrument, reason = "phq9", "Recent chats touched on low mood, so a quick depression check helps track it."
-    elif anx and not dep:
-        instrument, reason = "gad7", "Recent chats touched on anxiety, so a quick anxiety check helps track it."
-    elif last and last.gad7_score is not None and last.phq9_score is None:
-        instrument, reason = "phq9", "Last time you did an anxiety check — let's balance it with a depression check today."
-    elif last and last.phq9_score is not None and last.gad7_score is None:
-        instrument, reason = "gad7", "Last time you did a depression check — let's balance it with an anxiety check today."
-    else:
-        instrument, reason = ("phq9" if not last else ("gad7" if last.phq9_score is not None else "phq9")), \
-            "A regular check-in helps you and your clinician see how you're doing over time."
-
-    if high_risk:
-        reason = "Some recent messages raised a safety concern — a check-in now is especially helpful."
-
-    # Personalised, memory-aware intro (deterministic — no model call so the page
-    # is instant; the recurring themes come straight from the user's memory).
-    theme = (mem.summary.strip() if mem and mem.summary else "")
-    if theme:
-        intro = f"Based on what you've shared recently — “{theme[:160]}” — here's a short check-in for today."
-    else:
-        intro = "Here's a short, private check-in to see how you're doing today."
-
-    title = {"phq9": "Depression check-in (PHQ-9)",
-             "gad7": "Anxiety check-in (GAD-7)"}[instrument]
+    # Kick off the model-written intro once per day (non-blocking).
+    if not plan.ai_intro:
+        background.add_task(screening_planner.generate_ai_intro, str(uid), today)
 
     return {
-        "instrument": instrument,
-        "title": title,
-        "intro": intro,
-        "reason": reason,
+        "instrument": plan.instrument,
+        "title": screening_planner.TITLES.get(plan.instrument, "Check-in"),
+        "intro": plan.ai_intro or plan.intro,
+        "reason": plan.reason,
         "done_today": done_today,
         "days_since_last": days_since,
-        "high_risk": high_risk,
+        "ai": bool(plan.ai_intro),
     }
