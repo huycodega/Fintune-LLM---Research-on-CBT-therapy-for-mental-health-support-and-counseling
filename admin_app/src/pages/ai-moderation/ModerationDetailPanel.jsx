@@ -93,11 +93,6 @@ function ReviewEditor({ detail, busy, onApprove, onReject, onEditResponse, onNee
   const original = drafts[idx]?.response ?? detail.aiResponse ?? "";
   const changed = editText.trim() !== (original || "").trim();
 
-  function approve() {
-    if (changed) onEditResponse(editText, note || "Edited by moderator");
-    else onApprove(drafts[idx]?.idx);
-  }
-
   return (
     <section className="am-detail-card am-actions-card">
       <h3>Review &amp; respond</h3>
@@ -157,8 +152,13 @@ function ReviewEditor({ detail, busy, onApprove, onReject, onEditResponse, onNee
       </label>
 
       <div className="am-action-grid">
-        <button type="button" className="am-primary-btn" disabled={busy} onClick={approve}>
-          {changed ? "Send edited reply" : `Approve option ${idx + 1}`}
+        <button type="button" className="am-primary-btn" disabled={busy}
+                onClick={() => onApprove(drafts[idx]?.idx)}>
+          Approve option {idx + 1}
+        </button>
+        <button type="button" className="am-edit-btn" disabled={busy}
+                onClick={() => onEditResponse(editText, note || "Edited by moderator")}>
+          Send edited reply{changed ? " ✎" : ""}
         </button>
         <button type="button" className="am-danger-btn" disabled={busy} onClick={() => setReasonMode("reject")}>Reject</button>
         <button type="button" className="am-warning-btn" disabled={busy} onClick={() => setReasonMode("improve")}>Need improvement</button>

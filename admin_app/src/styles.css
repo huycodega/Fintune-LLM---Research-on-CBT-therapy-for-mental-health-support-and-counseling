@@ -2082,6 +2082,7 @@ button { font-family: inherit; cursor: pointer; }
 .am-primary-btn,
 .am-ghost-btn,
 .am-danger-btn,
+.am-edit-btn,
 .am-warning-btn {
   min-height: 40px;
   border-radius: 8px;
@@ -2111,9 +2112,15 @@ button { font-family: inherit; cursor: pointer; }
   background: #f59e0b;
   color: #1f2937;
 }
+.am-edit-btn {
+  border-color: #10b981;
+  background: #10b981;
+  color: #fff;
+}
 .am-primary-btn:disabled,
 .am-ghost-btn:disabled,
 .am-danger-btn:disabled,
+.am-edit-btn:disabled,
 .am-warning-btn:disabled {
   opacity: .58;
   cursor: not-allowed;
