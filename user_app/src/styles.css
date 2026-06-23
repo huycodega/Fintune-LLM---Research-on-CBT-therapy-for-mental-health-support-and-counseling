@@ -2050,12 +2050,17 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 /* Form panel */
 .auth2-panel {
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;            /* tall card scrolls instead of being clipped */
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px 24px;
 }
+/* auto vertical margins center the card when there's room and collapse to a
+   scrollable overflow when the viewport is shorter than the card — so the
+   Google / "create account" footer is never cut off. */
+.auth2-card { margin: auto 0; }
 .auth2-panel-deco { position: absolute; inset: 0; pointer-events: none; }
 .auth2-card {
   position: relative;

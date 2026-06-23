@@ -135,11 +135,6 @@ export default function Login({ onAuth, onBack }) {
         onClick={() => setMode("register")}>
         New here? <strong>Create an account with Gmail</strong>
       </button>
-
-      <div className="auth-demo">
-        <span className="auth-demo-flask">🧪</span>
-        Demo: <strong>user</strong> / <strong>user123</strong>
-      </div>
     </AuthLayout>
   );
 }
