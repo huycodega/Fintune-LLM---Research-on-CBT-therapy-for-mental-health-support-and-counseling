@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, fmtDateTime } from "../../ui.jsx";
 import RiskLevelBadge from "./RiskLevelBadge.jsx";
+import LaPager from "../../components/shared/LaPager.jsx";
+
+const PAGE_SIZE = 10;
 
 const DECISION = {
   approve: { label: "Approved", cls: "ok" },
@@ -11,6 +14,12 @@ const DECISION = {
 
 export default function ModerationHistory({ items, loading, error }) {
   const [openId, setOpenId] = useState(null);
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    const pc = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    if (page > pc) setPage(pc);
+  }, [items.length, page]);
+  const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <section className="am-table-card">
@@ -41,7 +50,7 @@ export default function ModerationHistory({ items, loading, error }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => {
+              {pageItems.map((it) => {
                 const d = DECISION[it.resolution] || { label: it.resolution || "Resolved", cls: "" };
                 const open = openId === it.id;
                 return [
@@ -80,6 +89,10 @@ export default function ModerationHistory({ items, loading, error }) {
             </tbody>
           </table>
         </div>
+      )}
+      {!loading && !error && (
+        <LaPager page={page} pageSize={PAGE_SIZE} total={items.length}
+                 onChange={setPage} noun="resolved" />
       )}
     </section>
   );

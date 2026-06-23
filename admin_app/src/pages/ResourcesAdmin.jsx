@@ -6,6 +6,9 @@ import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
 import ContentFormModal from "../admin/ContentFormModal.jsx";
 import ConfirmDialog from "../admin/ConfirmDialog.jsx";
+import LaPager from "../components/shared/LaPager.jsx";
+
+const PAGE_SIZE = 10;
 
 const RESOURCE_FIELDS = [
   { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Grounding techniques for panic" },
@@ -255,28 +258,6 @@ function ResourceRow({ r, idx, selected, onSelect, onDelete }) {
   );
 }
 
-/* ── Pagination ────────────────────────────────────────────────── */
-function Pagination() {
-  const pages = [1, 2, 3, 4, "…", 14];
-  return (
-    <div className="la-pagination">
-      <div className="la-page-info">Showing 1–10 / 326 resources</div>
-      <div className="la-page-controls">
-        <button className="la-page-btn"><Icon name="chevronsLeft" size={14} /></button>
-        <button className="la-page-btn"><Icon name="chevronLeft" size={15} /></button>
-        {pages.map((p, i) => (
-          <button key={i} className={`la-page-btn ${p === 1 ? "active" : ""} ${p === "…" ? "ellipsis" : ""}`} disabled={p === "…"}>{p}</button>
-        ))}
-        <button className="la-page-btn"><Icon name="chevronRight" size={15} /></button>
-        <button className="la-page-btn"><Icon name="chevronsRight" size={14} /></button>
-      </div>
-      <div className="la-select-group">
-        <select className="la-select"><option>10 / page</option></select>
-      </div>
-    </div>
-  );
-}
-
 /* ── Detail panel ──────────────────────────────────────────────── */
 const TAGS = ["urgent", "hotline", "support", "24/7"];
 const INFO = [
@@ -386,6 +367,7 @@ function DetailSkeleton() {
 export default function ResourcesAdmin({ onLogout, onNav }) {
   const [tab, setTab] = useState("all");
   const [resources, setResources] = useState([]);
+  const [page, setPage] = useState(1);
   const [stats, setStats] = useState({ total: 0, urgent: 0, by_type: {} });
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -493,6 +475,13 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
   const selectedResource = resources.find((r) => r.id === selected);
   const panelOpen = !!selectedResource;
 
+  // Reset to page 1 when the filter tab changes; keep page valid as the list shrinks.
+  useEffect(() => { setPage(1); }, [tab]);
+  useEffect(() => {
+    const pc = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page > pc) setPage(pc);
+  }, [filtered.length, page]);
+
   return (
     <div className="la-shell">
       <Sidebar active="resources" onNav={onNav} />
@@ -547,7 +536,7 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                   </thead>
                   <tbody key={loading ? "loading" : tab}>
                     {loading && Array.from({ length: 6 }).map((_, i) => <RowSkeleton key={i} />)}
-                    {!loading && filtered.map((r, i) => (
+                    {!loading && filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r, i) => (
                       <ResourceRow key={r.id} r={r} idx={i} selected={r.id === selected} onSelect={setSelected} onDelete={handleDelete} />
                     ))}
                     {!loading && filtered.length === 0 && (
@@ -557,7 +546,8 @@ export default function ResourcesAdmin({ onLogout, onNav }) {
                 </table>
               </div>
 
-              <Pagination />
+              <LaPager page={page} pageSize={PAGE_SIZE} total={filtered.length}
+                       onChange={setPage} noun="resources" />
             </div>
           </div>
 

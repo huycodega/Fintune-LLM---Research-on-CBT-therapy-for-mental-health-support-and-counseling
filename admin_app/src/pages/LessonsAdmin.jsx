@@ -6,6 +6,9 @@ import { api } from "../api.js";
 import { DemoNotice, updatedNow } from "../ui.jsx";
 import ContentFormModal from "../admin/ContentFormModal.jsx";
 import ConfirmDialog from "../admin/ConfirmDialog.jsx";
+import LaPager from "../components/shared/LaPager.jsx";
+
+const PAGE_SIZE = 8;
 
 const LESSON_FIELDS = [
   { name: "title", label: "Title", type: "text", required: true, placeholder: "e.g. Identifying cognitive distortions" },
@@ -250,27 +253,6 @@ function LessonRow({ lesson, idx, selected, onSelect, onDelete }) {
   );
 }
 
-/* ── Pagination ────────────────────────────────────────────────── */
-function Pagination() {
-  const pages = [1, 2, 3, "…", 6];
-  const [active] = [1];
-  return (
-    <div className="la-pagination">
-      <div className="la-page-info">Showing 1 to 8 of 48 lessons</div>
-      <div className="la-page-controls">
-        <button className="la-page-btn"><Icon name="chevronLeft" size={15} /></button>
-        {pages.map((p, i) => (
-          <button key={i} className={`la-page-btn ${p === active ? "active" : ""} ${p === "…" ? "ellipsis" : ""}`} disabled={p === "…"}>{p}</button>
-        ))}
-        <button className="la-page-btn"><Icon name="chevronRight" size={15} /></button>
-      </div>
-      <div className="la-select-group">
-        <select className="la-select"><option>10 / page</option></select>
-      </div>
-    </div>
-  );
-}
-
 /* ── Mini line chart ───────────────────────────────────────────── */
 function MiniLineChart() {
   const data = [42, 38, 47, 44, 53, 58, 63];
@@ -387,6 +369,7 @@ function DetailPanel({ lesson, thumb, onTogglePublish, onEdit }) {
 /* ── Page ──────────────────────────────────────────────────────── */
 export default function LessonsAdmin({ onLogout, onNav }) {
   const [lessons, setLessons] = useState([]);
+  const [page, setPage] = useState(1);
   const [stats, setStats] = useState({ total: 0, published: 0, draft: 0, views: 0 });
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -432,6 +415,11 @@ export default function LessonsAdmin({ onLogout, onNav }) {
     }
   }
   useEffect(() => { load(); }, []);
+  // Keep the current page valid when the list shrinks (e.g. after a delete).
+  useEffect(() => {
+    const pc = Math.max(1, Math.ceil(lessons.length / PAGE_SIZE));
+    if (page > pc) setPage(pc);
+  }, [lessons.length, page]);
 
   // Keep stats in sync after a local (demo) mutation.
   function commitLocal(list) {
@@ -529,7 +517,7 @@ export default function LessonsAdmin({ onLogout, onNav }) {
                   </thead>
                   <tbody>
                     {loading && Array.from({ length: 6 }).map((_, i) => <RowSkeleton key={i} />)}
-                    {!loading && lessons.map((l, i) => (
+                    {!loading && lessons.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((l, i) => (
                       <LessonRow key={l.id} lesson={l} idx={i} selected={l.id === selected} onSelect={setSelected} onDelete={handleDelete} />
                     ))}
                     {!loading && lessons.length === 0 && (
@@ -538,7 +526,8 @@ export default function LessonsAdmin({ onLogout, onNav }) {
                   </tbody>
                 </table>
               </div>
-              <Pagination />
+              <LaPager page={page} pageSize={PAGE_SIZE} total={lessons.length}
+                       onChange={setPage} noun="lessons" />
             </div>
           </div>
 
