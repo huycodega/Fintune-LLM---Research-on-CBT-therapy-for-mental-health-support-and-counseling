@@ -32,6 +32,7 @@ class GoogleAuthIn(BaseModel):
     # The Google Identity Services ID token (JWT) issued in the browser.
     credential: str = Field(min_length=20)
     expected_role: Optional[str] = None       # "user" or "admin"
+    intent: str = "login"                     # "login" (no auto-create) | "register"
 
 
 class LoginOut(BaseModel):

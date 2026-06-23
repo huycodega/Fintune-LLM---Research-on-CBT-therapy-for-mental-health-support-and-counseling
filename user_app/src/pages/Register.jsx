@@ -54,7 +54,7 @@ export default function Register({ onAuth, onBackToLogin }) {
     setErr("");
     setBusy(true);
     try {
-      const res = await api.googleAuth(credential);
+      const res = await api.googleAuth(credential, "register");
       setSession(res.token, { username: res.username, role: res.role });
       onAuth({ username: res.username, role: res.role });
     } catch (e) {

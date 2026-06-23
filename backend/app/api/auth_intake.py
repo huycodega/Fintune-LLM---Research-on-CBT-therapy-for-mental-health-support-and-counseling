@@ -271,6 +271,13 @@ def google_auth(body: GoogleAuthIn, request: Request,
     user = db.query(models.User).filter_by(email=email).first()
     created = False
     if not user:
+        # Only the sign-UP flow may create an account. A Google sign-IN for an
+        # email we don't know must NOT silently create one — the user has to
+        # register first.
+        if body.intent != "register":
+            raise HTTPException(
+                404, "No account is registered for this Google email. "
+                     "Please sign up first.")
         # No password is ever used for Google accounts; store a random hash so
         # the NOT NULL column is satisfied and password login can't match.
         user = models.User(
