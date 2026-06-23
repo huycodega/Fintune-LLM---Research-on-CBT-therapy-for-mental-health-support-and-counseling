@@ -98,7 +98,6 @@ export default function CaseManagementPage({ onNav }) {
           <Pagination page={filters.page} pageSize={filters.page_size} total={pageData?.total || 0}
             onChange={page => setFilters(value => ({ ...value, page }))} /></>}
     </section>
-    {selectedId && <button className="drawer-scrim" onClick={() => setSelectedId(null)} aria-label="Close details" />}
     <CaseDetailPanel open={!!selectedId} detail={detail} history={history} loading={detailLoading}
       error={detailError} busy={busy} onClose={() => setSelectedId(null)} onAction={action}
       onProfile={(userId) => onNav?.("users", userId)} />

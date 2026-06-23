@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { LoadingState, ErrorState } from "../shared/States.jsx";
 import { fmtDateTime } from "../../ui.jsx";
 import { CasePriorityBadge, CaseRiskBadge, CaseStatusBadge } from "./CaseBadges.jsx";
@@ -21,7 +22,9 @@ export default function CaseDetailPanel({
 }) {
   if (!open) return null;
   const overdue = detail?.sla_due_at && new Date(detail.sla_due_at) < new Date() && detail.status !== "closed";
-  return <aside className="case-drawer">
+  return createPortal(<>
+    <button className="drawer-scrim" onClick={onClose} aria-label="Close details" />
+    <aside className="case-drawer">
     <div className="case-drawer-head"><div>{detail && <><div className="eyebrow">CASE DETAIL</div>
       <h2>{detail.case_code}</h2></>}</div>
       <div className="drawer-head-actions">{detail && <CasePriorityBadge value={detail.priority} />}
@@ -54,5 +57,6 @@ export default function CaseDetailPanel({
             </div>)}</section>}
         </div>
       </>}
-  </aside>;
+  </aside>
+  </>, document.body);
 }

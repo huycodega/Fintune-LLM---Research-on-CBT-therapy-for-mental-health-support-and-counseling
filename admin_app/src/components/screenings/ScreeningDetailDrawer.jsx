@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { RiskBadge, ScreeningStatusBadge } from "./ScreeningBadges.jsx";
 import { fmtDateTime } from "../../ui.jsx";
 
@@ -10,7 +11,7 @@ const BARS = [
 export default function ScreeningDetailDrawer({ open, detail, loading, onClose, onAddNote }) {
   if (!open) return null;
   const u = detail?.user || {};
-  return (
+  return createPortal(
     <>
       <button className="sm-drawer-scrim" onClick={onClose} aria-label="Close detail" />
       <aside className="sm-drawer">
@@ -107,6 +108,7 @@ export default function ScreeningDetailDrawer({ open, detail, loading, onClose, 
           </div>
         )}
       </aside>
-    </>
+    </>,
+    document.body
   );
 }

@@ -233,14 +233,7 @@ export default function ScreeningManagementPage() {
         sortOrder={filters.sort_order}
       />
 
-      {/* ── Detail Drawer ── */}
-      {selectedId && (
-        <button
-          className="sm-drawer-scrim"
-          onClick={() => setSelectedId(null)}
-          aria-label="Close detail"
-        />
-      )}
+      {/* ── Detail Drawer (renders its own scrim, portaled to body) ── */}
       <ScreeningDetailDrawer
         open={!!selectedId}
         detail={detail}

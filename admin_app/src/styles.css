@@ -341,6 +341,30 @@ button { font-family: inherit; cursor: pointer; }
    la-* admin pages (Lessons / Resources / Moderation).
    All classes prefixed .la- so they never clash with the clinician UI.
 ═══════════════════════════════════════════════════════════════ */
+/* la-* design tokens also on :root so portaled drawers (case / screening
+   detail, rendered into document.body) resolve their colours correctly. */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --shadow-sm: 0 1px 3px rgba(16,24,40,.06);
+  --la-indigo: #6366f1;
+  --la-indigo-dark: #4f46e5;
+  --la-navy: #0f172a;
+  --la-navy-2: #1e293b;
+  --la-bg: #f8fafc;
+  --la-surface: #ffffff;
+  --la-ink: #1e293b;
+  --la-ink-soft: #64748b;
+  --la-line: #e9edf3;
+  --la-green: #10b981;
+  --la-green-soft: #d1fae5;
+  --la-green-ink: #047857;
+  --la-amber: #f59e0b;
+  --la-amber-soft: #fef3c7;
+  --la-amber-ink: #b45309;
+  --la-red: #ef4444;
+  --la-red-soft: #fee2e2;
+  --la-red-ink: #b91c1c;
+}
 .la-shell {
   --font: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --shadow-sm: 0 1px 3px rgba(16,24,40,.06);
