@@ -72,13 +72,13 @@ export default function ModerationHistory({ items, loading, error }) {
                     <tr key={it.id + "-d"} className="am-history-detail-row">
                       <td colSpan={6}>
                         <div className="am-history-detail">
-                          <div>
-                            <span className="am-history-label">User message</span>
-                            <p className="am-copy-block">{it.userContent || "—"}</p>
+                          <div className="am-history-block user">
+                            <span className="am-history-label">💬 User message</span>
+                            <p className="am-history-text">{it.userContent || "—"}</p>
                           </div>
-                          <div>
-                            <span className="am-history-label">Final response sent</span>
-                            <p className="am-copy-block">{it.finalResponse || "(no reply was sent)"}</p>
+                          <div className="am-history-block reply">
+                            <span className="am-history-label">✅ Final response sent</span>
+                            <p className="am-history-text">{it.finalResponse || "(no reply was sent)"}</p>
                           </div>
                         </div>
                       </td>
