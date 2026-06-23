@@ -167,6 +167,55 @@ def case_stats(_: dict = Depends(auth.require_admin),
     }
 
 
+# ── derived signals / suggested actions (real, from the session) ────────────
+_ACTION_PLAYBOOK = {
+    "L0": ["trigger_crisis_protocol", "contact_user_immediately",
+           "notify_on_call_specialist"],
+    "L1": ["assign_specialist", "arrange_early_followup"],
+    "L2": ["monitor_symptoms", "recommend_cbt_followup"],
+    "L3": ["routine_monitoring"],
+}
+
+
+def _split_csv(raw):
+    if not isinstance(raw, str):
+        return []
+    skip = {"none clearly detected", "unspecified distress", "none", ""}
+    return [x.strip() for x in raw.split(",")
+            if x.strip() and x.strip().lower() not in skip]
+
+
+def _derive_signals(sess):
+    """Detected signals for a case: the safety-gate classification plus any
+    emotions / cognitive distortions the analyzer recorded on the session."""
+    level = sess.triage_level or "L3"
+    signals = [{
+        "id": f"{sess.id}-triage",
+        "signal_code": sess.triage_reason or "Risk classified",
+        "category": "Safety triage",
+        "detected_by": "safety_gate",
+        "risk_level": level,
+    }]
+    analysis = sess.analysis if isinstance(sess.analysis, dict) else {}
+    for emo in _split_csv(analysis.get("emotion"))[:3]:
+        signals.append({"id": f"{sess.id}-emo-{emo}", "signal_code": emo.title(),
+                        "category": "Emotion", "detected_by": "analyzer",
+                        "risk_level": level})
+    for dist in _split_csv(analysis.get("cognitive_distortions"))[:3]:
+        signals.append({"id": f"{sess.id}-dist-{dist}",
+                        "signal_code": dist.title(),
+                        "category": "Cognitive distortion",
+                        "detected_by": "analyzer", "risk_level": level})
+    return signals
+
+
+def _derive_actions(sess):
+    level = sess.triage_level or "L3"
+    plan = _ACTION_PLAYBOOK.get(level, _ACTION_PLAYBOOK["L3"])
+    return [{"id": f"{sess.id}-act-{i}", "action_type": a, "due_at": None}
+            for i, a in enumerate(plan)]
+
+
 # ── detail / history ────────────────────────────────────────────────────────
 @router.get("/cases/{cid}")
 def case_detail(cid: str, _: dict = Depends(auth.require_admin),
@@ -187,8 +236,8 @@ def case_detail(cid: str, _: dict = Depends(auth.require_admin),
         "source_type": "ai_message",
         "source": {"content": content, "created_at": sess.created_at.isoformat(),
                    "session_id": str(sess.id)},
-        "signals": [],
-        "actions": [],
+        "signals": _derive_signals(sess),
+        "actions": _derive_actions(sess),
         "notes": st["notes"],
         "attachments": [],
         "closed_at": st["closed_at"],
@@ -357,7 +406,8 @@ def case_detail_payload(sess, user, st, db):
         "source_type": "ai_message",
         "source": {"content": content, "created_at": sess.created_at.isoformat(),
                    "session_id": str(sess.id)},
-        "signals": [], "actions": [], "notes": st["notes"],
+        "signals": _derive_signals(sess), "actions": _derive_actions(sess),
+        "notes": st["notes"],
         "attachments": [], "closed_at": st["closed_at"],
     })
     return base

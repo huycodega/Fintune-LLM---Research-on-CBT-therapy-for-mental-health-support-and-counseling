@@ -1,8 +1,15 @@
 import { adminRequest, query } from "./http.js";
 
-const riskMap = {
-  high: "L1", elevated: "L2", moderate: "L2", low: "L3",
-  critical: "L0", L0: "L0", L1: "L1", L2: "L2", L3: "L3",
+// Map a VALIDATED PHQ-9 / GAD-7 severity band to the admin L-risk convention.
+// A screening score alone (no active suicidal statement) never implies L0 —
+// that's a chat-crisis signal, not a questionnaire result — so we cap at L1.
+const LEVEL_RISK = {
+  normal: "L3", mild: "L3", moderate: "L2",
+  moderately_severe: "L1", severe: "L1",
+};
+const LEVEL_LABEL = {
+  normal: "Minimal", mild: "Mild", moderate: "Moderate",
+  moderately_severe: "Moderately severe", severe: "Severe",
 };
 const notes = new Map();
 
@@ -16,8 +23,6 @@ function ageFrom(dateOfBirth) {
 }
 
 function normalize(user, screening) {
-  const rawRisk = screening.risk_level || screening.risk || user.risk || "low";
-  const riskLevel = Number(user.crisis_count || 0) > 0 ? "L0" : riskMap[rawRisk] || "L3";
   const sourceStatus = screening.status || screening.handling_status || "resolved";
   const status = {
     resolved: "completed", completed: "completed", open: "pending",
@@ -25,7 +30,19 @@ function normalize(user, screening) {
   }[sourceStatus] || "pending";
   const phq9 = screening.phq9_score ?? null;
   const gad7 = screening.gad7_score ?? null;
+  const phqLevel = screening.phq9_level || null;
+  const gadLevel = screening.gad7_level || null;
+  const isPhq = phq9 != null;
   const score = phq9 ?? gad7 ?? screening.score ?? 0;
+
+  // Risk comes from the screening's OWN validated severity band — the worse of
+  // the two instruments present — NOT from the user's chat crisis count.
+  const risks = [phqLevel, gadLevel].filter(Boolean).map((l) => LEVEL_RISK[l] || "L3");
+  const riskLevel = risks.length ? risks.slice().sort()[0] : "L3";  // L0<L1<L2<L3
+  const primaryLevel = isPhq ? phqLevel : gadLevel;
+  const bandLabel = LEVEL_LABEL[primaryLevel] || "Screening";
+  const instrument = isPhq ? "depression" : "anxiety";
+
   return {
     id: screening.id,
     screening_id: screening.id,
@@ -46,18 +63,20 @@ function normalize(user, screening) {
     status,
     answers: screening.answers || (screening.note ? [{ question: "Screening note", answer: screening.note }] : []),
     note: notes.get(screening.id) || "",
+    // Clinical interpretation grounded in the validated band (not fabricated).
     ai_assessment: {
-      risk_summary: { L0: "Critical Risk", L1: "High Depression Risk", L2: "Medium Risk", L3: "Low Risk" }[riskLevel],
-      emotions: riskLevel === "L0" || riskLevel === "L1" ? ["Sadness", "Hopelessness"] : riskLevel === "L2" ? ["Anxiety", "Stress"] : ["Stable"],
-      recommendation: riskLevel === "L0" ? "Immediate specialist intervention is required."
-        : riskLevel === "L1" ? "Assign a specialist and arrange an early follow-up."
-        : riskLevel === "L2" ? "Monitor symptoms and recommend a CBT follow-up."
-        : "Continue routine monitoring.",
+      risk_summary: `${bandLabel} ${instrument} — ${isPhq ? "PHQ-9" : "GAD-7"} score ${score}`,
+      emotions: [`${bandLabel} ${instrument}`],
+      recommendation: riskLevel === "L1"
+        ? "Score in the elevated range — assign a specialist and arrange an early follow-up."
+        : riskLevel === "L2"
+        ? "Moderate range — monitor symptoms and recommend a CBT follow-up."
+        : "Within the low/normal range — continue routine monitoring.",
     },
     breakdown: {
       depression: phq9 ?? 0,
       anxiety: gad7 ?? 0,
-      stress: Math.max(0, 10 - Number(screening.mood_score ?? user.mood_score ?? 10)),
+      mood: Number(screening.mood_score ?? user.mood_score ?? 0),
     },
   };
 }

@@ -4,7 +4,7 @@ import { fmtDateTime } from "../../ui.jsx";
 const BARS = [
   ["Depression (PHQ-9)", "depression", 27],
   ["Anxiety (GAD-7)", "anxiety", 21],
-  ["Stress", "stress", 10],
+  ["Mood (self-rated)", "mood", 10],
 ];
 
 export default function ScreeningDetailDrawer({ open, detail, loading, onClose, onAddNote }) {

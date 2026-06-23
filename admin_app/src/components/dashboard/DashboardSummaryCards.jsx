@@ -1,3 +1,5 @@
+import { timeAgo } from "../../ui.jsx";
+
 const cards = [
   ["total_users", "👥", "Total users", "purple"],
   ["active_users", "●", "Active users", "green"],
@@ -55,7 +57,7 @@ export function AttentionRequired({ items = [], onNavigate }) {
           <span className={`case-badge risk-${(item.risk_level || "L1").toLowerCase()}`}>
             {item.risk_level || "L1"}
           </span>
-          <time>{item.time_ago || item.created_at || "—"}</time>
+          <time>{item.time_ago || timeAgo(item.created_at) || "—"}</time>
           <span>→</span>
         </button>
       ))}
