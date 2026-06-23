@@ -3823,3 +3823,7 @@ textarea.la-input { resize: vertical; line-height: 1.5; }
 .sm-trend-col small { font-size: 10px; color: #94a3b8; }
 .sm-trend-col:hover span { filter: brightness(1.06); }
 .sm-trend-col:hover b { opacity: 1; }
+
+/* notification: appointment-booking tone */
+.la-notif-dot.appointment { background: #6366f1; }
+.la-notif-pill.appt { background: #e0e7ff; color: #4338ca; }

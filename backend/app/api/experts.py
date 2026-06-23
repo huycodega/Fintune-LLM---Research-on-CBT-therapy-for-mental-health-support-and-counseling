@@ -150,7 +150,7 @@ def my_appointments(user: dict = Depends(auth.current_user),
                     db: Session = Depends(get_db)):
     rows = (db.query(models.Appointment)
               .filter_by(user_id=user["uid"])
-              .order_by(models.Appointment.date.desc()).all())
+              .order_by(models.Appointment.created_at.desc()).all())
     experts = {p.id: p for p in db.query(models.Psychologist).all()}
     return {"appointments": [
         _appt_out(a, experts.get(a.psychologist_id)) for a in rows]}
@@ -244,7 +244,7 @@ def admin_list_appointments(expert_id: str = Query(""),
     q = db.query(models.Appointment)
     if expert_id:
         q = q.filter(models.Appointment.psychologist_id == expert_id)
-    rows = q.order_by(models.Appointment.date.desc()).all()
+    rows = q.order_by(models.Appointment.created_at.desc()).all()
     experts = {p.id: p for p in db.query(models.Psychologist).all()}
     users = {u.id: u for u in db.query(models.User).all()}
     out = []

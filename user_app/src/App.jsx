@@ -14,6 +14,7 @@ import TaiNguyen from "./pages/TaiNguyen.jsx";
 import TuVan from "./pages/TuVan.jsx";
 import CaiDat from "./pages/CaiDat.jsx";
 import MoodWidget from "./components/MoodWidget.jsx";
+import NotifBell from "./components/NotifBell.jsx";
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: "home", label: "Home" },
@@ -160,13 +161,7 @@ function Topbar({ activePage, onNav, user, onLogout, onMenu }) {
 
       {/* Right: notification + user */}
       <div className="topbar-right">
-        <button className="topbar-notif" title="Notifications">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M6 9.5a6 6 0 1 1 12 0c0 4.5 1.8 5.5 1.8 5.5H4.2S6 14 6 9.5z" />
-            <path d="M10 19a2 2 0 0 0 4 0" />
-          </svg>
-          <span className="topbar-notif-badge">3</span>
-        </button>
+        <NotifBell onNav={onNav} />
         <div className="topbar-user-wrap">
           <button className="topbar-user-info" onClick={() => setMenuOpen((o) => !o)}>
             <div className="topbar-avatar">{initials}</div>

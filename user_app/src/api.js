@@ -94,6 +94,7 @@ export const api = {
   latestScreening: () => req("/screening/latest"),
   screeningToday: () => req("/screening/today"),
   emotionalTrend: (days = 30) => req(`/screening/emotional-trend?days=${days}`),
+  myNotifications: () => req("/me/notifications"),
 
   // ---- learning content (BaiHoc / TaiNguyen) ----
   lessons: (params = {}) => {

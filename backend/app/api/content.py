@@ -21,9 +21,25 @@ NOT PHI — public educational content, stored as plain text. All admin writes
 are audited.
 """
 import uuid
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.orm import Session
+
+
+def _utc(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _is_new(created, updated) -> bool:
+    """True when the row was never meaningfully edited (new vs updated)."""
+    if not updated:
+        return True
+    if not created:
+        return False
+    return abs((_utc(updated) - _utc(created)).total_seconds()) < 5
 
 from app.core import auth, audit as audit_mod
 from app.db import models
@@ -150,6 +166,54 @@ def get_resource(rid: str, _: dict = Depends(auth.current_user),
     if r.status == "draft":
         raise HTTPException(404, "Resource not found")
     return _resource_out(r)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PER-USER notifications — new/updated lessons & resources + a daily screening
+# reminder, newest first.
+# ═════════════════════════════════════════════════════════════════════════════
+@router.get("/me/notifications")
+def my_notifications(user: dict = Depends(auth.current_user),
+                     db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=14)
+    out = []
+
+    lessons = (db.query(models.Lesson)
+               .filter(models.Lesson.status == "published")
+               .order_by(models.Lesson.created_at.desc()).limit(25).all())
+    for l in lessons:
+        ts = _utc(l.updated_at) or _utc(l.created_at)
+        if not ts or ts < cutoff:
+            continue
+        new = _is_new(l.created_at, l.updated_at)
+        out.append({"id": f"lesson-{l.id}", "kind": "lesson",
+                    "title": "New lesson" if new else "Updated lesson",
+                    "text": l.title, "link": "baihoc", "created_at": ts.isoformat()})
+
+    resources = (db.query(models.Resource)
+                 .filter(models.Resource.status != "draft")
+                 .order_by(models.Resource.created_at.desc()).limit(25).all())
+    for r in resources:
+        ts = _utc(r.updated_at) or _utc(r.created_at)
+        if not ts or ts < cutoff:
+            continue
+        new = _is_new(r.created_at, r.updated_at)
+        out.append({"id": f"resource-{r.id}", "kind": "resource",
+                    "title": "New resource" if new else "Updated resource",
+                    "text": r.title, "link": "tainguyen", "created_at": ts.isoformat()})
+
+    # Daily screening reminder (only while today's check-in is still pending).
+    last = (db.query(models.Screening).filter_by(user_id=user["uid"])
+            .order_by(models.Screening.created_at.desc()).first())
+    done_today = bool(last and last.created_at and _utc(last.created_at).date() == now.date())
+    if not done_today:
+        out.append({"id": f"reminder-{now.date().isoformat()}", "kind": "reminder",
+                    "title": "Daily check-in", "text": "Take a minute for today's mood screening.",
+                    "link": "sangloc", "created_at": now.isoformat()})
+
+    out.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return {"items": out[:20]}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

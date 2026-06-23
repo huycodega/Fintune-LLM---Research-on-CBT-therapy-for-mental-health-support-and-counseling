@@ -189,6 +189,47 @@ def pending_moderations(request: Request, _: dict = Depends(auth.require_admin),
     } for q, s, u in rows]}
 
 
+@router.get("/notifications")
+def admin_notifications(_: dict = Depends(auth.require_admin),
+                        db: DbSession = Depends(get_db)):
+    """Unified admin notification feed (newest first): pending clinician
+    reviews + new appointment bookings from users."""
+    from app.core.crypto import decrypt_str
+    out = []
+
+    rows = (db.query(models.ReviewQueue, models.Session, models.User)
+            .join(models.Session, models.Session.id == models.ReviewQueue.session_id)
+            .join(models.User, models.User.id == models.Session.user_id)
+            .filter(models.ReviewQueue.resolved_at.is_(None))
+            .order_by(desc(models.ReviewQueue.created_at)).limit(20).all())
+    for q, s, u in rows:
+        try:
+            txt = decrypt_str(s.user_input_enc) if s.user_input_enc else ""
+        except Exception:
+            txt = ""
+        ts = q.created_at or s.created_at
+        out.append({"id": f"rev-{s.id}", "kind": "review", "title": _name(u.username),
+                    "text": txt[:90], "level": s.triage_level, "link": "moderation",
+                    "created_at": ts.isoformat() if ts else None})
+
+    appts = (db.query(models.Appointment)
+             .order_by(desc(models.Appointment.created_at)).limit(20).all())
+    experts = {p.id: p for p in db.query(models.Psychologist).all()}
+    users = {u.id: u for u in db.query(models.User).all()}
+    for a in appts:
+        p = experts.get(a.psychologist_id)
+        u = users.get(a.user_id)
+        out.append({"id": f"appt-{a.id}", "kind": "appointment",
+                    "title": _name(u.username if u else "User"),
+                    "text": f"Booked {p.name if p else 'a psychologist'} · "
+                            f"{a.date} {a.slot} ({a.status})",
+                    "level": None, "link": "experts",
+                    "created_at": a.created_at.isoformat() if a.created_at else None})
+
+    out.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return {"items": out[:25]}
+
+
 @router.get("/dashboard/recent-activities")
 def recent_activities(request: Request, _: dict = Depends(auth.require_admin),
                       db: DbSession = Depends(get_db)):

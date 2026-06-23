@@ -9,6 +9,10 @@ const LEVEL = {
   L2: { tone: "mod", label: "Moderate" },
   L3: { tone: "low", label: "Low" },
 };
+const KIND = {
+  review:      { icon: "🛡️", label: "Review" },
+  appointment: { icon: "📅", label: "Booking" },
+};
 const ACK_KEY = "mc_admin_notif_ack";    // ids the admin has opened/read
 const SEEN_KEY = "mc_admin_notif_seen";  // ids the bell has already rung for
 
@@ -38,21 +42,21 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, o
   const seenRef = useRef(loadSet(SEEN_KEY));
   const shakeTimer = useRef(null);
 
-  // Poll the review queue — each pending item is one user input awaiting a
-  // clinician, carrying its danger level. A brand-new item rings the bell once.
+  // Poll the unified admin feed — pending clinician reviews + new appointment
+  // bookings, newest first. A brand-new item rings the bell once.
   useEffect(() => {
     let alive = true;
     async function poll() {
       try {
-        const r = await api.queue();
+        const r = await api.notifications();
         if (!alive) return;
-        const q = r.queue || [];
+        const q = r.items || [];
         setItems(q);
-        const fresh = q.filter((x) => !seenRef.current.has(x.session_id));
+        const fresh = q.filter((x) => !seenRef.current.has(x.id));
         if (fresh.length) {
-          fresh.forEach((x) => seenRef.current.add(x.session_id));
+          fresh.forEach((x) => seenRef.current.add(x.id));
           saveSet(SEEN_KEY, seenRef.current);
-          if (fresh.some((x) => !ackRef.current.has(x.session_id))) {
+          if (fresh.some((x) => !ackRef.current.has(x.id))) {
             setShake(true);
             clearTimeout(shakeTimer.current);
             shakeTimer.current = setTimeout(() => setShake(false), 1500);
@@ -65,21 +69,21 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, o
     return () => { alive = false; clearInterval(t); clearTimeout(shakeTimer.current); };
   }, []);
 
-  const unreadCount = items.filter((x) => !ackRef.current.has(x.session_id)).length;
+  const unreadCount = items.filter((x) => !ackRef.current.has(x.id)).length;
 
   function openNotif() {
     const next = !notifOpen;
     setNotifOpen(next);
     setMenu(false);
     if (next && items.length) {
-      items.forEach((x) => ackRef.current.add(x.session_id));
+      items.forEach((x) => ackRef.current.add(x.id));
       saveSet(ACK_KEY, ackRef.current);
       setShake(false);
     }
   }
-  function goCase() {
+  function go(link) {
     setNotifOpen(false);
-    onNav && onNav("moderation");
+    onNav && onNav(link || "moderation");
   }
 
   return (
@@ -118,33 +122,33 @@ export default function TopBar({ title, subtitle, searchPlaceholder, onLogout, o
             <div className="la-overlay" onClick={() => setNotifOpen(false)} />
             <div className="la-notif-menu" role="dialog" aria-label="Notifications">
               <div className="la-notif-head">
-                <span>Pending reviews</span>
+                <span>Notifications</span>
                 <span className="la-notif-count">{items.length}</span>
               </div>
               {items.length === 0 ? (
-                <div className="la-notif-empty">🎉 No drafts waiting for review.</div>
+                <div className="la-notif-empty">🎉 Nothing new right now.</div>
               ) : (
                 <div className="la-notif-list">
-                  {items.slice(0, 8).map((x) => {
-                    const lv = LEVEL[x.triage_level] || { tone: "mod", label: x.triage_level || "—" };
+                  {items.slice(0, 10).map((x) => {
+                    const lv = x.level ? (LEVEL[x.level] || { tone: "mod", label: x.level }) : null;
+                    const k = KIND[x.kind] || { icon: "🔔", label: x.kind };
                     return (
-                      <button key={x.session_id} className="la-notif-item" onClick={goCase}>
-                        <span className={`la-notif-dot ${lv.tone}`} />
+                      <button key={x.id} className="la-notif-item" onClick={() => go(x.link)}>
+                        <span className={`la-notif-dot ${lv ? lv.tone : x.kind}`} />
                         <span className="la-notif-body">
                           <span className="la-notif-row1">
-                            <b className="la-notif-user">{x.username}</b>
-                            <span className={`la-notif-pill ${lv.tone}`}>{x.triage_level} · {lv.label}</span>
+                            <b className="la-notif-user">{k.icon} {x.title}</b>
+                            {lv
+                              ? <span className={`la-notif-pill ${lv.tone}`}>{x.level} · {lv.label}</span>
+                              : <span className="la-notif-pill appt">{k.label}</span>}
                           </span>
-                          <span className="la-notif-text">{x.user_input}</span>
+                          <span className="la-notif-text">{x.text}</span>
                           <span className="la-notif-time">{relTime(x.created_at)}</span>
                         </span>
                       </button>
                     );
                   })}
                 </div>
-              )}
-              {items.length > 0 && (
-                <button className="la-notif-foot" onClick={goCase}>View all in AI Moderation →</button>
               )}
             </div>
           </>

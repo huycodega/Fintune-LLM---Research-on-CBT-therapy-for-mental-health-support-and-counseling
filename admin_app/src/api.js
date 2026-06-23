@@ -71,6 +71,7 @@ export const api = {
 
   // --- case handling (review queue) ---
   queue: () => req("/admin/queue"),
+  notifications: () => req("/admin/notifications"),
   adminSession: (sid) => req(`/admin/session/${sid}`),
   review: (sid, payload) =>
     req(`/admin/review/${sid}`, { method: "POST", body: payload }),
