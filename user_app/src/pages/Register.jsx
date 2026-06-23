@@ -3,6 +3,29 @@ import { api, setSession } from "../api.js";
 import AuthLayout from "../components/AuthLayout.jsx";
 import GoogleSignInButton from "../components/GoogleSignInButton.jsx";
 
+const MailIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
+    <path d="m4 7 8 6 8-6" />
+  </svg>
+);
+const LockIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="5" y="10.5" width="14" height="9" rx="2" />
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+  </svg>
+);
+const EyeIcon = ({ off }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+    {off && <path d="M4 4l16 16" />}
+  </svg>
+);
+
 // Two-step Gmail registration: (1) email + password → OTP emailed,
 // (2) enter OTP → verified + auto-logged-in.
 export default function Register({ onAuth, onBackToLogin }) {
@@ -14,6 +37,7 @@ export default function Register({ onAuth, onBackToLogin }) {
   const [delivery, setDelivery] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   async function submitForm(e) {
     e.preventDefault();
@@ -96,22 +120,33 @@ export default function Register({ onAuth, onBackToLogin }) {
           <form onSubmit={submitForm}>
             <div className="field">
               <label>Gmail address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@gmail.com"
-                autoFocus
-              />
+              <div className="auth-input-wrap">
+                <span className="auth-input-icon"><MailIcon /></span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@gmail.com"
+                  autoFocus
+                />
+              </div>
             </div>
             <div className="field">
               <label>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-              />
+              <div className="auth-input-wrap">
+                <span className="auth-input-icon"><LockIcon /></span>
+                <input
+                  type={showPw ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                />
+                <button type="button" className="auth-input-eye"
+                  onClick={() => setShowPw((v) => !v)}
+                  aria-label={showPw ? "Hide password" : "Show password"}>
+                  <EyeIcon off={showPw} />
+                </button>
+              </div>
             </div>
             {err && <div className="banner crisis">{err}</div>}
             <button className="btn accent full" disabled={busy} style={{ marginTop: 4 }}>

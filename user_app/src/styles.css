@@ -575,7 +575,7 @@ input:focus, select:focus, textarea:focus {
 .progress-fill.danger { background: linear-gradient(90deg, #fc8181, var(--danger)); }
 
 /* Form elements */
-.field { margin-bottom: 16px; }
+.field { margin-bottom: 13px; }
 .field label {
   display: block;
   font-size: 12px;
@@ -646,7 +646,7 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 .divider { height: 1px; background: var(--line); margin: 16px 0; }
 
 /* "or" separator + Google sign-in button row on the auth screens */
-.auth-or { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; color: var(--ink-soft); font-size: 12px; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 13px 0 11px; color: var(--ink-soft); font-size: 12px; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .gsi-row { display: flex; justify-content: center; }
 .gsi-btn-wrap { display: flex; justify-content: center; min-height: 40px; color-scheme: light; }
@@ -1808,8 +1808,8 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg, #d8f3e6 0%, #f5f8f6 50%, #e8f0fb 100%); }
 .login-card { width: 100%; max-width: 420px; background: var(--surface); border-radius: 20px; padding: 36px; box-shadow: var(--shadow-lg); border: 1px solid var(--line); }
 .login-logo { font-size: 40px; margin-bottom: 10px; }
-.login-title { font-size: 26px; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 6px; color: var(--ink); }
-.login-sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 26px; line-height: 1.6; }
+.login-title { font-size: 23px; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 5px; color: var(--ink); }
+.login-sub { color: var(--ink-soft); font-size: 13.5px; margin-bottom: 18px; line-height: 1.55; }
 
 /* ══ Auth split layout (Login / Register) — matches landing ═════ */
 .auth2 {
@@ -2065,20 +2065,20 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 .auth2-card {
   position: relative;
   z-index: 1;
-  max-width: 430px;
-  padding: 40px;
+  max-width: 416px;
+  padding: 30px 34px 28px;
   border-radius: 22px;
   box-shadow: 0 24px 60px rgba(30,42,56,0.12);
   animation: hero-rise-right 0.7s cubic-bezier(0.16, 0.84, 0.44, 1) both;
 }
 .auth2-card-logo {
-  width: 52px; height: 52px;
+  width: 46px; height: 46px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 26px;
+  font-size: 23px;
   background: linear-gradient(135deg, var(--primary-soft) 0%, var(--primary-light) 100%);
   border: 1px solid var(--primary-soft);
-  border-radius: 15px;
-  margin-bottom: 18px;
+  border-radius: 14px;
+  margin-bottom: 14px;
 }
 .auth2-back {
   background: none; border: none; cursor: pointer;
