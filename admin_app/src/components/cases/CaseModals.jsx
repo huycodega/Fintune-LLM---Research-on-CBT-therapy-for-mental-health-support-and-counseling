@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 function Modal({ title, children, submitLabel, danger, open, busy, onClose, onSubmit }) {
   if (!open) return null;
-  return <div className="modal-layer" role="dialog" aria-modal="true">
-    <button className="modal-backdrop" onClick={onClose} aria-label="Close" />
-    <form className="case-modal" onSubmit={onSubmit}><div className="case-modal-head">
-      <h2>{title}</h2><button type="button" className="icon-button" onClick={onClose}>×</button></div>
-      <div className="case-modal-body">{children}</div>
-      <div className="case-modal-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button>
-        <button className={`btn ${danger ? "red" : "primary"}`} disabled={busy}>{submitLabel}</button></div>
-    </form>
-  </div>;
+  // Portal to body so the modal sits above the case detail drawer (which is
+  // itself portaled to body at z-index 80) instead of behind it.
+  return createPortal(
+    <div className="modal-layer" role="dialog" aria-modal="true">
+      <button className="modal-backdrop" onClick={onClose} aria-label="Close" />
+      <form className="case-modal" onSubmit={onSubmit}><div className="case-modal-head">
+        <h2>{title}</h2><button type="button" className="icon-button" onClick={onClose}>×</button></div>
+        <div className="case-modal-body">{children}</div>
+        <div className="case-modal-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className={`btn ${danger ? "red" : "primary"}`} disabled={busy}>{submitLabel}</button></div>
+      </form>
+    </div>,
+    document.body
+  );
 }
 
 function TextActionModal({ open, mode, busy, onClose, onConfirm }) {
