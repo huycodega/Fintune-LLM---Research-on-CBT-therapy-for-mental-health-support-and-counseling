@@ -6,6 +6,7 @@ import ModerationDetailPanel from "./ModerationDetailPanel.jsx";
 import ModerationFilters from "./ModerationFilters.jsx";
 import ModerationStats from "./ModerationStats.jsx";
 import ModerationTable from "./ModerationTable.jsx";
+import ModerationHistory from "./ModerationHistory.jsx";
 
 function nowText() {
   return new Date().toLocaleString("en-GB", {
@@ -38,6 +39,10 @@ export default function ModerationPage() {
   const [listError, setListError] = useState("");
   const [detailError, setDetailError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(nowText());
+  const [view, setView] = useState("queue");          // queue | history
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -114,6 +119,23 @@ export default function ModerationPage() {
     loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      setHistory(await aiModerationApi.history());
+    } catch (error) {
+      setHistory([]);
+      setHistoryError(error.message || "Could not load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === "history") loadHistory();
+  }, [view, loadHistory]);
+
   function toggleRow(id, checked) {
     setSelectedRows((rows) => checked ? [...new Set([...rows, id])] : rows.filter((rowId) => rowId !== id));
   }
@@ -169,43 +191,58 @@ export default function ModerationPage() {
         </div>
       </header>
 
+      <div className="am-tabs">
+        <button type="button" className={`am-tab ${view === "queue" ? "active" : ""}`} onClick={() => setView("queue")}>
+          Pending queue
+        </button>
+        <button type="button" className={`am-tab ${view === "history" ? "active" : ""}`} onClick={() => setView("history")}>
+          Processed history
+        </button>
+      </div>
+
       <ModerationStats stats={stats} loading={statsLoading} />
 
-      <ModerationFilters
-        search={search}
-        onSearch={setSearch}
-        riskLevel={riskLevel}
-        onRiskLevel={setRiskLevel}
-        sortBy={sortBy}
-        onSortBy={setSortBy}
-        sortOrder={sortOrder}
-        onSortOrder={setSortOrder}
-      />
+      {view === "queue" ? (
+        <>
+          <ModerationFilters
+            search={search}
+            onSearch={setSearch}
+            riskLevel={riskLevel}
+            onRiskLevel={setRiskLevel}
+            sortBy={sortBy}
+            onSortBy={setSortBy}
+            sortOrder={sortOrder}
+            onSortOrder={setSortOrder}
+          />
 
-      <div className="am-workspace">
-        <ModerationTable
-          sessions={sessions}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          selectedRows={selectedRows}
-          onToggleRow={toggleRow}
-          onToggleAll={toggleAll}
-          loading={listLoading}
-          error={listError}
-          pagination={pagination}
-          onPage={setPage}
-        />
-        <ModerationDetailPanel
-          detail={detail}
-          loading={detailLoading}
-          error={detailError}
-          busy={actionBusy}
-          onApprove={(draftIdx) => runAction(() => aiModerationApi.approve(selectedId, draftIdx))}
-          onReject={(reason) => runAction(() => aiModerationApi.reject(selectedId, reason))}
-          onEditResponse={(editedResponse, note) => runAction(() => aiModerationApi.editResponse(selectedId, editedResponse, note))}
-          onNeedImprovement={(reason) => runAction(() => aiModerationApi.needImprovement(selectedId, reason))}
-        />
-      </div>
+          <div className="am-workspace">
+            <ModerationTable
+              sessions={sessions}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              selectedRows={selectedRows}
+              onToggleRow={toggleRow}
+              onToggleAll={toggleAll}
+              loading={listLoading}
+              error={listError}
+              pagination={pagination}
+              onPage={setPage}
+            />
+            <ModerationDetailPanel
+              detail={detail}
+              loading={detailLoading}
+              error={detailError}
+              busy={actionBusy}
+              onApprove={(draftIdx) => runAction(() => aiModerationApi.approve(selectedId, draftIdx))}
+              onReject={(reason) => runAction(() => aiModerationApi.reject(selectedId, reason))}
+              onEditResponse={(editedResponse, note) => runAction(() => aiModerationApi.editResponse(selectedId, editedResponse, note))}
+              onNeedImprovement={(reason) => runAction(() => aiModerationApi.needImprovement(selectedId, reason))}
+            />
+          </div>
+        </>
+      ) : (
+        <ModerationHistory items={history} loading={historyLoading} error={historyError} />
+      )}
     </div>
   );
 }

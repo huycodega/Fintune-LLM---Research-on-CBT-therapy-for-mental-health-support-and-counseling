@@ -98,6 +98,10 @@ export const aiModerationApi = {
   },
 
   detail: async (id) => mapItem(await request(`/items/${id}`)),
+  history: async () => {
+    const data = await request("/history");
+    return data.items || [];
+  },
   approve: (id, draftIdx) =>
     request(`/items/${id}/approve`, { method: "PATCH", body: { draft_idx: draftIdx ?? null } }),
   reject: (id, reason) => request(`/items/${id}/reject`, { method: "PATCH", body: { note: reason } }),

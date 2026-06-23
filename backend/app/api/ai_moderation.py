@@ -214,6 +214,52 @@ def items(_: dict = Depends(auth.require_admin), db: Session = Depends(get_db)):
     return {"items": out, "stats": _stats(db)}
 
 
+@router.get("/history")
+def history(limit: int = 100, _: dict = Depends(auth.require_admin),
+            db: Session = Depends(get_db)):
+    """Already-resolved moderation decisions (approve / edit / reject),
+    newest-first — the 'processed' history of the AI Moderation queue."""
+    rows = (
+        db.query(models.ReviewQueue, models.Session, models.User)
+        .join(models.Session, models.Session.id == models.ReviewQueue.session_id)
+        .join(models.User, models.User.id == models.Session.user_id)
+        .filter(models.ReviewQueue.resolved_at.isnot(None))
+        .order_by(models.ReviewQueue.resolved_at.desc())
+        .limit(limit).all()
+    )
+    reviewer_ids = {s.reviewed_by for _q, s, _u in rows if s.reviewed_by}
+    names = {}
+    if reviewer_ids:
+        for ru in db.query(models.User).filter(models.User.id.in_(reviewer_ids)).all():
+            names[ru.id] = _display(ru.username)
+
+    out = []
+    for q, s, u in rows:
+        try:
+            final = decrypt_str(s.final_reply_enc) if s.final_reply_enc else ""
+        except Exception:
+            final = ""
+        try:
+            content = decrypt_str(s.user_input_enc) or ""
+        except Exception:
+            content = ""
+        out.append({
+            "id": str(s.id),
+            "sessionId": str(s.id),
+            "riskLevel": s.triage_level or "L3",
+            "user": {"name": _display(u.username),
+                     "masked_email": _mask_email(u.email)},
+            "userContent": content,
+            "contentSummary": content[:120],
+            "resolution": q.resolution,                 # approve | edit | reject
+            "reviewedBy": names.get(s.reviewed_by),
+            "resolvedAt": q.resolved_at.isoformat() if q.resolved_at else None,
+            "finalResponse": final,
+            "technique": s.final_technique,
+        })
+    return {"items": out}
+
+
 @router.get("/items/{qid}")
 def item_detail(qid: str, _: dict = Depends(auth.require_admin),
                 db: Session = Depends(get_db)):
