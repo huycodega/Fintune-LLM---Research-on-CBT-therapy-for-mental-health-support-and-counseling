@@ -13,6 +13,7 @@ import BaiHoc from "./pages/BaiHoc.jsx";
 import TaiNguyen from "./pages/TaiNguyen.jsx";
 import TuVan from "./pages/TuVan.jsx";
 import CaiDat from "./pages/CaiDat.jsx";
+import MoodWidget from "./components/MoodWidget.jsx";
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: "home", label: "Home" },
@@ -332,6 +333,9 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Floating per-account mood trend — gentle, on every page. */}
+      <MoodWidget />
     </div>
   );
 }
