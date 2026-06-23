@@ -84,10 +84,10 @@ function GeneralCard({ data, setValue, onSave, saved }) {
   </form>;
 }
 
-function RolesCard({ openMenu, setOpenMenu }) {
+function RolesCard({ roles, openMenu, setOpenMenu }) {
   return <section id="settings-roles" className="st-card st-rise" style={{ "--i": 1 }}>
     <CardHeader icon="users" title="Roles & Permissions" subtitle="Manage roles and permissions in the system." />
-    <div className="st-table-wrap"><table className="st-table"><thead><tr><th>Role</th><th>Users</th><th>Actions</th></tr></thead><tbody>{ROLES.map((row, index) => <tr key={row.role} style={{ "--i": index }}><td><b>{row.role}</b><span className={`st-permission ${row.tone}`}>{row.permission}</span></td><td>{row.users}</td><td className="st-action-cell"><button onClick={() => setOpenMenu(openMenu === row.role ? null : row.role)} aria-label={`Actions for ${row.role}`}><Icon name="dots" size={17} /></button>{openMenu === row.role && <div className="st-action-menu"><button>Edit role</button><button>View users</button></div>}</td></tr>)}</tbody></table></div>
+    <div className="st-table-wrap"><table className="st-table"><thead><tr><th>Role</th><th>Users</th><th>Actions</th></tr></thead><tbody>{roles.map((row, index) => <tr key={row.role} style={{ "--i": index }}><td><b>{row.role}</b><span className={`st-permission ${row.tone}`}>{row.permission}</span></td><td>{row.users}</td><td className="st-action-cell"><button onClick={() => setOpenMenu(openMenu === row.role ? null : row.role)} aria-label={`Actions for ${row.role}`}><Icon name="dots" size={17} /></button>{openMenu === row.role && <div className="st-action-menu"><button>Edit role</button><button>View users</button></div>}</td></tr>)}</tbody></table></div>
     <button className="st-outline">Manage Roles</button>
   </section>;
 }
@@ -129,8 +129,8 @@ function HotlineCard({ data, setValue, onSave, saved }) {
   </form>;
 }
 
-function IntegrationsCard({ configured, configure }) {
-  return <section id="settings-integrations" className="st-card st-rise" style={{ "--i": 7 }}><CardHeader icon="plug" title="System Integrations" subtitle="Connect external services and third-party systems." /><div className="st-integration-list">{INTEGRATIONS.map((item, index) => <div className="st-integration" style={{ "--i": index }} key={item.name}><span className={`st-integration-icon ${item.tone}`}><Icon name={item.icon} size={17} /></span><b>{item.name}</b><span className={`st-connection ${item.connected ? "connected" : "disconnected"}`}>{item.connected ? "Connected" : "Not Connected"}</span><button onClick={() => configure(item.name)}>{configured === item.name ? "Configured" : "Configure"}</button></div>)}</div></section>;
+function IntegrationsCard({ integrations, configured, configure }) {
+  return <section id="settings-integrations" className="st-card st-rise" style={{ "--i": 7 }}><CardHeader icon="plug" title="System Integrations" subtitle="Connect external services and third-party systems." /><div className="st-integration-list">{integrations.map((item, index) => <div className="st-integration" style={{ "--i": index }} key={item.name}><span className={`st-integration-icon ${item.tone}`}><Icon name={item.icon} size={17} /></span><b>{item.name}</b><span className={`st-connection ${item.connected ? "connected" : "disconnected"}`}>{item.connected ? "Connected" : "Not Connected"}</span><button onClick={() => configure(item.name)}>{configured === item.name ? "Configured" : "Configure"}</button></div>)}</div></section>;
 }
 
 function BackupCard({ data, setValue, status, runAction }) {
@@ -142,14 +142,14 @@ function SettingsSkeleton() {
 }
 
 // Stat row — matches the la-stats row used on every other admin page.
-function SettingsStats() {
-  const connected = INTEGRATIONS.filter((item) => item.connected).length;
-  const members = ROLES.reduce((sum, row) => sum + row.users, 0);
+function SettingsStats({ roles, integrations, rulesCount }) {
+  const connected = integrations.filter((item) => item.connected).length;
+  const members = roles.reduce((sum, row) => sum + (row.users || 0), 0);
   const cards = [
-    ["shieldCheck", "indigo", "Admin Roles", String(ROLES.length), "configured"],
+    ["shieldCheck", "indigo", "Admin Roles", String(roles.length), "configured"],
     ["users", "green", "Role Members", String(members), "across all roles"],
-    ["plug", "orange", "Integrations", `${connected}/${INTEGRATIONS.length}`, "connected"],
-    ["shield", "red", "Moderation Rules", String(INITIAL_RULES.length), "enforced"],
+    ["plug", "orange", "Integrations", `${connected}/${integrations.length}`, "connected"],
+    ["shield", "red", "Moderation Rules", String(rulesCount), "enforced"],
   ];
   return <section className="la-stats st-stats">{cards.map(([icon, tone, label, value, sub], index) => (
     <div className="la-stat la-rise" style={{ "--i": index }} key={label}>
@@ -167,6 +167,8 @@ export default function SettingsAdmin({ onLogout, onNav }) {
   const [values, setValues] = useState(INITIAL);
   const [thresholds, setThresholds] = useState(INITIAL_THRESHOLDS);
   const [rules, setRules] = useState(INITIAL_RULES);
+  const [roles, setRoles] = useState(ROLES);
+  const [integrations, setIntegrations] = useState(INTEGRATIONS);
   const [saved, setSaved] = useState("");
   const [openRole, setOpenRole] = useState(null);
   const [configured, setConfigured] = useState("");
@@ -192,6 +194,8 @@ export default function SettingsAdmin({ onLogout, onNav }) {
         });
         if (Array.isArray(data.thresholds) && data.thresholds.length) setThresholds(data.thresholds);
         if (Array.isArray(data.rules) && data.rules.length) setRules(data.rules);
+        if (Array.isArray(data.roles) && data.roles.length) setRoles(data.roles);
+        if (Array.isArray(data.integrations) && data.integrations.length) setIntegrations(data.integrations);
         if (data.meta?.updated_at) setUpdatedLabel(updatedNow());
         setDemo(false);
       } catch (error) {
@@ -240,6 +244,6 @@ export default function SettingsAdmin({ onLogout, onNav }) {
   const filterPanel = <><label>Settings group<select><option>All settings</option><option>Security</option><option>AI & Moderation</option><option>Integrations</option></select></label><button onClick={() => jump("settings-general")}>Show Settings</button></>;
 
   return <div className="la-shell st-shell">{mobileOpen && <button className="st-nav-scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}<Sidebar active="settings" onNav={onNav} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><main className="la-main st-main"><TopBar title="System Settings" subtitle={updatedLabel} searchPlaceholder="Search users, email, phone..." onLogout={onLogout} onMenu={() => setMobileOpen(true)} filterPanel={filterPanel} />
-    <div className="la-content la-content-nopanel st-content">{loading ? <SettingsSkeleton /> : <div className="la-content-left">{demo && <div style={{ marginBottom: 12 }}><DemoNotice>Sample settings shown — changes won't be saved until the settings API is connected.</DemoNotice></div>}<SettingsStats /><div className="st-grid"><div className="st-column"><GeneralCard data={values.general} setValue={(key, value) => setSection("general", key, value)} onSave={save} saved={saved === "general"} /><ThresholdCard rows={thresholds} setRows={setThresholds} /><ModerationCard rows={rules} setRows={setRules} /></div><div className="st-column"><RolesCard openMenu={openRole} setOpenMenu={setOpenRole} /><NotificationsCard data={values.notifications} setValue={(key, value) => setSection("notifications", key, value)} onSave={save} saved={saved === "notifications"} /><IntegrationsCard configured={configured} configure={configure} /></div><div className="st-column"><PrivacyCard data={values.privacy} setValue={(key, value) => setSection("privacy", key, value)} onSave={save} saved={saved === "privacy"} /><HotlineCard data={values.hotline} setValue={(key, value) => setSection("hotline", key, value)} onSave={save} saved={saved === "hotline"} /><BackupCard data={values.backup} setValue={(key, value) => setSection("backup", key, value)} status={backupStatus} runAction={runBackup} /></div></div></div>}</div>
+    <div className="la-content la-content-nopanel st-content">{loading ? <SettingsSkeleton /> : <div className="la-content-left">{demo && <div style={{ marginBottom: 12 }}><DemoNotice>Sample settings shown — changes won't be saved until the settings API is connected.</DemoNotice></div>}<SettingsStats roles={roles} integrations={integrations} rulesCount={rules.length} /><div className="st-grid"><div className="st-column"><GeneralCard data={values.general} setValue={(key, value) => setSection("general", key, value)} onSave={save} saved={saved === "general"} /><ThresholdCard rows={thresholds} setRows={setThresholds} /><ModerationCard rows={rules} setRows={setRules} /></div><div className="st-column"><RolesCard roles={roles} openMenu={openRole} setOpenMenu={setOpenRole} /><NotificationsCard data={values.notifications} setValue={(key, value) => setSection("notifications", key, value)} onSave={save} saved={saved === "notifications"} /><IntegrationsCard integrations={integrations} configured={configured} configure={configure} /></div><div className="st-column"><PrivacyCard data={values.privacy} setValue={(key, value) => setSection("privacy", key, value)} onSave={save} saved={saved === "privacy"} /><HotlineCard data={values.hotline} setValue={(key, value) => setSection("hotline", key, value)} onSave={save} saved={saved === "hotline"} /><BackupCard data={values.backup} setValue={(key, value) => setSection("backup", key, value)} status={backupStatus} runAction={runBackup} /></div></div></div>}</div>
   </main></div>;
 }

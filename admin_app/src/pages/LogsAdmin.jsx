@@ -151,13 +151,31 @@ function DetailPanel({ row, onClose }) {
   </section>;
 }
 
-function CriticalEvents() {
+// Derive critical events from the real audit log (failed / warning rows).
+// Falls back to the sample list only when running on demo data.
+function criticalFrom(logs, demo) {
+  if (demo) return CRITICAL;
+  return logs
+    .filter((row) => row.status === "Failed" || row.status === "Warning")
+    .slice(0, 6)
+    .map((row) => ({
+      time: (row.time || "").split(" ")[1] || row.time || "",
+      title: row.action,
+      description: row.target && row.target !== "-" ? row.target : row.ip,
+      tone: row.status === "Failed" ? "danger" : "warning",
+    }));
+}
+
+function CriticalEvents({ logs, demo }) {
+  const items = criticalFrom(logs, demo);
   return <section className="lg-critical lg-panel-in"><div className="lg-side-title"><h2>Recent Critical Events</h2></div>
-    <div className="lg-critical-list">{CRITICAL.map((item, index) => <div className="lg-critical-item" style={{ "--i": index }} key={`${item.time}-${item.title}`}>
-      <span className={`lg-critical-icon ${item.tone}`}>{item.tone === "warning" ? <Icon name="alert" size={15} /> : <span />}</span>
-      <time>{item.time}</time><div><b>{item.title}</b><small>{item.description}</small></div>
-    </div>)}</div>
-    <button className="lg-critical-btn">View All Critical Events <Icon name="chevronRight" size={15} /></button>
+    {items.length === 0
+      ? <p className="lg-critical-empty">No critical events recorded.</p>
+      : <div className="lg-critical-list">{items.map((item, index) => <div className="lg-critical-item" style={{ "--i": index }} key={`${item.time}-${item.title}-${index}`}>
+          <span className={`lg-critical-icon ${item.tone}`}>{item.tone === "warning" ? <Icon name="alert" size={15} /> : <span />}</span>
+          <time>{item.time}</time><div><b>{item.title}</b><small>{item.description}</small></div>
+        </div>)}</div>}
+    {items.length > 0 && <button className="lg-critical-btn">View All Critical Events <Icon name="chevronRight" size={15} /></button>}
   </section>;
 }
 
@@ -284,7 +302,7 @@ export default function LogsAdmin({ onLogout, onNav }) {
             <div className="lg-pagination"><span>Showing {filtered.length ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, filtered.length)} of {demo ? "12,842" : filtered.length.toLocaleString("en-US")} events</span><div className="lg-page-controls"><button onClick={() => setPage(1)} aria-label="First page"><Icon name="chevronsLeft" size={14} /></button><button onClick={() => setPage(Math.max(1, page - 1))} aria-label="Previous page"><Icon name="chevronLeft" size={14} /></button>{[1, 2, 3].map((number) => <button key={number} className={page === number ? "active" : ""} onClick={() => setPage(Math.min(number, pageCount))}>{number}</button>)}<span>...</span><button onClick={() => setPage(pageCount)}>{demo ? "1,285" : pageCount}</button><button onClick={() => setPage(Math.min(pageCount, page + 1))} aria-label="Next page"><Icon name="chevronRight" size={14} /></button></div><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}><option value={10}>10 / page</option><option value={20}>20 / page</option><option value={50}>50 / page</option></select></div>
           </section>
         </div>
-        <aside className="la-detail la-detail-single">{selected && <DetailPanel row={selected} onClose={() => setSelected(null)} />}<CriticalEvents /></aside>
+        <aside className="la-detail la-detail-single">{selected && <DetailPanel row={selected} onClose={() => setSelected(null)} />}<CriticalEvents logs={logs} demo={demo} /></aside>
       </>}</div>
     </main>
   </div>;

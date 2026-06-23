@@ -3728,3 +3728,5 @@ textarea.la-input { resize: vertical; line-height: 1.5; }
   font-size: 13.5px; font-weight: 600; box-shadow: 0 12px 32px rgba(0,0,0,.2);
   cursor: pointer; max-width: 90vw;
 }
+
+.lg-critical-empty { padding: 14px 4px; font-size: 13px; color: var(--muted, #64748b); }
