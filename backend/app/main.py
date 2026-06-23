@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI application entry.
 
 On startup:
@@ -26,6 +26,7 @@ from app.api.admin_settings import router as admin_settings_router
 from app.api.admin_cases import router as admin_cases_router
 from app.api.admin_dashboard import router as admin_dashboard_router
 from app.api.conversations import router as conversations_router
+from app.api.me_profile import router as me_profile_router
 from app.api.screening import router as screening_router
 from app.api.content import router as content_router
 from app.api.experts import router as experts_router
@@ -57,6 +58,7 @@ app.include_router(admin_settings_router)
 app.include_router(admin_cases_router)
 app.include_router(admin_dashboard_router)
 app.include_router(conversations_router)
+app.include_router(me_profile_router)
 app.include_router(screening_router)
 app.include_router(content_router)
 app.include_router(experts_router)

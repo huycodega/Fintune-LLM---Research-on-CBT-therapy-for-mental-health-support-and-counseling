@@ -541,3 +541,22 @@ class ScreeningPlan(Base):
     intro: Mapped[Optional[str]] = mapped_column(Text)       # deterministic
     ai_intro: Mapped[Optional[str]] = mapped_column(Text)    # model-written
     created_at: Mapped[datetime] = _now()
+
+
+# ============================================================
+# saved_resources  (a user's bookmarked resources)
+# ============================================================
+# NOTE: the editable profile lives in the existing `user_profiles` table
+# (app.db.models_admin.UserProfile), extended by migration 0011 with the
+# wellness_goal / avatar_url / prefs / consent columns the user app needs.
+class SavedResource(Base):
+    """A user's bookmarked resource. Powers the Home 'Saved Resources' panel
+    and the bookmark toggle on the Resources page."""
+    __tablename__ = "saved_resources"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True)
+    resource_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resources.id", ondelete="CASCADE"),
+        primary_key=True)
+    created_at: Mapped[datetime] = _now()

@@ -113,6 +113,15 @@ class UserProfile(Base):
     address_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     emergency_contact_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     user_group: Mapped[Optional[str]] = mapped_column(String(50))
+    # ── user-app self-service fields (migration 0011) ──
+    wellness_goal: Mapped[Optional[str]] = mapped_column(Text)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String)
+    # {"notifications": {...bool}, "privacy": {...bool}, "app": {language,theme,font_size}}
+    prefs: Mapped[Optional[dict]] = mapped_column(JSONB)
+    # {"store_data": bool, "emails": bool, "data_use": bool}
+    consent: Mapped[Optional[dict]] = mapped_column(JSONB)
+    consent_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
 

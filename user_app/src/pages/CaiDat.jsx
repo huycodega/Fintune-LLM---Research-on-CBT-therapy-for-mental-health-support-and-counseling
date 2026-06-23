@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "../api.js";
 import Mascot from "../components/Mascot.jsx";
 
 /* ── Inline line-icon set (teal stroke, matches mockup) ────────── */
@@ -10,7 +11,6 @@ const ICON_PATHS = {
   globe:    <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></>,
   phone:    <><path d="M5 4h4l2 5-3 2c1 3 3 5 6 6l2-3 5 2v4c0 1-1 2-2 2C9 22 2 15 2 6c0-1 1-2 3-2z" /></>,
   grid:     <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
-  sparkle:  <><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" /></>,
   doc:      <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /></>,
   chip:     <><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" /></>,
   mail:     <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>,
@@ -19,7 +19,6 @@ const ICON_PATHS = {
   memory:   <><rect x="5" y="5" width="14" height="14" rx="3" /><path d="M9 9h6v6H9z" /></>,
   download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
   trash:    <><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14" /></>,
-  camera:   <><rect x="3" y="7" width="18" height="13" rx="2.5" /><circle cx="12" cy="13.5" r="3.5" /><path d="M8 7l1.5-3h5L16 7" /></>,
   eye:      <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff:   <><path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0112 6c6 0 10 6 10 6a18 18 0 01-3.1 3.6M6.6 6.6A18 18 0 002 12s4 6 10 6a9.5 9.5 0 004.3-1" /><path d="M9.9 9.9a3 3 0 004.2 4.2" /></>,
   chevron:  <><path d="M9 6l6 6-6 6" /></>,
@@ -27,39 +26,22 @@ const ICON_PATHS = {
 
 function Icon({ name, size = 20, className = "" }) {
   return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       {ICON_PATHS[name]}
     </svg>
   );
 }
 
-/* ── Toggle switch ─────────────────────────────────────────────── */
-function Toggle({ defaultOn = false }) {
-  const [on, setOn] = useState(defaultOn);
+function Toggle({ on, onChange, disabled }) {
   return (
-    <button
-      type="button"
-      className={`st-toggle ${on ? "on" : ""}`}
-      onClick={() => setOn(!on)}
-      role="switch"
-      aria-checked={on}
-    >
+    <button type="button" className={`st-toggle ${on ? "on" : ""}`} disabled={disabled}
+      onClick={() => onChange(!on)} role="switch" aria-checked={on}>
       <span className="st-toggle-knob" />
     </button>
   );
 }
 
-/* ── Card header ───────────────────────────────────────────────── */
 function CardHead({ icon, title, sub, action }) {
   return (
     <div className="st-card-head">
@@ -73,8 +55,7 @@ function CardHead({ icon, title, sub, action }) {
   );
 }
 
-/* ── Toggle row ────────────────────────────────────────────────── */
-function ToggleRow({ icon, color, title, desc, defaultOn }) {
+function ToggleRow({ icon, color, title, desc, on, onChange }) {
   return (
     <div className="st-row">
       <span className="st-row-icon" style={{ color }}><Icon name={icon} size={18} /></span>
@@ -82,19 +63,19 @@ function ToggleRow({ icon, color, title, desc, defaultOn }) {
         <div className="st-row-title">{title}</div>
         <div className="st-row-desc">{desc}</div>
       </div>
-      <Toggle defaultOn={defaultOn} />
+      <Toggle on={on} onChange={onChange} />
     </div>
   );
 }
 
-/* ── Password field with show/hide ─────────────────────────────── */
-function PasswordField({ label, placeholder }) {
+function PasswordField({ label, placeholder, value, onChange }) {
   const [show, setShow] = useState(false);
   return (
     <div className="st-pwd">
       <label className="st-field-label">{label}</label>
       <div className="st-input-wrap">
-        <input className="st-input" type={show ? "text" : "password"} placeholder={placeholder} />
+        <input className="st-input" type={show ? "text" : "password"} placeholder={placeholder}
+          value={value} onChange={(e) => onChange(e.target.value)} />
         <button type="button" className="st-eye" onClick={() => setShow((s) => !s)} aria-label="Toggle visibility">
           <Icon name={show ? "eyeOff" : "eye"} size={18} />
         </button>
@@ -103,64 +84,101 @@ function PasswordField({ label, placeholder }) {
   );
 }
 
-/* ── Data ──────────────────────────────────────────────────────── */
-const NOTIFICATIONS = [
-  { icon: "bell", color: "#14b8a6", title: "Screening & Reminders",      desc: "Reminders to complete periodic screenings",  on: true },
-  { icon: "doc",  color: "#f59e0b", title: "Lessons & New Content",      desc: "Updates on new lessons and resources",        on: true },
-  { icon: "chip", color: "#14b8a6", title: "AI Support Notifications",   desc: "Suggestions, mood tracking, and messages",    on: true },
-  { icon: "mail", color: "#f59e0b", title: "Email Notifications",        desc: "Receive notifications via email",             on: false },
-  { icon: "monitor", color: "#14b8a6", title: "Browser Push Notifications", desc: "Show notifications in your browser",       on: true },
+const Soon = () => <span className="st-soon-badge">Coming soon</span>;
+
+const NOTIF_ROWS = [
+  { key: "screening",    icon: "bell",    color: "#14b8a6", title: "Screening & Reminders",      desc: "Reminders to complete periodic screenings" },
+  { key: "lessons",      icon: "doc",     color: "#f59e0b", title: "Lessons & New Content",      desc: "Updates on new lessons and resources" },
+  { key: "ai_support",   icon: "chip",    color: "#14b8a6", title: "AI Support Notifications",   desc: "Suggestions, mood tracking, and messages" },
+  { key: "email",        icon: "mail",    color: "#f59e0b", title: "Email Notifications",        desc: "Receive notifications via email" },
+  { key: "browser_push", icon: "monitor", color: "#14b8a6", title: "Browser Push Notifications", desc: "Show notifications in your browser" },
+];
+const PRIVACY_ROWS = [
+  { key: "share_anonymous", icon: "info",   color: "#14b8a6", title: "Share anonymous data to improve AI",   desc: "Help us improve the experience and deliver more relevant content." },
+  { key: "ai_remember",     icon: "memory", color: "#14b8a6", title: "Allow AI to remember your preferences", desc: "Personalize suggestions based on your usage behavior." },
 ];
 
-const PRIVACY = [
-  { icon: "info",   color: "#14b8a6", title: "Share anonymous data to improve AI",   desc: "Help us improve the experience and deliver more relevant content.", on: true },
-  { icon: "memory", color: "#14b8a6", title: "Allow AI to remember your preferences", desc: "Personalize suggestions based on your usage behavior.",            on: true },
-];
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 
-const OTHER = [
-  { icon: "monitor",  title: "Manage Logged-in Devices", desc: "View and manage devices logged into your account." },
-  { icon: "download", title: "Download Your Data",       desc: "Download a copy of your personal data from MindCare AI." },
-  { icon: "trash",    title: "Delete Account",           desc: "Permanently delete your account and all your data.", danger: true },
-];
+export default function CaiDat({ user }) {
+  const [data, setData] = useState(null);
+  const [prefs, setPrefs] = useState(null);
+  const [emergency, setEmergency] = useState({ name: "", relationship: "", phone: "" });
+  const [editEm, setEditEm] = useState(false);
+  const [pw, setPw] = useState({ current_password: "", new_password: "", confirm: "" });
+  const [pwMsg, setPwMsg] = useState(null);
 
-export default function CaiDat({ user, onLogout }) {
+  useEffect(() => {
+    api.mySettings().catch(() => null).then((s) => {
+      if (!s) return;
+      setData(s);
+      setPrefs(s.prefs);
+      setEmergency({
+        name: s.emergency?.name || "", relationship: s.emergency?.relationship || "",
+        phone: s.emergency?.phone || "",
+      });
+    });
+  }, []);
+
+  function patchPrefs(section, key, value) {
+    const next = { ...prefs, [section]: { ...prefs[section], [key]: value } };
+    setPrefs(next);
+    api.updateSettings({ prefs: { [section]: { [key]: value } } }).catch(() => {});
+  }
+
+  async function saveEmergency() {
+    try {
+      const s = await api.updateSettings({ emergency });
+      setData(s);
+      setEditEm(false);
+    } catch { /* keep editing */ }
+  }
+
+  async function updatePassword() {
+    setPwMsg(null);
+    if (pw.new_password !== pw.confirm) { setPwMsg({ err: true, text: "Passwords don't match" }); return; }
+    try {
+      await api.changePassword(pw.current_password, pw.new_password);
+      setPwMsg({ err: false, text: "Password updated ✓" });
+      setPw({ current_password: "", new_password: "", confirm: "" });
+    } catch (e) {
+      setPwMsg({ err: true, text: e.message || "Could not update password" });
+    }
+  }
+
+  const account = data?.account || {};
+  const initials = (account.full_name || user?.username || "U").slice(0, 1).toUpperCase();
+
   return (
     <div className="st-page">
-      {/* Heading */}
       <header className="st-head">
         <h1 className="st-page-title">Settings</h1>
         <p className="st-page-sub">Manage your account, app preferences, and security.</p>
       </header>
 
       <div className="st-grid">
-        {/* ── LEFT COLUMN ─────────────────────────────────────── */}
+        {/* ── LEFT COLUMN ── */}
         <div className="st-col">
-
           {/* Account */}
           <section className="st-card">
-            <CardHead
-              icon="user"
-              title="Account"
-              sub="Manage your account information."
-              action={<button className="st-btn-outline">Edit Profile</button>}
-            />
+            <CardHead icon="user" title="Account" sub="Manage your account information." />
             <div className="st-account">
-              <div className="st-avatar">
-                <span className="st-avatar-initials">M</span>
-                <button className="st-avatar-cam" aria-label="Change photo"><Icon name="camera" size={15} /></button>
-              </div>
+              <div className="st-avatar"><span className="st-avatar-initials">{initials}</span></div>
               <div className="st-account-info">
                 <div className="st-info-item">
                   <div className="st-field-label">Full Name</div>
-                  <div className="st-info-value">Minh</div>
+                  <div className="st-info-value">{account.full_name || "—"}</div>
                 </div>
                 <div className="st-info-item">
                   <div className="st-field-label">Email</div>
-                  <div className="st-info-value">minh.nguyen@example.com</div>
+                  <div className="st-info-value">{account.email || "—"}</div>
                 </div>
                 <div className="st-info-item">
                   <div className="st-field-label">Joined</div>
-                  <div className="st-info-value">14/06/2024</div>
+                  <div className="st-info-value">{fmtDate(account.joined)}</div>
                 </div>
               </div>
             </div>
@@ -170,34 +188,36 @@ export default function CaiDat({ user, onLogout }) {
           <section className="st-card">
             <CardHead icon="shield" title="Security" sub="Change password and manage account security." />
             <div className="st-security">
-              {/* Change password */}
               <div className="st-security-col">
                 <div className="st-subhead">Change Password</div>
-                <PasswordField label="Current Password" placeholder="Enter current password" />
-                <PasswordField label="New Password" placeholder="Enter new password" />
-                <PasswordField label="Confirm New Password" placeholder="Re-enter new password" />
-                <button className="st-btn-primary st-btn-full">Update Password</button>
+                <PasswordField label="Current Password" placeholder="Enter current password"
+                  value={pw.current_password} onChange={(v) => setPw((s) => ({ ...s, current_password: v }))} />
+                <PasswordField label="New Password" placeholder="Enter new password"
+                  value={pw.new_password} onChange={(v) => setPw((s) => ({ ...s, new_password: v }))} />
+                <PasswordField label="Confirm New Password" placeholder="Re-enter new password"
+                  value={pw.confirm} onChange={(v) => setPw((s) => ({ ...s, confirm: v }))} />
+                {pwMsg && <div className={`st-pw-msg ${pwMsg.err ? "err" : "ok"}`}>{pwMsg.text}</div>}
+                <button className="st-btn-primary st-btn-full" onClick={updatePassword}>Update Password</button>
               </div>
-              {/* 2FA */}
               <div className="st-security-col">
                 <div className="st-subhead-row">
                   <span className="st-subhead">Two-Factor Authentication (2FA)</span>
-                  <span className="st-badge-on">Enabled ✓</span>
+                  <Soon />
                 </div>
                 <p className="st-2fa-intro">Add an extra layer of security to your account.</p>
-                <div className="st-2fa-item">
+                <div className="st-2fa-item st-disabled">
                   <div className="st-2fa-text">
                     <div className="st-2fa-title">Authenticator App</div>
-                    <div className="st-2fa-sub">Linked with Google Authenticator</div>
+                    <div className="st-2fa-sub">Link an authenticator app</div>
                   </div>
-                  <button className="st-btn-outline st-btn-sm">Manage</button>
+                  <button className="st-btn-outline st-btn-sm" disabled>Manage</button>
                 </div>
-                <div className="st-2fa-item">
+                <div className="st-2fa-item st-disabled">
                   <div className="st-2fa-text">
                     <div className="st-2fa-title">Backup Codes</div>
-                    <div className="st-2fa-sub">You have 5 unused backup codes.</div>
+                    <div className="st-2fa-sub">One-time recovery codes</div>
                   </div>
-                  <button className="st-btn-outline st-btn-sm">View Codes</button>
+                  <button className="st-btn-outline st-btn-sm" disabled>View Codes</button>
                 </div>
               </div>
             </div>
@@ -206,103 +226,133 @@ export default function CaiDat({ user, onLogout }) {
           {/* Language & Appearance */}
           <section className="st-card">
             <CardHead icon="globe" title="Language & Appearance" sub="Customize the display language and appearance." />
-            <div className="st-selects">
-              <div className="st-select-field">
-                <label className="st-field-label">Language</label>
-                <select className="st-select" defaultValue="en">
-                  <option value="en">🌐 English</option>
-                  <option value="vi">Tiếng Việt</option>
-                </select>
+            {prefs && (
+              <div className="st-selects">
+                <div className="st-select-field">
+                  <label className="st-field-label">Language</label>
+                  <select className="st-select" value={prefs.app.language} onChange={(e) => patchPrefs("app", "language", e.target.value)}>
+                    <option value="en">🌐 English</option>
+                    <option value="vi">Tiếng Việt</option>
+                  </select>
+                </div>
+                <div className="st-select-field">
+                  <label className="st-field-label">Theme</label>
+                  <select className="st-select" value={prefs.app.theme} onChange={(e) => patchPrefs("app", "theme", e.target.value)}>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                  </select>
+                </div>
+                <div className="st-select-field">
+                  <label className="st-field-label">Font Size</label>
+                  <select className="st-select" value={prefs.app.font_size} onChange={(e) => patchPrefs("app", "font_size", e.target.value)}>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                  </select>
+                </div>
               </div>
-              <div className="st-select-field">
-                <label className="st-field-label">Theme</label>
-                <select className="st-select" defaultValue="light">
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="system">System</option>
-                </select>
-              </div>
-              <div className="st-select-field">
-                <label className="st-field-label">Font Size</label>
-                <select className="st-select" defaultValue="medium">
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                </select>
-              </div>
-            </div>
+            )}
           </section>
 
           {/* Other */}
           <section className="st-card">
             <CardHead icon="grid" title="Other" sub="Account management and data options." />
             <div className="st-other-list">
-              {OTHER.map((o) => (
-                <button key={o.title} className={`st-other-row ${o.danger ? "danger" : ""}`}>
-                  <span className="st-other-icon"><Icon name={o.icon} size={18} /></span>
-                  <div className="st-other-text">
-                    <div className="st-other-title">{o.title}</div>
-                    <div className="st-other-desc">{o.desc}</div>
-                  </div>
-                  <span className="st-other-arrow"><Icon name="chevron" size={18} /></span>
-                </button>
-              ))}
+              <div className="st-other-row st-disabled">
+                <span className="st-other-icon"><Icon name="monitor" size={18} /></span>
+                <div className="st-other-text">
+                  <div className="st-other-title">Manage Logged-in Devices <Soon /></div>
+                  <div className="st-other-desc">View and manage devices logged into your account.</div>
+                </div>
+              </div>
+              <div className="st-other-row st-disabled">
+                <span className="st-other-icon"><Icon name="download" size={18} /></span>
+                <div className="st-other-text">
+                  <div className="st-other-title">Download Your Data <Soon /></div>
+                  <div className="st-other-desc">Download a copy of your personal data from MindCare AI.</div>
+                </div>
+              </div>
+              <div className="st-other-row st-disabled danger">
+                <span className="st-other-icon"><Icon name="trash" size={18} /></span>
+                <div className="st-other-text">
+                  <div className="st-other-title">Delete Account <Soon /></div>
+                  <div className="st-other-desc">Permanently delete your account and all your data.</div>
+                </div>
+              </div>
             </div>
           </section>
         </div>
 
-        {/* ── RIGHT COLUMN ────────────────────────────────────── */}
+        {/* ── RIGHT COLUMN ── */}
         <div className="st-col">
-
           {/* Notifications */}
           <section className="st-card">
             <CardHead icon="bell" title="Notifications" sub="Customize how you receive notifications." />
-            <div className="st-rows">
-              {NOTIFICATIONS.map((n) => (
-                <ToggleRow key={n.title} {...n} defaultOn={n.on} />
-              ))}
-            </div>
-            <button className="st-card-link">Manage advanced settings <Icon name="chevron" size={16} /></button>
+            {prefs && (
+              <div className="st-rows">
+                {NOTIF_ROWS.map((n) => (
+                  <ToggleRow key={n.key} {...n} on={!!prefs.notifications[n.key]}
+                    onChange={(v) => patchPrefs("notifications", n.key, v)} />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Privacy */}
           <section className="st-card">
             <CardHead icon="lock" title="Privacy" sub="Manage your personal data and privacy." />
-            <div className="st-rows">
-              {PRIVACY.map((p) => (
-                <ToggleRow key={p.title} {...p} defaultOn={p.on} />
-              ))}
-            </div>
-            <button className="st-card-link">View Privacy Policy <Icon name="chevron" size={16} /></button>
+            {prefs && (
+              <div className="st-rows">
+                {PRIVACY_ROWS.map((p) => (
+                  <ToggleRow key={p.key} {...p} on={!!prefs.privacy[p.key]}
+                    onChange={(v) => patchPrefs("privacy", p.key, v)} />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Emergency Contact */}
           <section className="st-card">
-            <CardHead
-              icon="phone"
-              title="Emergency Contact"
+            <CardHead icon="phone" title="Emergency Contact"
               sub="This contact information will be used when you need emergency support."
-            />
-            <div className="st-emergency">
-              <div className="st-emergency-info">
-                <div className="st-info-item">
-                  <div className="st-field-label">Contact Person</div>
-                  <div className="st-info-value">Lan Anh (Sister)</div>
-                </div>
-                <div className="st-info-item">
-                  <div className="st-field-label">Phone Number</div>
-                  <div className="st-info-value">0901 234 567</div>
+              action={!editEm && <button className="st-btn-outline st-btn-sm" onClick={() => setEditEm(true)}>Edit</button>} />
+            {!editEm ? (
+              <div className="st-emergency">
+                <div className="st-emergency-info">
+                  <div className="st-info-item">
+                    <div className="st-field-label">Contact Person</div>
+                    <div className="st-info-value">
+                      {emergency.name || "—"}{emergency.relationship ? ` (${emergency.relationship})` : ""}
+                    </div>
+                  </div>
+                  <div className="st-info-item">
+                    <div className="st-field-label">Phone Number</div>
+                    <div className="st-info-value">{emergency.phone || "—"}</div>
+                  </div>
                 </div>
               </div>
-              <button className="st-btn-outline st-btn-sm">Edit</button>
-            </div>
+            ) : (
+              <div className="st-emergency-edit">
+                <input className="st-input" placeholder="Contact name" value={emergency.name}
+                  onChange={(e) => setEmergency((s) => ({ ...s, name: e.target.value }))} />
+                <input className="st-input" placeholder="Relationship (e.g. Sister)" value={emergency.relationship}
+                  onChange={(e) => setEmergency((s) => ({ ...s, relationship: e.target.value }))} />
+                <input className="st-input" placeholder="Phone number" value={emergency.phone}
+                  onChange={(e) => setEmergency((s) => ({ ...s, phone: e.target.value }))} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="st-btn-primary st-btn-sm" onClick={saveEmergency}>Save</button>
+                  <button className="st-btn-outline st-btn-sm" onClick={() => setEditEm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
             <div className="st-warn-box">
               <span className="st-warn-icon"><Icon name="info" size={18} /></span>
               <span>In case you need emergency support, we will reach out to this person to provide appropriate help.</span>
             </div>
           </section>
 
-          {/* Tips from MindCare AI */}
+          {/* Tips */}
           <section className="st-card st-tips">
             <div className="st-tips-mascot"><Mascot variant="wave" size={104} /></div>
             <div className="st-tips-body">
@@ -311,13 +361,11 @@ export default function CaiDat({ user, onLogout }) {
                 Protecting your privacy is very important. Always keep your security information up
                 to date and only share data you feel comfortable with.
               </p>
-              <button className="st-btn-primary st-btn-sm">Learn more about security</button>
             </div>
           </section>
         </div>
       </div>
 
-      {/* Footer */}
       <p className="st-footer">
         <Icon name="shield" size={15} />
         MindCare AI is committed to protecting your personal data. We never share your information

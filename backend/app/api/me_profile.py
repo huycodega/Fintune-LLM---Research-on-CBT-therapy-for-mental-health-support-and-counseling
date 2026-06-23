@@ -1,0 +1,376 @@
+"""
+Self-service profile / settings / overview for the logged-in user.
+
+Backs the user app's Profile, Settings, Home (activity + streak) and the
+Resources bookmark toggle with REAL data. Reuses the existing `user_profiles`
+table (app.db.models_admin.UserProfile) — sensitive fields (full name, phone,
+DOB, emergency contact) stay AES-256-GCM encrypted in the *_enc columns;
+preferences / consent / wellness goal use the columns added by migration 0011.
+
+  GET/PUT  /api/me/profile
+  GET/PUT  /api/me/settings
+  POST     /api/me/password
+  GET      /api/me/overview          (stats + streak + recent activity)
+  GET      /api/me/saved-resources
+  POST/DEL /api/me/saved-resources/{rid}
+"""
+from __future__ import annotations
+import json
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core import auth, audit as audit_mod
+from app.core.crypto import encrypt_phi, decrypt_str
+from app.db import models, models_admin
+from app.db.session import get_db
+
+router = APIRouter(prefix="/api/me")
+
+
+# ── Preference defaults ──────────────────────────────────────────────────────
+DEFAULT_PREFS = {
+    "notifications": {
+        "screening": True, "lessons": True, "ai_support": True,
+        "email": False, "browser_push": True,
+    },
+    "privacy": {"share_anonymous": True, "ai_remember": True},
+    "app": {"language": "en", "theme": "light", "font_size": "medium"},
+}
+DEFAULT_CONSENT = {"store_data": True, "emails": True, "data_use": True}
+
+
+def _merge(base: dict, override) -> dict:
+    """Deep-merge a stored partial prefs dict over the defaults."""
+    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in base.items()}
+    if isinstance(override, dict):
+        for k, v in override.items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = _merge(out[k], v)
+            else:
+                out[k] = v
+    return out
+
+
+def _dec(b) -> Optional[str]:
+    if not b:
+        return None
+    try:
+        return decrypt_str(b)
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def _enc(s):
+    s = (s or "").strip()
+    return encrypt_phi(s) if s else None
+
+
+def _emergency(p: models_admin.UserProfile) -> dict:
+    raw = _dec(p.emergency_contact_enc)
+    if not raw:
+        return {"name": None, "relationship": None, "phone": None}
+    try:
+        d = json.loads(raw)
+        return {"name": d.get("name"), "relationship": d.get("relationship"),
+                "phone": d.get("phone")}
+    except Exception:                                        # noqa: BLE001
+        # legacy plain string
+        return {"name": raw, "relationship": None, "phone": None}
+
+
+def _get_or_create(db: Session, uid) -> models_admin.UserProfile:
+    p = db.query(models_admin.UserProfile).filter_by(user_id=uid).first()
+    if not p:
+        p = models_admin.UserProfile(user_id=uid)
+        db.add(p)
+        db.flush()
+    return p
+
+
+def _intake_demo(db: Session, uid) -> dict:
+    row = (db.query(models.IntakeForm).filter_by(user_id=uid)
+           .order_by(models.IntakeForm.created_at.desc()).first())
+    return (row.demographics or {}) if row else {}
+
+
+# ── Request bodies ───────────────────────────────────────────────────────────
+class EmergencyIn(BaseModel):
+    name: Optional[str] = None
+    relationship: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ProfileIn(BaseModel):
+    full_name: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    phone: Optional[str] = None
+    wellness_goal: Optional[str] = None
+    emergency: Optional[EmergencyIn] = None
+
+
+class SettingsIn(BaseModel):
+    prefs: Optional[dict] = None
+    consent: Optional[dict] = None
+    emergency: Optional[EmergencyIn] = None
+
+
+class PasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+# ── Profile ──────────────────────────────────────────────────────────────────
+def _profile_payload(db: Session, u: models.User, p: models_admin.UserProfile) -> dict:
+    demo = _intake_demo(db, u.id)
+    return {
+        "username": u.username,
+        "email": u.email or (u.username if "@" in (u.username or "") else None),
+        "joined": u.created_at.isoformat() if u.created_at else None,
+        "full_name": _dec(p.full_name_enc) or (u.username or "").split("@")[0],
+        "gender": p.gender or demo.get("gender"),
+        "age": demo.get("age") or demo.get("age_group"),
+        "date_of_birth": _dec(p.date_of_birth_enc),
+        "phone": _dec(p.phone_enc),
+        "wellness_goal": p.wellness_goal,
+        "avatar_url": p.avatar_url,
+        "emergency": _emergency(p),
+        "consent": _merge(DEFAULT_CONSENT, p.consent),
+        "consent_updated_at": (p.consent_updated_at.isoformat()
+                               if p.consent_updated_at else
+                               (u.consent_at.isoformat() if u.consent_at else None)),
+    }
+
+
+@router.get("/profile")
+def get_profile(user: dict = Depends(auth.current_user),
+                db: Session = Depends(get_db)):
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    p = _get_or_create(db, u.id)
+    return _profile_payload(db, u, p)
+
+
+def _apply_emergency(p: models_admin.UserProfile, em: EmergencyIn) -> None:
+    cur = _emergency(p)
+    if em.name is not None:
+        cur["name"] = em.name.strip() or None
+    if em.relationship is not None:
+        cur["relationship"] = em.relationship.strip() or None
+    if em.phone is not None:
+        cur["phone"] = em.phone.strip() or None
+    p.emergency_contact_enc = (encrypt_phi(json.dumps(cur, ensure_ascii=False))
+                               if any(cur.values()) else None)
+
+
+@router.put("/profile")
+def update_profile(body: ProfileIn, request: Request,
+                   user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    p = _get_or_create(db, u.id)
+    if body.full_name is not None:
+        p.full_name_enc = _enc(body.full_name)
+    if body.gender is not None:
+        p.gender = body.gender.strip() or None
+    if body.date_of_birth is not None:
+        p.date_of_birth_enc = _enc(body.date_of_birth)
+    if body.phone is not None:
+        p.phone_enc = _enc(body.phone)
+    if body.wellness_goal is not None:
+        p.wellness_goal = body.wellness_goal.strip() or None
+    if body.emergency is not None:
+        _apply_emergency(p, body.emergency)
+    p.updated_at = datetime.now(timezone.utc)
+    audit_mod.audit(db, action="profile_update", actor=user,
+                    ip=auth.client_ip(request),
+                    resource_type="user", resource_id=u.id, detail={})
+    return _profile_payload(db, u, p)
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+def _settings_payload(db: Session, u: models.User, p: models_admin.UserProfile) -> dict:
+    return {
+        "account": {
+            "full_name": _dec(p.full_name_enc) or (u.username or "").split("@")[0],
+            "email": u.email or (u.username if "@" in (u.username or "") else None),
+            "joined": u.created_at.isoformat() if u.created_at else None,
+        },
+        "prefs": _merge(DEFAULT_PREFS, p.prefs),
+        "consent": _merge(DEFAULT_CONSENT, p.consent),
+        "emergency": _emergency(p),
+    }
+
+
+@router.get("/settings")
+def get_settings(user: dict = Depends(auth.current_user),
+                 db: Session = Depends(get_db)):
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    p = _get_or_create(db, u.id)
+    return _settings_payload(db, u, p)
+
+
+@router.put("/settings")
+def update_settings(body: SettingsIn, request: Request,
+                    user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    p = _get_or_create(db, u.id)
+    if body.prefs is not None:
+        p.prefs = _merge(_merge(DEFAULT_PREFS, p.prefs), body.prefs)
+    if body.consent is not None:
+        p.consent = _merge(_merge(DEFAULT_CONSENT, p.consent), body.consent)
+        p.consent_updated_at = datetime.now(timezone.utc)
+    if body.emergency is not None:
+        _apply_emergency(p, body.emergency)
+    p.updated_at = datetime.now(timezone.utc)
+    return _settings_payload(db, u, p)
+
+
+@router.post("/password")
+def change_password(body: PasswordIn, request: Request,
+                    user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    if not auth.verify_password(body.current_password, u.password_hash):
+        raise HTTPException(400, "Current password is incorrect")
+    if len(body.new_password or "") < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    u.password_hash = auth.hash_password(body.new_password)
+    audit_mod.audit(db, action="password_change", actor=user,
+                    ip=auth.client_ip(request),
+                    resource_type="user", resource_id=u.id, detail={})
+    return {"ok": True}
+
+
+# ── Overview (stats + streak + recent activity) ──────────────────────────────
+def _activity_dates(db: Session, uid, since) -> set:
+    days = set()
+    for created, in (db.query(models.Screening.created_at)
+                     .filter(models.Screening.user_id == uid).all()):
+        if created and created.date() >= since:
+            days.add(created.date())
+    for updated, in (db.query(models.UserLessonProgress.updated_at)
+                     .filter(models.UserLessonProgress.user_id == uid).all()):
+        if updated and updated.date() >= since:
+            days.add(updated.date())
+    for updated, in (db.query(models.Conversation.updated_at)
+                     .filter(models.Conversation.user_id == uid).all()):
+        if updated and updated.date() >= since:
+            days.add(updated.date())
+    return days
+
+
+@router.get("/overview")
+def overview(user: dict = Depends(auth.current_user),
+             db: Session = Depends(get_db)):
+    uid = user["uid"]
+    today = datetime.now(timezone.utc).date()
+
+    screenings = (db.query(models.Screening)
+                  .filter_by(user_id=uid)
+                  .order_by(models.Screening.created_at.desc()).all())
+    last_screening = screenings[0] if screenings else None
+    ai_sessions = db.query(models.Conversation).filter_by(user_id=uid).count()
+    lessons_completed = (db.query(models.UserLessonProgress)
+                         .filter_by(user_id=uid, status="completed").count())
+    resources_saved = db.query(models.SavedResource).filter_by(user_id=uid).count()
+
+    # learning/activity streak — consecutive days (ending today or yesterday)
+    days = _activity_dates(db, uid, today - timedelta(days=60))
+    streak = 0
+    cursor = today if today in days else (today - timedelta(days=1))
+    while cursor in days:
+        streak += 1
+        cursor -= timedelta(days=1)
+    # this week's Mon..Sun activity flags
+    monday = today - timedelta(days=today.weekday())
+    week = [bool((monday + timedelta(days=i)) in days) for i in range(7)]
+
+    # recent activity feed from real events
+    feed = []
+    for s in screenings[:5]:
+        lvl = s.phq9_level or s.gad7_level or "completed"
+        feed.append({"type": "screening", "icon": "shield",
+                     "title": "Completed Screening",
+                     "detail": f"PHQ-9 {s.phq9_score if s.phq9_score is not None else '-'} · "
+                               f"GAD-7 {s.gad7_score if s.gad7_score is not None else '-'} ({lvl})",
+                     "time": s.created_at.isoformat() if s.created_at else None})
+    done = (db.query(models.UserLessonProgress, models.Lesson)
+            .join(models.Lesson, models.Lesson.id == models.UserLessonProgress.lesson_id)
+            .filter(models.UserLessonProgress.user_id == uid)
+            .order_by(models.UserLessonProgress.updated_at.desc()).limit(5).all())
+    for prog, lesson in done:
+        feed.append({"type": "lesson", "icon": "book",
+                     "title": "Completed Lesson" if prog.status == "completed" else "Lesson Progress",
+                     "detail": lesson.title,
+                     "time": prog.updated_at.isoformat() if prog.updated_at else None})
+    convos = (db.query(models.Conversation).filter_by(user_id=uid)
+              .order_by(models.Conversation.updated_at.desc()).limit(5).all())
+    for c in convos:
+        feed.append({"type": "chat", "icon": "chat",
+                     "title": "AI Support Conversation", "detail": c.title,
+                     "time": c.updated_at.isoformat() if c.updated_at else None})
+    feed = [f for f in feed if f["time"]]
+    feed.sort(key=lambda f: f["time"], reverse=True)
+
+    return {
+        "screenings_completed": len(screenings),
+        "last_screening_at": last_screening.created_at.isoformat() if last_screening and last_screening.created_at else None,
+        "ai_sessions": ai_sessions,
+        "lessons_completed": lessons_completed,
+        "resources_saved": resources_saved,
+        "streak": streak,
+        "week": week,
+        "recent_activity": feed[:8],
+    }
+
+
+# ── Saved resources (bookmarks) ──────────────────────────────────────────────
+@router.get("/saved-resources")
+def saved_resources(user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    rows = (db.query(models.Resource)
+            .join(models.SavedResource,
+                  models.SavedResource.resource_id == models.Resource.id)
+            .filter(models.SavedResource.user_id == user["uid"])
+            .order_by(models.SavedResource.created_at.desc()).all())
+    return {"resources": [{
+        "id": str(r.id), "title": r.title, "type": r.type,
+        "category": r.category, "duration": r.duration,
+        "urgent": bool(r.urgent) or r.status == "urgent",
+    } for r in rows]}
+
+
+@router.post("/saved-resources/{rid}")
+def save_resource(rid: str, user: dict = Depends(auth.current_user),
+                  db: Session = Depends(get_db)):
+    r = db.query(models.Resource).filter_by(id=rid).first()
+    if not r:
+        raise HTTPException(404, "Resource not found")
+    exists = (db.query(models.SavedResource)
+              .filter_by(user_id=user["uid"], resource_id=rid).first())
+    if not exists:
+        db.add(models.SavedResource(user_id=user["uid"], resource_id=rid))
+    return {"ok": True, "saved": True}
+
+
+@router.delete("/saved-resources/{rid}")
+def unsave_resource(rid: str, user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    (db.query(models.SavedResource)
+     .filter_by(user_id=user["uid"], resource_id=rid).delete())
+    return {"ok": True, "saved": False}

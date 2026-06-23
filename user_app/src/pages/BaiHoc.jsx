@@ -103,15 +103,7 @@ function TopicArt({ type, color }) {
   }
 }
 
-const STREAK_DAYS = [
-  { label: "Mon", done: true },
-  { label: "Tue", done: true },
-  { label: "Wed", done: true },
-  { label: "Thu", done: true },
-  { label: "Fri", done: true },
-  { label: "Sat", done: true },
-  { label: "Sun", done: false },
-];
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const TOOLS = [
   { icon: "✏️",  title: "Emotion Journal",      sub: "Record your feelings every day" },
@@ -151,6 +143,7 @@ export default function BaiHoc() {
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState({});   // { lessonId: {progress_pct, completed_steps, status} }
   const [openLesson, setOpenLesson] = useState(null);   // full lesson being viewed
+  const [overview, setOverview] = useState(null);   // streak / week from real activity
 
   useEffect(() => {
     let alive = true;
@@ -161,6 +154,7 @@ export default function BaiHoc() {
     api.lessonProgress()
       .then((r) => { if (alive) setProgress(r.progress || {}); })
       .catch(() => {});
+    api.myOverview().then((o) => { if (alive) setOverview(o); }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -191,6 +185,15 @@ export default function BaiHoc() {
     };
   });
   const filtered = active === "all" ? cards : cards.filter((t) => t.cat === active);
+
+  // Suggested = a lesson in progress, else the first not-yet-started, else first.
+  const suggested = cards.find((c) => c.progress > 0 && c.progress < 100)
+    || cards.find((c) => c.progress === 0)
+    || cards[0]
+    || null;
+
+  const streak = overview?.streak ?? 0;
+  const week = overview?.week || Array(7).fill(false);
 
   return (
     <div className="bh-layout">
@@ -298,34 +301,38 @@ export default function BaiHoc() {
             <div className="bh-suggest-title">Suggested for you</div>
             <Mascot variant="reading" size={84} />
           </div>
-          <div className="bh-suggest-label">Next lesson</div>
-          <div className="bh-suggest-lesson">4-7-8 Breathing</div>
+          <div className="bh-suggest-label">{suggested && suggested.progress > 0 ? "Continue" : "Next lesson"}</div>
+          <div className="bh-suggest-lesson">{suggested ? suggested.title : "Explore a lesson"}</div>
           <p className="bh-suggest-desc">
-            A breathing technique that helps you relax and reduce stress right now.
+            {suggested?.desc || "Pick a CBT lesson to start building positive habits today."}
           </p>
           <div className="bh-suggest-meta">
-            <span>🕐 10 min</span>
-            <span>📊 Easy</span>
+            <span>🕐 {suggested?.time || "—"}</span>
+            {suggested && <span>📊 {suggested.progress}%</span>}
           </div>
-          <button className="bh-btn-primary bh-btn-full">Start now →</button>
+          <button className="bh-btn-primary bh-btn-full"
+            disabled={!suggested}
+            onClick={() => suggested && setOpenLesson(suggested.lesson)}>
+            {suggested && suggested.progress > 0 ? "Continue →" : "Start now →"}
+          </button>
         </div>
 
         {/* Streak card */}
         <div className="bh-panel">
           <div className="bh-panel-title">Your learning streak</div>
-          <div className="bh-streak-count">🔥 <strong>7 days in a row</strong></div>
+          <div className="bh-streak-count">🔥 <strong>{streak} {streak === 1 ? "day" : "days"} in a row</strong></div>
           <div className="bh-streak-days">
-            {STREAK_DAYS.map((d, i) => (
+            {WEEKDAY_LABELS.map((label, i) => (
               <div key={i} className="bh-streak-day">
-                <div className={`bh-streak-dot ${d.done ? "done" : ""}`}>{d.done ? "✓" : ""}</div>
-                <span className="bh-streak-lbl">{d.label}</span>
+                <div className={`bh-streak-dot ${week[i] ? "done" : ""}`}>{week[i] ? "✓" : ""}</div>
+                <span className="bh-streak-lbl">{label}</span>
               </div>
             ))}
           </div>
           <p className="bh-streak-note">
-            Keep your streak going to build positive habits!
+            {streak > 0 ? "Keep your streak going to build positive habits!"
+                        : "Complete a lesson or check-in today to start a streak!"}
           </p>
-          <button className="bh-link">View learning history →</button>
         </div>
 
         {/* Tools card */}

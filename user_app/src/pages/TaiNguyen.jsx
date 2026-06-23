@@ -164,6 +164,9 @@ export default function TaiNguyen() {
       .then((r) => { if (alive) setItems((r.resources || []).map(toCard)); })
       .catch(() => { if (alive) setItems([]); })
       .finally(() => { if (alive) setLoading(false); });
+    api.savedResources()
+      .then((r) => { if (alive) setSavedItems(new Set((r.resources || []).map((x) => x.id))); })
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -177,11 +180,20 @@ export default function TaiNguyen() {
   const savedResources = items.filter((resource) => savedItems.has(resource.id));
 
   function toggleSave(id) {
+    const isSaved = savedItems.has(id);
     setSavedItems((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (isSaved) next.delete(id); else next.add(id);
       return next;
+    });
+    const call = isSaved ? api.unsaveResource(id) : api.saveResource(id);
+    call.catch(() => {
+      // revert on failure
+      setSavedItems((prev) => {
+        const next = new Set(prev);
+        if (isSaved) next.add(id); else next.delete(id);
+        return next;
+      });
     });
   }
 

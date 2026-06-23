@@ -125,4 +125,16 @@ export const api = {
     req(`/my/appointments/${aid}`, { method: "PATCH", body }),
   cancelAppointment: (aid) =>
     req(`/my/appointments/${aid}`, { method: "DELETE" }),
+
+  // ---- profile / settings / overview (real self-service data) ----
+  myProfile: () => req("/me/profile"),
+  updateProfile: (body) => req("/me/profile", { method: "PUT", body }),
+  mySettings: () => req("/me/settings"),
+  updateSettings: (body) => req("/me/settings", { method: "PUT", body }),
+  changePassword: (current_password, new_password) =>
+    req("/me/password", { method: "POST", body: { current_password, new_password } }),
+  myOverview: () => req("/me/overview"),
+  savedResources: () => req("/me/saved-resources"),
+  saveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "POST" }),
+  unsaveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "DELETE" }),
 };

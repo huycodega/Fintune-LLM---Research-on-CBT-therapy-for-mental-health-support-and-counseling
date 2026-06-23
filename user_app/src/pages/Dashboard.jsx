@@ -51,12 +51,22 @@ const FEATURED_LESSONS = [
   { icon: "play",    iconBg: "#FFF0E6", iconColor: "#F59E0B", title: "Meditation for Beginners",             type: "Video",   duration: "12 min" },
 ];
 
-const ACTIVITY = [
-  { icon: "shield", iconBg: "#E9F8F2", iconColor: "#2BA37F", text: "Mental Screening",         date: "14/06/2024 09:24", status: "Medium",    type: "warn" },
-  { icon: "audio",  iconBg: "#EEF4FF", iconColor: "#4F6BED", text: "4-7-8 Breathing Exercise", date: "12/06/2024 20:15", status: "Completed", type: "ok" },
-  { icon: "bot",    iconBg: "#F3EEFF", iconColor: "#8B5CF6", text: "Chat with AI",             date: "10/06/2024 21:30", status: "Completed", type: "ok" },
-  { icon: "shield", iconBg: "#FFF4E5", iconColor: "#E8920C", text: "Mental Screening",         date: "08/06/2024 08:45", status: "Medium",    type: "warn" },
+const ACTIVITY_STYLE = {
+  screening: { icon: "shield", iconBg: "#E9F8F2", iconColor: "#2BA37F" },
+  lesson:    { icon: "book",   iconBg: "#EEF4FF", iconColor: "#4F6BED" },
+  chat:      { icon: "bot",    iconBg: "#F3EEFF", iconColor: "#8B5CF6" },
+};
+const LESSON_STYLE = [
+  { icon: "book",    iconBg: "#EAF4FF", iconColor: "#4F6BED" },
+  { icon: "audio",   iconBg: "#E9F8F2", iconColor: "#2BA37F" },
+  { icon: "play",    iconBg: "#FFF0E6", iconColor: "#F59E0B" },
 ];
+function fmtActDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }).replace(",", "");
+}
 
 const RISK_MAP = {
   normal:            { bg: "#E6F8EE", color: "#1F9D55", label: "Low" },
@@ -69,9 +79,13 @@ const RISK_MAP = {
 export default function Dashboard({ user, onNav }) {
   const [latest, setLatest] = useState(null);
   const [draft, setDraft] = useState("");
+  const [activity, setActivity] = useState([]);
+  const [lessons, setLessons] = useState([]);
 
   useEffect(() => {
     api.latestScreening().catch(() => null).then(setLatest);
+    api.myOverview().then((o) => setActivity(o?.recent_activity || [])).catch(() => {});
+    api.lessons().then((r) => setLessons(r?.lessons || [])).catch(() => {});
   }, []);
 
   const risk = RISK_MAP[latest?.phq9_level] || RISK_MAP.moderate;
@@ -173,18 +187,21 @@ export default function Dashboard({ user, onNav }) {
               <button className="block-link" type="button" onClick={() => onNav("baihoc")}>View All →</button>
             </div>
             <div className="featured-list">
-              {FEATURED_LESSONS.map((l) => (
-                <button key={l.title} className="featured-item" type="button" onClick={() => onNav("baihoc")}>
-                  <div className="featured-icon" style={{ background: l.iconBg, color: l.iconColor }}>
-                    <SvgIcon name={l.icon} size={20} />
-                  </div>
-                  <div className="featured-body">
-                    <div className="featured-title">{l.title}</div>
-                    <div className="featured-meta">{l.type} · {l.duration}</div>
-                  </div>
-                  <span className="featured-arrow">›</span>
-                </button>
-              ))}
+              {(lessons.length ? lessons.slice(0, 3) : FEATURED_LESSONS).map((l, i) => {
+                const s = LESSON_STYLE[i % LESSON_STYLE.length];
+                return (
+                  <button key={l.id || l.title} className="featured-item" type="button" onClick={() => onNav("baihoc")}>
+                    <div className="featured-icon" style={{ background: l.iconBg || s.iconBg, color: l.iconColor || s.iconColor }}>
+                      <SvgIcon name={l.icon || s.icon} size={20} />
+                    </div>
+                    <div className="featured-body">
+                      <div className="featured-title">{l.title}</div>
+                      <div className="featured-meta">{l.category || l.type || "Lesson"} · {l.duration || l.level || "—"}</div>
+                    </div>
+                    <span className="featured-arrow">›</span>
+                  </button>
+                );
+              })}
             </div>
           </section>
         </div>
@@ -235,19 +252,24 @@ export default function Dashboard({ user, onNav }) {
             <button className="block-link" type="button" onClick={() => onNav("hoso")}>View All</button>
           </div>
           <div className="activity-list">
-            {ACTIVITY.map((a, i) => (
-              <div key={`${a.text}-${i}`} className="activity-row">
-                <div className="activity-icon" style={{ background: a.iconBg, color: a.iconColor }}><SvgIcon name={a.icon} size={18} /></div>
-                <div className="activity-main">
-                  <div className="activity-text">{a.text}</div>
-                  <div className="activity-date">{a.date}</div>
+            {activity.length === 0 && (
+              <p className="side-text" style={{ padding: "8px 0" }}>No activity yet — start a screening or chat.</p>
+            )}
+            {activity.map((a, i) => {
+              const s = ACTIVITY_STYLE[a.type] || ACTIVITY_STYLE.screening;
+              return (
+                <div key={i} className="activity-row">
+                  <div className="activity-icon" style={{ background: s.iconBg, color: s.iconColor }}><SvgIcon name={s.icon} size={18} /></div>
+                  <div className="activity-main">
+                    <div className="activity-text">{a.title}</div>
+                    <div className="activity-date">{fmtActDate(a.time)}</div>
+                  </div>
+                  <div className="activity-status ok">
+                    <SvgIcon name="check" size={14} />
+                  </div>
                 </div>
-                <div className={`activity-status ${a.type}`}>
-                  {a.type === "ok" ? <SvgIcon name="check" size={14} /> : <span className="activity-dot" />}
-                  {a.status}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </aside>
