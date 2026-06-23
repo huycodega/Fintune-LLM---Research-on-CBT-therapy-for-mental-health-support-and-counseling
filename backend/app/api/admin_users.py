@@ -257,8 +257,36 @@ def screening_history(uid: str, _: dict = Depends(auth.require_admin),
         "gad7_level": s.gad7_level,
         "mood_score": s.mood_score,
         "note": s.notes,
+        "admin_notes": s.admin_notes or [],
         "status": "completed",
     } for s in rows]}
+
+
+class ScreeningNoteIn(BaseModel):
+    content: str
+
+
+@router.post("/screenings/{sid}/note")
+def add_screening_note(sid: str, body: ScreeningNoteIn, request: Request,
+                       actor: dict = Depends(auth.require_admin),
+                       db: Session = Depends(get_db)):
+    s = db.query(models.Screening).filter_by(id=sid).first()
+    if not s:
+        raise HTTPException(404, "Screening not found")
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(400, "Note content is required")
+    note = {
+        "author": actor.get("username") or "clinician",
+        "content": content,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    # JSONB columns need reassignment for SQLAlchemy to flag the change.
+    s.admin_notes = [*(s.admin_notes or []), note]
+    audit_mod.audit(db, action="screening_note", actor=actor,
+                    ip=auth.client_ip(request),
+                    resource_type="screening", resource_id=s.id, detail={})
+    return {"ok": True, "admin_notes": s.admin_notes}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

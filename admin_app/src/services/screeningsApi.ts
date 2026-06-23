@@ -11,7 +11,6 @@ const LEVEL_LABEL = {
   normal: "Minimal", mild: "Mild", moderate: "Moderate",
   moderately_severe: "Moderately severe", severe: "Severe",
 };
-const notes = new Map();
 
 function ageFrom(dateOfBirth) {
   if (!dateOfBirth) return null;
@@ -62,7 +61,7 @@ function normalize(user, screening) {
     risk_level: riskLevel,
     status,
     answers: screening.answers || (screening.note ? [{ question: "Screening note", answer: screening.note }] : []),
-    note: notes.get(screening.id) || "",
+    notes: screening.admin_notes || [],
     // Clinical interpretation grounded in the validated band (not fabricated).
     ai_assessment: {
       risk_summary: `${bandLabel} ${instrument} — ${isPhq ? "PHQ-9" : "GAD-7"} score ${score}`,
@@ -142,6 +141,7 @@ export const screeningsApi = {
         .map(item => ({ label: new Date(item.screening_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: item.status === "completed" ? 100 : 0 })),
     };
   },
-  addNote: async (id, content) => { notes.set(id, content); return { id, content }; },
+  addNote: async (id, content) =>
+    adminRequest("/screenings/" + id + "/note", { method: "POST", body: { content } }),
   exportCsv: async params => applyFilters(await allRows(), params),
 };

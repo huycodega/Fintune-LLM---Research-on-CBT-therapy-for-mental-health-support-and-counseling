@@ -346,6 +346,10 @@ class Screening(Base):
 
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
+    # Clinician/admin annotations added from the Screening Management page.
+    # List of {author, content, created_at}. NOT the user's own `notes`.
+    admin_notes: Mapped[Optional[list]] = mapped_column(JSONB)
+
 
 Index("idx_screenings_user", Screening.user_id, Screening.created_at.desc())
 

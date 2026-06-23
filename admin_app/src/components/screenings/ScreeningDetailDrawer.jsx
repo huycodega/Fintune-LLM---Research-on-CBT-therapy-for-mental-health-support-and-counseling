@@ -86,6 +86,21 @@ export default function ScreeningDetailDrawer({ open, detail, loading, onClose, 
               </section>
             )}
 
+            {(detail.notes || []).length > 0 && (
+              <section className="sm-drawer-section">
+                <h3>Clinician notes</h3>
+                {detail.notes.map((n, i) => (
+                  <div key={i} className="sm-note-item">
+                    <div className="sm-note-meta">
+                      <b>{n.author || "clinician"}</b>
+                      <span>{fmtDateTime(n.created_at)}</span>
+                    </div>
+                    <p>{n.content}</p>
+                  </div>
+                ))}
+              </section>
+            )}
+
             <div className="sm-drawer-actions">
               <button type="button" className="sm-primary-btn" onClick={onAddNote}>＋ Add note</button>
             </div>
