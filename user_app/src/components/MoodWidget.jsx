@@ -11,6 +11,19 @@ const TREND = {
   stable: { emoji: "➖", text: "Steady",     color: "#64748b" },
 };
 
+// Catmull-Rom → cubic bezier for a smooth (not jagged) line.
+function smoothPath(pts) {
+  if (pts.length < 2) return pts.length ? `M${pts[0].x} ${pts[0].y}` : "";
+  let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 export default function MoodWidget() {
   const [data, setData] = useState(null);   // null = loading
   const [open, setOpen] = useState(true);
@@ -45,8 +58,17 @@ export default function MoodWidget() {
   const n = points.length;
   const x = (i) => (n <= 1 ? PL + innerW / 2 : PL + (i / (n - 1)) * innerW);
   const y = (s) => PT + (1 - Math.max(0, Math.min(100, s)) / 100) * innerH;
-  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.score).toFixed(1)}`).join(" ");
-  const area = n ? `${line} L${x(n - 1).toFixed(1)} ${(PT + innerH).toFixed(1)} L${x(0).toFixed(1)} ${(PT + innerH).toFixed(1)} Z` : "";
+
+  // 3-point moving average → a smooth trend line over the raw points.
+  const maScores = points.map((_, i) => {
+    const sl = points.slice(Math.max(0, i - 1), Math.min(n, i + 2));
+    return sl.reduce((a, b) => a + b.score, 0) / sl.length;
+  });
+  const rawCoords = points.map((p, i) => ({ x: x(i), y: y(p.score) }));
+  const maCoords = maScores.map((sv, i) => ({ x: x(i), y: y(sv) }));
+  const rawLine = rawCoords.map((c, i) => `${i ? "L" : "M"}${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ");
+  const maLine = smoothPath(maCoords);
+  const area = n ? `${maLine} L${x(n - 1).toFixed(1)} ${(PT + innerH).toFixed(1)} L${x(0).toFixed(1)} ${(PT + innerH).toFixed(1)} Z` : "";
   const fmt = (ts) => new Date(ts).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 
   return (
@@ -75,7 +97,9 @@ export default function MoodWidget() {
               <line key={g} className="mood-grid" x1={PL} x2={W - PR} y1={y(g)} y2={y(g)} />
             ))}
             {area && <path className={`mood-area ${shown ? "in" : ""}`} d={area} fill="url(#moodArea)" />}
-            <path className={`mood-line ${shown ? "in" : ""}`} d={line} pathLength="1" fill="none" />
+            {/* faint raw line + bold smoothed moving-average line */}
+            <path className={`mood-line-raw ${shown ? "in" : ""}`} d={rawLine} fill="none" />
+            <path className={`mood-line ${shown ? "in" : ""}`} d={maLine} pathLength="1" fill="none" />
             {points.map((p, i) => (
               <circle key={i} className={`mood-dot ${p.source} ${shown ? "in" : ""}`}
                       cx={x(i)} cy={y(p.score)} r="3.1"

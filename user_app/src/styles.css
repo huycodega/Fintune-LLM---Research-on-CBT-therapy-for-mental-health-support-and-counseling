@@ -6887,6 +6887,9 @@ html, body, #root { overflow-x: hidden; }
 .mood-grid { stroke: #eef2f7; stroke-width: 1; }
 .mood-area { opacity: 0; }
 .mood-area.in { opacity: 1; transition: opacity .9s ease .35s; }
+.mood-line-raw { stroke: #94a3b8; stroke-width: 1.2; stroke-linejoin: round; opacity: 0;
+  stroke-dasharray: 2 3; }
+.mood-line-raw.in { opacity: .35; transition: opacity .7s ease .5s; }
 .mood-line { stroke: #10b981; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
   stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 2px 4px rgba(16,185,129,.25)); }
 .mood-line.in { stroke-dashoffset: 0; transition: stroke-dashoffset 1.15s cubic-bezier(.45,.05,.3,1); }
@@ -6920,8 +6923,9 @@ html, body, #root { overflow-x: hidden; }
 @keyframes mood-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @media (max-width: 860px) { .mood-widget { right: 14px; bottom: 86px; width: 200px; } .mood-widget-pill { right: 14px; bottom: 86px; } }
 @media (prefers-reduced-motion: reduce) {
-  .mood-widget, .mood-widget-pill, .mood-line, .mood-area, .mood-dot { transition: none; }
+  .mood-widget, .mood-widget-pill, .mood-line, .mood-line-raw, .mood-area, .mood-dot { transition: none; }
   .mood-line { stroke-dashoffset: 0; }
   .mood-area, .mood-dot { opacity: 1; transform: none; }
+  .mood-line-raw { opacity: .35; }
   .mood-widget-empty-emoji { animation: none; }
 }

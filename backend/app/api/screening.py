@@ -199,6 +199,25 @@ def screening_today(background: BackgroundTasks,
 _BAND_WELLNESS = {"normal": 90, "mild": 70, "moderate": 50,
                   "moderately_severe": 30, "severe": 15}
 _TRIAGE_WELLNESS = {"L0": 12, "L1": 32, "L2": 58, "L3": 85}
+_SEV_WELLNESS = {"critical": 12, "high": 33, "moderate": 58, "low": 82}
+
+
+def _chat_wellness(triage: Optional[str], analysis: Optional[dict]) -> int:
+    """Per-session wellness (0-100) from the analyzer's emotion/severity, not
+    just the triage level. Base comes from severity (falling back to triage),
+    then each detected negative emotion / cognitive distortion nudges it down —
+    so a chat full of distress scores lower than a calmer one at the same level.
+    """
+    analysis = analysis or {}
+    sev = str(analysis.get("severity") or "").lower()
+    base = _SEV_WELLNESS.get(sev)
+    if base is None:
+        base = _TRIAGE_WELLNESS.get(triage, 60)
+    emotions = [e for e in str(analysis.get("emotion") or "").split(",") if e.strip()]
+    distortions = [d for d in str(analysis.get("cognitive_distortions") or "").split(",")
+                   if d.strip() and "none" not in d.lower()]
+    penalty = min(22, 4 * len(emotions) + 3 * len(distortions))
+    return max(5, min(95, int(base - penalty)))
 
 
 @router.get("/screening/emotional-trend")
@@ -234,7 +253,7 @@ def emotional_trend(days: int = 30,
         if not s.triage_level:
             continue
         points.append({"ts": _as_utc(s.created_at).isoformat(),
-                       "score": _TRIAGE_WELLNESS.get(s.triage_level, 60),
+                       "score": _chat_wellness(s.triage_level, s.analysis),
                        "source": "chat"})
 
     points.sort(key=lambda p: p["ts"])
