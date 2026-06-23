@@ -93,6 +93,7 @@ export const api = {
     req(`/screening/history?limit=${limit}`),
   latestScreening: () => req("/screening/latest"),
   screeningToday: () => req("/screening/today"),
+  emotionalTrend: (days = 30) => req(`/screening/emotional-trend?days=${days}`),
 
   // ---- learning content (BaiHoc / TaiNguyen) ----
   lessons: (params = {}) => {

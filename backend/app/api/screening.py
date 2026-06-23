@@ -3,7 +3,7 @@ Screening API — periodic PHQ-9 / GAD-7 mental health check-ins.
 Users can submit results multiple times; history is returned newest-first.
 """
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 
 
@@ -188,3 +188,65 @@ def screening_today(background: BackgroundTasks,
         "days_since_last": days_since,
         "ai": bool(plan.ai_intro),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /screening/emotional-trend — a single wellness timeline (0–100, higher is
+# better) built from the user's REAL history: every chat session (the signal
+# behind their memory) AND every screening, ordered in time. Lets the app show
+# how the user's emotional state is improving across each touch-point.
+# ─────────────────────────────────────────────────────────────────────────────
+_BAND_WELLNESS = {"normal": 90, "mild": 70, "moderate": 50,
+                  "moderately_severe": 30, "severe": 15}
+_TRIAGE_WELLNESS = {"L0": 12, "L1": 32, "L2": 58, "L3": 85}
+
+
+@router.get("/screening/emotional-trend")
+def emotional_trend(days: int = 30,
+                    user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    uid = user["uid"]
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    points = []
+
+    # Screenings → wellness from self-rated mood, else from the worse band.
+    screenings = (db.query(models.Screening)
+                  .filter(models.Screening.user_id == uid,
+                          models.Screening.created_at >= cutoff).all())
+    for s in screenings:
+        if s.mood_score is not None:
+            score = int(max(0, min(10, s.mood_score)) * 10)
+        else:
+            bands = [_BAND_WELLNESS.get(s.phq9_level), _BAND_WELLNESS.get(s.gad7_level)]
+            bands = [b for b in bands if b is not None]
+            if not bands:
+                continue
+            score = min(bands)
+        points.append({"ts": _as_utc(s.created_at).isoformat(),
+                       "score": score, "source": "screening"})
+
+    # Chat sessions → wellness from the safety triage level (these are exactly
+    # the turns that build the user's memory).
+    sessions = (db.query(models.Session)
+                .filter(models.Session.user_id == uid,
+                        models.Session.created_at >= cutoff).all())
+    for s in sessions:
+        if not s.triage_level:
+            continue
+        points.append({"ts": _as_utc(s.created_at).isoformat(),
+                       "score": _TRIAGE_WELLNESS.get(s.triage_level, 60),
+                       "source": "chat"})
+
+    points.sort(key=lambda p: p["ts"])
+    points = points[-30:]   # cap for a clean sparkline
+
+    direction, change = "stable", 0
+    if len(points) >= 2:
+        seg = max(1, len(points) // 3)
+        early = sum(p["score"] for p in points[:seg]) / seg
+        late = sum(p["score"] for p in points[-seg:]) / seg
+        change = round(late - early)
+        direction = "up" if change > 4 else "down" if change < -4 else "stable"
+
+    return {"points": points, "direction": direction, "change": change,
+            "latest": points[-1]["score"] if points else None}

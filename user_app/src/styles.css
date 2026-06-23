@@ -6882,16 +6882,27 @@ html, body, #root { overflow-x: hidden; }
 .mood-widget-title { font-size: 12.5px; font-weight: 700; color: #334155; letter-spacing: .01em; }
 .mood-widget-min { border: 0; background: none; cursor: pointer; color: #94a3b8; font-size: 20px; line-height: 1; padding: 0 6px; border-radius: 6px; transition: background .15s, color .15s; }
 .mood-widget-min:hover { background: #f1f5f9; color: #475569; }
-.mood-chart { display: flex; align-items: flex-end; gap: 7px; height: 88px; padding: 4px 2px 0; }
-.mood-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; }
-.mood-bar { width: 100%; max-width: 18px; min-height: 4px; border-radius: 7px 7px 3px 3px;
-  box-shadow: 0 2px 7px rgba(16,24,40,.12);
-  transition: height .8s cubic-bezier(.22,.9,.32,1); }
-.mood-col small { font-size: 9px; color: #9aa6b8; }
-.mood-widget-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px;
-  border-top: 1px solid #eef2f7; font-size: 12px; color: #475569; }
-.mood-widget-foot b { color: #1f2a38; }
-.mood-foot-emoji { font-size: 20px; animation: mood-bob 3.4s ease-in-out infinite; }
+/* line chart with grid */
+.mood-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.mood-grid { stroke: #eef2f7; stroke-width: 1; }
+.mood-area { opacity: 0; }
+.mood-area.in { opacity: 1; transition: opacity .9s ease .35s; }
+.mood-line { stroke: #10b981; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 2px 4px rgba(16,185,129,.25)); }
+.mood-line.in { stroke-dashoffset: 0; transition: stroke-dashoffset 1.15s cubic-bezier(.45,.05,.3,1); }
+.mood-dot { opacity: 0; transform: scale(0); transform-box: fill-box; transform-origin: center;
+  stroke: #fff; stroke-width: 1.5; }
+.mood-dot.in { opacity: 1; transform: scale(1);
+  transition: opacity .3s ease, transform .4s cubic-bezier(.34,1.56,.64,1); }
+.mood-dot.chat { fill: #6366f1; }
+.mood-dot.screening { fill: #14b8a6; }
+.mood-widget-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 10px; padding-top: 9px; border-top: 1px solid #eef2f7; font-size: 11px; color: #64748b; }
+.mood-trend-pill { font-weight: 700; font-size: 11.5px; }
+.mood-legend { display: inline-flex; align-items: center; gap: 5px; color: #94a3b8; }
+.mood-legend-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-left: 4px; }
+.mood-legend-dot.chat { background: #6366f1; }
+.mood-legend-dot.screening { background: #14b8a6; }
 .mood-widget-empty { text-align: center; padding: 8px 4px 4px; }
 .mood-widget-empty-emoji { font-size: 28px; display: block; animation: mood-bob 3.4s ease-in-out infinite; }
 .mood-widget-empty p { font-size: 11.5px; color: #94a3b8; margin: 8px 0 0; line-height: 1.55; }
@@ -6909,6 +6920,8 @@ html, body, #root { overflow-x: hidden; }
 @keyframes mood-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @media (max-width: 860px) { .mood-widget { right: 14px; bottom: 86px; width: 200px; } .mood-widget-pill { right: 14px; bottom: 86px; } }
 @media (prefers-reduced-motion: reduce) {
-  .mood-widget, .mood-bar, .mood-widget-pill { transition: none; }
-  .mood-foot-emoji, .mood-widget-empty-emoji { animation: none; }
+  .mood-widget, .mood-widget-pill, .mood-line, .mood-area, .mood-dot { transition: none; }
+  .mood-line { stroke-dashoffset: 0; }
+  .mood-area, .mood-dot { opacity: 1; transform: none; }
+  .mood-widget-empty-emoji { animation: none; }
 }
