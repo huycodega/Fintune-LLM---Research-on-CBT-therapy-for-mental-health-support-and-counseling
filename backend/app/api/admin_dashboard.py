@@ -88,30 +88,44 @@ def charts(_: dict = Depends(auth.require_admin), db: DbSession = Depends(get_db
         closed = db.query(models.Session).filter(
             models.Session.triage_level.in_(_CASE_LEVELS),
             models.Session.status.in_(("answered", "auto_sent", "rejected"))).count()
-        return [{"label": "Mới", "value": opn},
-                {"label": "Theo dõi", "value": 0},
-                {"label": "Đóng", "value": closed}]
+        return [{"label": "New", "value": opn},
+                {"label": "Monitoring", "value": 0},
+                {"label": "Closed", "value": closed}]
 
     def moderation_series():
         pending = db.query(models.ReviewQueue).filter(models.ReviewQueue.resolved_at.is_(None)).count()
         resolved = db.query(models.ReviewQueue).filter(models.ReviewQueue.resolved_at.isnot(None)).count()
-        return [{"label": "Chờ", "value": pending}, {"label": "Đã xử lý", "value": resolved}]
+        return [{"label": "Pending", "value": pending}, {"label": "Resolved", "value": resolved}]
+
+    def _daily(query_for_date):
+        out = []
+        for i in range(6, -1, -1):
+            d = (datetime.now(timezone.utc) - timedelta(days=i)).date()
+            out.append({"label": d.strftime("%d/%m"), "value": int(query_for_date(d))})
+        return out
 
     def screening_trend():
-        out = []
-        for i in range(5, -1, -1):
-            d = (datetime.now(timezone.utc) - timedelta(days=i)).date()
-            n = db.query(models.Screening).filter(func.date(models.Screening.created_at) == d).count()
-            out.append({"label": d.strftime("%d/%m"), "value": int(n)})
-        return out
+        return _daily(lambda d: db.query(models.Screening)
+                      .filter(func.date(models.Screening.created_at) == d).count())
+
+    def resource_usage():
+        # bookmarks saved per day — real user resource engagement
+        return _daily(lambda d: db.query(models.SavedResource)
+                      .filter(func.date(models.SavedResource.created_at) == d).count())
+
+    def cbt_completion():
+        # lessons completed per day
+        return _daily(lambda d: db.query(models.UserLessonProgress)
+                      .filter(models.UserLessonProgress.status == "completed",
+                              func.date(models.UserLessonProgress.updated_at) == d).count())
 
     return {
         "screening_trend": {"available": True, "series": _safe(screening_trend, [])},
         "risk_distribution": {"available": True, "series": _safe(risk_series, [])},
         "case_status_distribution": {"available": True, "series": _safe(case_status_series, [])},
         "ai_moderation_statistics": {"available": True, "series": _safe(moderation_series, [])},
-        "resource_usage": {"available": False, "series": []},
-        "cbt_completion": {"available": False, "series": []},
+        "resource_usage": {"available": True, "series": _safe(resource_usage, [])},
+        "cbt_completion": {"available": True, "series": _safe(cbt_completion, [])},
     }
 
 

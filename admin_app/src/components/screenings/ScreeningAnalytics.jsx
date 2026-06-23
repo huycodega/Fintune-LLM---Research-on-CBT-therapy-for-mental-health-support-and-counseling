@@ -25,13 +25,20 @@ export default function ScreeningAnalytics({ data }) {
         <h3>Completion trend</h3>
         {trend.length === 0 ? (
           <p className="sm-page-info">No data yet.</p>
-        ) : (
-          <div className="sm-line-chart-wrap">
-            <div className="sm-chart-xaxis">
-              {trend.map((t, i) => <span key={i}>{t.label}</span>)}
+        ) : (() => {
+          const max = Math.max(...trend.map((t) => t.value || 0), 1);
+          return (
+            <div className="sm-trend-chart">
+              {trend.map((t, i) => (
+                <div className="sm-trend-col" key={i} title={`${t.label}: ${t.value}`}>
+                  <b>{t.value}</b>
+                  <span style={{ height: `${Math.max(8, ((t.value || 0) / max) * 100)}%` }} />
+                  <small>{t.label}</small>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </section>
   );

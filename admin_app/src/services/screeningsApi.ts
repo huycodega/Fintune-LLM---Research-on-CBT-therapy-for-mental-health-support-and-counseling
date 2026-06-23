@@ -37,7 +37,12 @@ function normalize(user, screening) {
   // Risk comes from the screening's OWN validated severity band — the worse of
   // the two instruments present — NOT from the user's chat crisis count.
   const risks = [phqLevel, gadLevel].filter(Boolean).map((l) => LEVEL_RISK[l] || "L3");
-  const riskLevel = risks.length ? risks.slice().sort()[0] : "L3";  // L0<L1<L2<L3
+  let riskLevel = risks.length ? risks.slice().sort()[0] : "L3";  // L0<L1<L2<L3
+  // PHQ-9 item 9 (thoughts of self-harm) endorsed → crisis/emergency (L0),
+  // mirroring the Reports classifier so both views agree.
+  const phqAnswers = Array.isArray(screening.phq9_answers) ? screening.phq9_answers : [];
+  const selfHarm = phqAnswers.length >= 9 && Number(phqAnswers[8]) > 0;
+  if (selfHarm) riskLevel = "L0";
   const primaryLevel = isPhq ? phqLevel : gadLevel;
   const bandLabel = LEVEL_LABEL[primaryLevel] || "Screening";
   const instrument = isPhq ? "depression" : "anxiety";
@@ -64,9 +69,13 @@ function normalize(user, screening) {
     notes: screening.admin_notes || [],
     // Clinical interpretation grounded in the validated band (not fabricated).
     ai_assessment: {
-      risk_summary: `${bandLabel} ${instrument} — ${isPhq ? "PHQ-9" : "GAD-7"} score ${score}`,
-      emotions: [`${bandLabel} ${instrument}`],
-      recommendation: riskLevel === "L1"
+      risk_summary: selfHarm
+        ? `Critical — PHQ-9 item 9 (thoughts of self-harm) endorsed (score ${score})`
+        : `${bandLabel} ${instrument} — ${isPhq ? "PHQ-9" : "GAD-7"} score ${score}`,
+      emotions: selfHarm ? ["Self-harm risk"] : [`${bandLabel} ${instrument}`],
+      recommendation: selfHarm
+        ? "Thoughts of self-harm were endorsed — prioritise immediate clinician review and safety follow-up."
+        : riskLevel === "L1"
         ? "Score in the elevated range — assign a specialist and arrange an early follow-up."
         : riskLevel === "L2"
         ? "Moderate range — monitor symptoms and recommend a CBT follow-up."
@@ -133,12 +142,21 @@ export const screeningsApi = {
   },
   analytics: async () => {
     const rows = await allRows();
+    // Completion trend = number of screenings completed per day (real volume).
+    const byDay = {};
+    rows.forEach((item) => {
+      const key = new Date(item.screening_date).toISOString().slice(0, 10);
+      byDay[key] = (byDay[key] || 0) + 1;
+    });
+    const completion_trend = Object.keys(byDay).sort().map((key) => ({
+      label: new Date(key).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+      value: byDay[key],
+    }));
     return {
       risk_distribution: ["L0", "L1", "L2", "L3"].map(level => ({
         label: level, value: rows.filter(item => item.risk_level === level).length,
       })),
-      completion_trend: rows.slice().sort((a, b) => new Date(a.screening_date) - new Date(b.screening_date))
-        .map(item => ({ label: new Date(item.screening_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: item.status === "completed" ? 100 : 0 })),
+      completion_trend,
     };
   },
   addNote: async (id, content) =>

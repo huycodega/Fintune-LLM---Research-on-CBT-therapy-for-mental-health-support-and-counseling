@@ -16,15 +16,21 @@ function MiniChart({ chart }) {
   const series = chart.series || [];
   if (!series.length) return <div className="chart-unavailable">No data in this period</div>;
   const max = Math.max(...series.map(valueOf), 1);
+  const allZero = series.every((s) => valueOf(s) === 0);
   return (
     <div className="mini-chart">
-      {series.slice(-12).map((item, index) => (
-        <div className="mini-chart-column" key={item.label || item.date || index}
-             title={`${item.label || item.date}: ${valueOf(item)}`}>
-          <span style={{ height: `${Math.max(5, valueOf(item) / max * 100)}%` }} />
-          <small>{item.label || item.date || ""}</small>
-        </div>
-      ))}
+      {series.slice(-12).map((item, index) => {
+        const v = valueOf(item);
+        return (
+          <div className="mini-chart-column" key={item.label || item.date || index}
+               title={`${item.label || item.date}: ${v}`}>
+            <b className="mini-chart-val">{v}</b>
+            <span className={v === max && !allZero ? "is-peak" : ""}
+                  style={{ height: `${allZero ? 4 : Math.max(6, (v / max) * 100)}%` }} />
+            <small>{item.label || item.date || ""}</small>
+          </div>
+        );
+      })}
     </div>
   );
 }
