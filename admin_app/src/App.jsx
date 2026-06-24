@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getUser, clearSession } from "./api.js";
 import Login from "./pages/Login.jsx";
 import AppShell from "./admin/AppShell.jsx";
@@ -39,14 +39,36 @@ const PAGE_META = {
   screening:  { title: "Screening", sub: "PHQ-9 / GAD-7 results" },
 };
 
+// Clean URL ↔ admin page id.
+const PAGE_PATHS = {
+  overview: "/", users: "/users", casemgmt: "/cases", moderation: "/moderation",
+  experts: "/psychologists", screening: "/screening", lessons: "/lessons",
+  resources: "/resources", crisis: "/crisis", reports: "/reports",
+  settings: "/settings", logs: "/logs",
+};
+const PATH_PAGES = Object.fromEntries(
+  Object.entries(PAGE_PATHS).map(([id, p]) => [p, id]));
+
 export default function App() {
   const [user, setUser] = useState(getUser());
-  const [page, setPage] = useState("overview");
+  const [path, setPath] = useState(() => window.location.pathname);
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState(null);
 
+  function go(p) {
+    if (window.location.pathname !== p) window.history.pushState({}, "", p);
+    setPath(p);
+  }
+  const page = PATH_PAGES[path] || "overview";
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   function logout() { clearSession(); setUser(null); }
-  function nav(p, userId = null) { setPage(p); setSearch(""); setSelectedUserId(userId); }
+  function nav(p, userId = null) { setSearch(""); setSelectedUserId(userId); go(PAGE_PATHS[p] || "/"); }
 
   if (!user) return <Login onAuth={setUser} />;
 

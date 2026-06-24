@@ -34,6 +34,15 @@ const TOPBAR_TABS = [
   { id: "chat", icon: "bot", label: "AI Support" },
 ];
 
+// Clean URL ↔ internal page id.
+const PAGE_PATHS = {
+  dashboard: "/dashboard", sangloc: "/screening", chat: "/chat",
+  baihoc: "/lessons", tainguyen: "/resources", tuvan: "/counselling",
+  hoso: "/profile", caidat: "/settings",
+};
+const PATH_PAGES = Object.fromEntries(
+  Object.entries(PAGE_PATHS).map(([id, p]) => [p, id]));
+
 function NavSvgIcon({ name }) {
   const common = {
     width: 22,
@@ -233,11 +242,23 @@ function Sidebar({ activePage, onNav, open, onClose }) {
 export default function App() {
   const [user, setUser] = useState(getUser());
   const [stage, setStage] = useState("loading");
-  const [activePage, setActivePage] = useState("dashboard");
-  const [showLogin, setShowLogin] = useState(false);
+  const [path, setPath] = useState(() => window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
-  // Navigate + always close the mobile drawer.
-  const navTo = (id) => { setActivePage(id); setNavOpen(false); };
+
+  // URL ↔ page. pushState gives real routes (/login, /dashboard…) without a
+  // router dep; popstate keeps the back/forward buttons working.
+  function go(p) {
+    if (window.location.pathname !== p) window.history.pushState({}, "", p);
+    setPath(p);
+  }
+  const activePage = PATH_PAGES[path] || "dashboard";
+  const navTo = (id) => { setNavOpen(false); go(PAGE_PATHS[id] || "/dashboard"); };
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     if (!user) { setStage("landing"); return; }
@@ -249,6 +270,12 @@ export default function App() {
       })
       .catch(() => setStage("app"));
   }, [user]);
+
+  // Once inside the app, keep the URL on a real page path.
+  useEffect(() => {
+    if (stage === "app" && !PATH_PAGES[path]) go("/dashboard");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, path]);
 
   // Soft staggered reveal of the outermost cards whenever the page changes.
   // Runs before paint (useLayoutEffect) so cards start hidden — no flicker.
@@ -280,18 +307,22 @@ export default function App() {
     };
   }, [activePage, stage]);
 
-  function handleAuth(u) { setUser(u); setShowLogin(false); }
+  function handleAuth(u) { setUser(u); go("/dashboard"); }
 
   function logout() {
     clearSession();
     setUser(null);
     setStage("landing");
-    setShowLogin(false);
-    setActivePage("dashboard");
+    go("/");
   }
 
-  if (stage === "landing" && !showLogin) return <Landing onSignIn={() => setShowLogin(true)} />;
-  if (!user || showLogin) return <Login onAuth={handleAuth} onBack={() => setShowLogin(false)} />;
+  // ── Pre-app routes (not signed in) ──
+  if (!user) {
+    if (path === "/login" || path === "/register")
+      return <Login initialMode={path === "/register" ? "register" : "login"}
+                    onAuth={handleAuth} onBack={() => go("/")} onNavigate={go} />;
+    return <Landing onSignIn={() => go("/login")} />;
+  }
   if (stage === "loading") return null;
   if (stage === "consent") return <Consent onDone={() => setStage("intake")} />;
   if (stage === "intake")  return <Intake  onDone={() => setStage("app")} />;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api, setSession } from "../api.js";
 import Register from "./Register.jsx";
 import AuthLayout from "../components/AuthLayout.jsx";
@@ -36,17 +36,23 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export default function Login({ onAuth, onBack }) {
-  const [mode, setMode] = useState("login"); // login | register
+export default function Login({ onAuth, onBack, initialMode = "login", onNavigate }) {
+  const [mode, setMode] = useState(initialMode); // login | register
   const [username, setU] = useState("");
   const [password, setP] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Keep mode in sync with the URL (/login vs /register, incl. back/forward).
+  useEffect(() => { setMode(initialMode); }, [initialMode]);
+
   if (mode === "register") {
     return (
-      <Register onAuth={onAuth} onBackToLogin={() => setMode("login")} />
+      <Register
+        onAuth={onAuth}
+        onBackToLogin={() => { setMode("login"); onNavigate && onNavigate("/login"); }}
+      />
     );
   }
 
@@ -132,7 +138,7 @@ export default function Login({ onAuth, onBack }) {
       </div>
 
       <button type="button" className="auth-google-btn"
-        onClick={() => setMode("register")}>
+        onClick={() => { setMode("register"); onNavigate && onNavigate("/register"); }}>
         New here? <strong>Create an account with Gmail</strong>
       </button>
     </AuthLayout>
