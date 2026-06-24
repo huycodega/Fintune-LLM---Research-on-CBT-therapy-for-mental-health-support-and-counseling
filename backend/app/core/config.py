@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     agent_max_steps: int = 6
     agent_temperature: float = 0.3   # low: orchestrator should route, not riff
 
+    # ---- scope router ----
+    # Off-topic / "about MindCare" questions on a ROUTINE (L3) turn get a short
+    # redirect/FYI instead of the CBT pipeline. Runs AFTER safety, only on L3,
+    # and biases to "personal" so it never blocks a real support message.
+    scope_router_enabled: bool = True
+
     # ---- reranker offload to Modal (optional) ----
     # bge-reranker-v2-m3 is ~2.3 GB; loading it locally alongside the embedder
     # OOMs a low-RAM container. When MODAL_RERANKER_ENDPOINT is set (or derived

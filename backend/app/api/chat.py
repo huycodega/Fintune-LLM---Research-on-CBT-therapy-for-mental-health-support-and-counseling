@@ -31,7 +31,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
-    moderation_store,
+    moderation_store, scope_router,
 )
 
 
@@ -349,6 +349,37 @@ def chat(body: ChatIn, request: Request,
                          "anything feels urgent while you wait, the resources "
                          "below are here for you any time."),
         }
+
+    # ---- Scope gate (L3 routine only) ----
+    # An off-topic or "about MindCare" question on a SAFE, routine turn doesn't
+    # need the CBT pipeline — answer it directly and skip the agent. Only ever
+    # runs on L3 (L0/L1/L2 returned above) and biases to "personal", so a real
+    # support message is never redirected.
+    if settings.scope_router_enabled and level == "L3":
+        scope = scope_router.classify(text)
+        if scope != "personal":
+            reply = scope_router.reply_for(scope)
+            sess = models.Session(
+                **base, status="answered", analysis={"scope": scope},
+                final_reply_enc=encrypt_phi(reply),
+                final_technique=f"scope_{scope}",
+                completed_at=datetime.now(timezone.utc))
+            db.add(sess); db.flush()
+            moderation_store.record_ai_message(
+                db, convo, user_message, reply, level, "not_required",
+                confidence=triage.get("confidence"), model_name="scope_router")
+            audit_mod.audit(db, action=f"scope_{scope}", actor=user, ip=ip,
+                             resource_type="session", resource_id=sess.id,
+                             detail={"scope": scope})
+            return {
+                "session_id": str(sess.id),
+                "conversation_id": str(convo.id),
+                "outcome": "answered", "triage": triage,
+                "final": {"technique": f"scope_{scope}", "response": reply},
+                "drafts": [{"idx": 0, "technique": f"scope_{scope}",
+                            "response": reply}],
+                "mode": "scope_router",
+            }
 
     # ---- L2 / L3: full pipeline ----
     analysis = analyzer.analyze(text, severity=triage["severity"])
