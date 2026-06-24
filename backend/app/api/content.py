@@ -203,14 +203,24 @@ def my_notifications(user: dict = Depends(auth.current_user),
                     "title": "New resource" if new else "Updated resource",
                     "text": r.title, "link": "tainguyen", "created_at": ts.isoformat()})
 
-    # Daily screening reminder (only while today's check-in is still pending).
+    # Daily screening reminder — ALWAYS present each day (a check-in nudge),
+    # flipping to a "done" state once today's screening is completed. "Today"
+    # is anchored to local time (UTC+7) so the day rolls over at local midnight.
+    local_off = timedelta(hours=7)
+    local_today = (now + local_off).date()
     last = (db.query(models.Screening).filter_by(user_id=user["uid"])
             .order_by(models.Screening.created_at.desc()).first())
-    done_today = bool(last and last.created_at and _utc(last.created_at).date() == now.date())
-    if not done_today:
-        out.append({"id": f"reminder-{now.date().isoformat()}", "kind": "reminder",
-                    "title": "Daily check-in", "text": "Take a minute for today's mood screening.",
-                    "link": "sangloc", "created_at": now.isoformat()})
+    done_today = bool(last and last.created_at
+                      and (_utc(last.created_at) + local_off).date() == local_today)
+    out.append({
+        "id": f"reminder-{local_today.isoformat()}", "kind": "reminder",
+        "title": "Daily check-in",
+        "text": ("✓ You've completed today's screening — nice work!" if done_today
+                 else "Take a minute for today's mood screening."),
+        "link": "sangloc",
+        # A pending reminder floats to the top; a completed one sits with the rest.
+        "created_at": (now if not done_today else now - timedelta(hours=12)).isoformat(),
+    })
 
     out.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return {"items": out[:20]}
