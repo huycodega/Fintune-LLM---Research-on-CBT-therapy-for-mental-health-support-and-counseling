@@ -356,7 +356,9 @@ def chat(body: ChatIn, request: Request,
     # runs on L3 (L0/L1/L2 returned above) and biases to "personal", so a real
     # support message is never redirected.
     if settings.scope_router_enabled and level == "L3":
-        scope = scope_router.classify(text)
+        scope = (scope_router.classify_smart(text)
+                 if settings.scope_router_semantic
+                 else scope_router.classify(text))
         if scope != "personal":
             reply = scope_router.reply_for(scope)
             sess = models.Session(

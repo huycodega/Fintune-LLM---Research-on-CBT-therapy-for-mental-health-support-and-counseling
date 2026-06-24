@@ -87,3 +87,63 @@ _OFFTOPIC_REPLY = (
 
 def reply_for(scope: str) -> str:
     return _META_REPLY if scope == "meta" else _OFFTOPIC_REPLY
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Semantic layer — for the AMBIGUOUS remainder only.
+#
+# classify() (keywords) already nails the obvious cases and every message with a
+# wellbeing signal. classify_smart() trusts those, and ONLY asks the LLM about a
+# message that keywords left as a *default* "personal" (no signal at all) — the
+# novel off-topic phrasings keywords can't enumerate. Best-effort: the LLM is
+# fed PII-scrubbed text, and ANY failure/timeout/ambiguity falls back to
+# "personal", so a real support message is never redirected and latency is only
+# paid on the genuinely-ambiguous minority.
+# ─────────────────────────────────────────────────────────────────────────────
+_CLASSIFY_SYS = (
+    "You route messages for MindCare, a student mental-health chat assistant. "
+    "Reply with EXACTLY ONE word — the label:\n"
+    "personal = the person shares feelings, stress, mood, or a personal "
+    "situation, or wants emotional/coping support. When unsure, choose personal.\n"
+    "meta = a question ABOUT MindCare itself (what it is, how it works, privacy, "
+    "is it human).\n"
+    "offtopic = a request unrelated to wellbeing (coding, math, homework, general "
+    "knowledge, weather, translation, trivia, shopping, trip planning, etc.).\n"
+    "Answer with one word only: personal, meta, or offtopic."
+)
+
+
+def _llm_classify(text: str):
+    """Ask the LLM for a label. Returns 'personal'|'meta'|'offtopic' or None on
+    any problem (caller treats None as personal). Never raises."""
+    import re as _re
+    try:
+        from app.services import llm_client, pii_scrubber
+        safe = pii_scrubber.scrub(text or "")[:500]
+        gen = llm_client.generate(
+            [{"role": "system", "content": _CLASSIFY_SYS},
+             {"role": "user", "content": safe}],
+            n=1, temperature=0.0)
+        if not gen or gen.get("degraded"):
+            return None
+        out = (gen.get("responses") or [""])[0].lower()
+        clean = _re.sub(r"[^a-z]", "", out)
+        if "offtopic" in clean:
+            return "offtopic"
+        if "meta" in clean:
+            return "meta"
+        if "personal" in clean:
+            return "personal"
+        return None
+    except Exception:
+        return None
+
+
+def classify_smart(text: str) -> str:
+    """Keyword-first, LLM only for the ambiguous default-personal remainder."""
+    kw = classify(text)
+    if kw != "personal":
+        return kw                                  # keyword caught meta/offtopic
+    if _PERSONAL_PAT.search((text or "").lower()):
+        return "personal"                          # wellbeing signal — never override
+    return _llm_classify(text or "") or "personal"  # ambiguous → ask LLM, default safe

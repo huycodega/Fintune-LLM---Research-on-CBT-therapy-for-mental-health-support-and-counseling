@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # redirect/FYI instead of the CBT pipeline. Runs AFTER safety, only on L3,
     # and biases to "personal" so it never blocks a real support message.
     scope_router_enabled: bool = True
+    # Semantic layer: for the ambiguous remainder (keywords found no signal),
+    # ask the LLM to catch novel off-topic phrasings. Best-effort, scrubbed,
+    # falls back to "personal" on any failure. Set False for keyword-only.
+    scope_router_semantic: bool = True
 
     # ---- reranker offload to Modal (optional) ----
     # bge-reranker-v2-m3 is ~2.3 GB; loading it locally alongside the embedder
