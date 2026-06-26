@@ -4339,6 +4339,19 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 .ai-conv-brand img { animation: float-bubble 5s ease-in-out infinite; }
 .ai-conv-brand-name { font-size: 14px; font-weight: 800; color: var(--ink, #1f2a38); letter-spacing: -0.01em; }
 .ai-conv-brand-sub { font-size: 11px; color: var(--ink-soft, #94a3b8); }
+
+/* Rail toggle (≡) + collapse */
+.ai-mini-bar { display: flex; align-items: center; margin-bottom: 8px; }
+.ai-rail-toggle {
+  width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center;
+  background: var(--surface, #fff); border: 1px solid var(--line, #e7eaf2);
+  border-radius: 10px; cursor: pointer; color: var(--ink, #1f2a38);
+  transition: background .15s;
+}
+.ai-rail-toggle:hover { background: var(--surface-2, #f1f5f9); }
+.ai-rail-scrim { display: none; }
+.ai-page.rail-closed .ai-grid { grid-template-columns: 1fr; }   /* collapse → big chat */
+.ai-page.rail-closed .ai-conv { display: none; }
 .ai-conv-item {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   padding: 9px 10px; border: 0; background: none; border-radius: 10px;
@@ -4761,7 +4774,17 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 @media (max-width: 1080px) {
   .ai-page { overflow-y: auto; height: auto; min-height: 100%; }
   .ai-grid { grid-template-columns: 1fr; height: auto; }
-  .ai-conv { display: none; }   /* chat goes full-width on mobile */
+  /* On small screens the rail becomes a slide-in drawer toggled by ≡ */
+  .ai-conv {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 82vw; max-width: 300px;
+    z-index: 70; border-radius: 0;
+    transform: translateX(-105%); transition: transform .25s ease;
+  }
+  .ai-page.rail-closed .ai-conv { display: flex; }   /* keep mounted; hidden via transform */
+  .ai-page.rail-open .ai-conv { transform: translateX(0); box-shadow: 8px 0 30px rgba(15,23,42,.18); }
+  .ai-page.rail-open .ai-rail-scrim {
+    display: block; position: fixed; inset: 0; z-index: 69; background: rgba(15,23,42,.4);
+  }
   .ai-feed { max-height: 60vh; }
   .ai-side { overflow: visible; }
 }
