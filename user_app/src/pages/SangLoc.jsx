@@ -43,6 +43,21 @@ function getLevel(score, max) {
   return           { label: "Severe",                  color: "var(--danger)",  badge: "badge-red" };
 }
 
+/* One row of a past (real) screening result in the Current Results panel. */
+function LatestRow({ label, score, max }) {
+  const lv = getLevel(score, max);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-soft)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: lv.color }}>{score}</span>
+        <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>/ {max}</span>
+        <span className={`badge ${lv.badge}`} style={{ marginLeft: "auto" }}>{lv.label}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function SangLoc() {
   const [step, setStep] = useState(0);
   const [phq9, setPhq9] = useState(Array(9).fill(null));
@@ -53,6 +68,7 @@ export default function SangLoc() {
   const [submitError, setSubmitError] = useState(null);
   const [rec, setRec] = useState(null);   // today's personalised recommendation
   const [recStarted, setRecStarted] = useState(false);
+  const [latest, setLatest] = useState(null);   // most recent completed screening (real)
   const stepsRef = useRef(null);
 
   // Jump into the recommended instrument. PHQ-9 is already step 0, so without
@@ -68,6 +84,7 @@ export default function SangLoc() {
   useEffect(() => {
     let alive = true;
     api.screeningToday().then((r) => { if (alive) setRec(r); }).catch(() => {});
+    api.latestScreening().then((r) => { if (alive) setLatest(r); }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -386,9 +403,27 @@ export default function SangLoc() {
           <div className="section-title" style={{ marginBottom: 12 }}>📊 Current Results</div>
           <ScorePanel />
           {step < 1 && (
-            <div style={{ textAlign: "center", color: "var(--ink-soft)", fontSize: 12, padding: "20px 0" }}>
-              Complete each step to see your results
-            </div>
+            latest && (latest.phq9_score != null || latest.gad7_score != null || latest.mood_score != null) ? (
+              <div style={{ paddingTop: 2 }}>
+                <div style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 10 }}>
+                  Your last result · {new Date(latest.created_at).toLocaleDateString("en-GB")}
+                </div>
+                {latest.phq9_score != null && <LatestRow label="PHQ-9 — Depression" score={latest.phq9_score} max={27} />}
+                {latest.gad7_score != null && <LatestRow label="GAD-7 — Anxiety" score={latest.gad7_score} max={21} />}
+                {latest.mood_score != null && (
+                  <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 2 }}>
+                    Mood: <strong style={{ color: "var(--ink)" }}>{latest.mood_score}/10</strong>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 12, lineHeight: 1.5 }}>
+                  Answer the questions to see your new results update live.
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", color: "var(--ink-soft)", fontSize: 12, padding: "20px 0" }}>
+                Complete each step to see your results
+              </div>
+            )
           )}
         </div>
 
