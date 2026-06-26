@@ -467,6 +467,36 @@ function HistoryCard({ conversations, activeId, onOpen, onNew }) {
   );
 }
 
+/* ── Left conversation rail (ChatGPT-style nav) ─────────────────── */
+function ConversationNav({ conversations, activeId, onOpen, onNew }) {
+  return (
+    <aside className="ai-conv">
+      <button className="ai-conv-new" onClick={onNew}>
+        <span className="ai-conv-plus">+</span> New chat
+      </button>
+      <div className="ai-conv-label">Conversations</div>
+      {conversations.length === 0 ? (
+        <p className="ai-conv-empty">No conversations yet — start chatting and they'll show up here.</p>
+      ) : (
+        <div className="ai-conv-list">
+          {conversations.map((c) => (
+            <button
+              key={c.id}
+              className={`ai-conv-item ${c.id === activeId ? "active" : ""}`}
+              onClick={() => onOpen(c.id)}
+              title={c.title}
+            >
+              <Icon name="chat" size={15} className="ai-conv-ico" />
+              <span className="ai-conv-title">{c.title || "Conversation"}</span>
+              <span className="ai-conv-time">{fmtDay(c.updated_at)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 /* ── Right panel ───────────────────────────────────────────────── */
 function RightPanel({ onUseTip, conversations, activeId, onOpen, onNew }) {
   return (
@@ -792,6 +822,14 @@ export default function Chat({ onNav }) {
   return (
     <div className="ai-page">
       <div className="ai-grid">
+        {/* ── LEFT: conversation rail ── */}
+        <ConversationNav
+          conversations={conversations}
+          activeId={activeId}
+          onOpen={openConversation}
+          onNew={newChat}
+        />
+
         {/* ── CENTER: chat ── */}
         <div className="ai-main">
           {/* Header */}
@@ -875,14 +913,6 @@ export default function Chat({ onNav }) {
           </div>
         </div>
 
-        {/* ── RIGHT: panel ── */}
-        <RightPanel
-          onUseTip={(t) => sendText(t)}
-          conversations={conversations}
-          activeId={activeId}
-          onOpen={openConversation}
-          onNew={newChat}
-        />
       </div>
 
       {recDetail && <RecDetail rec={recDetail} onClose={() => setRecDetail(null)} />}
