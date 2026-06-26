@@ -493,6 +493,13 @@ function ConversationNav({ conversations, activeId, onOpen, onNew }) {
           ))}
         </div>
       )}
+
+      {/* Brand — fills the empty space at the bottom of the rail */}
+      <div className="ai-conv-brand">
+        <Mascot variant="wave" size={76} />
+        <span className="ai-conv-brand-name">AI Support</span>
+        <span className="ai-conv-brand-sub">MindCare AI</span>
+      </div>
     </aside>
   );
 }
@@ -832,29 +839,6 @@ export default function Chat({ onNav }) {
 
         {/* ── CENTER: chat ── */}
         <div className="ai-main">
-          {/* Header */}
-          <header className="ai-header">
-            <div className="ai-header-text">
-              <h1 className="ai-title">AI Support</h1>
-              <p className="ai-subtitle">
-                Chat with MindCare AI to share, work through your emotions, and find the right
-                solutions for you.
-              </p>
-            </div>
-            <div className="ai-header-mascot"><Mascot variant="wave" size={138} /></div>
-          </header>
-
-          {/* Topic chips */}
-          <div className="ai-topicbar">
-            <span className="ai-topic-label">You can start with common topics</span>
-            {TOPICS.map((t) => (
-              <button key={t.label} className="ai-chip" onClick={() => sendText(t.text)}>
-                <span className="ai-chip-emoji">{t.emoji}</span>{t.label}
-              </button>
-            ))}
-            <button className="ai-chip-more" aria-label="More topics"><Icon name="chevron" size={16} /></button>
-          </div>
-
           {/* Feed */}
           <div className="ai-feed">
             {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
