@@ -244,6 +244,13 @@ export default function App() {
   const [stage, setStage] = useState("loading");
   const [path, setPath] = useState(() => window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  // ≡ : on phones it opens the off-canvas drawer; on desktop it collapses the
+  // sidebar so Home/Screening/etc. get more room.
+  const toggleNav = () => {
+    if (window.innerWidth <= 860) setNavOpen((o) => !o);
+    else setNavCollapsed((c) => !c);
+  };
 
   // URL ↔ page. pushState gives real routes (/login, /dashboard…) without a
   // router dep; popstate keeps the back/forward buttons working.
@@ -341,9 +348,9 @@ export default function App() {
   const isChatPage = activePage === "chat";
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${navCollapsed ? "nav-collapsed" : ""}`}>
       <Topbar activePage={activePage} onNav={navTo} user={user} onLogout={logout}
-              onMenu={() => setNavOpen((o) => !o)} />
+              onMenu={toggleNav} />
 
       <div className="app-body">
         <Sidebar activePage={activePage} onNav={navTo}

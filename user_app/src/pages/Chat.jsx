@@ -580,10 +580,6 @@ export default function Chat({ onNav }) {
   const [messages, setMessages] = useState(WELCOME);
   const [activeId, setActiveId] = useState(null);
   const [conversations, setConversations] = useState([]);
-  // Conversation rail: open on desktop, collapsed on phones (≡ toggles it).
-  const [railOpen, setRailOpen] = useState(
-    () => typeof window === "undefined" || window.innerWidth > 1080);
-  const closeRailOnMobile = () => { if (window.innerWidth <= 1080) setRailOpen(false); };
   const [library, setLibrary] = useState([]);     // lessons+resources for clickable recs
   const [recDetail, setRecDetail] = useState(null);
   const [expertBooking, setExpertBooking] = useState(null); // in-chat booking flow
@@ -831,30 +827,18 @@ export default function Chat({ onNav }) {
   }
 
   return (
-    <div className={`ai-page ${railOpen ? "rail-open" : "rail-closed"}`}>
-      <div className="ai-rail-scrim" onClick={() => setRailOpen(false)} />
+    <div className="ai-page">
       <div className="ai-grid">
         {/* ── LEFT: conversation rail ── */}
         <ConversationNav
           conversations={conversations}
           activeId={activeId}
-          onOpen={(id) => { openConversation(id); closeRailOnMobile(); }}
-          onNew={() => { newChat(); closeRailOnMobile(); }}
+          onOpen={openConversation}
+          onNew={newChat}
         />
 
         {/* ── CENTER: chat ── */}
         <div className="ai-main">
-          {/* Top bar: rail toggle (≡) */}
-          <div className="ai-mini-bar">
-            <button className="ai-rail-toggle" onClick={() => setRailOpen((v) => !v)}
-                    aria-label="Toggle conversations">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </button>
-          </div>
-
           {/* Feed */}
           <div className="ai-feed">
             {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
