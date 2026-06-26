@@ -21,7 +21,7 @@ export default function Sidebar({ active, onNav, mobileOpen = false, onClose }) 
     <aside className={`la-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
       {onClose && <button className="la-sidebar-close" onClick={onClose} aria-label="Close navigation"><Icon name="close" size={19} /></button>}
       <div className="la-brand">
-        <div className="la-brand-logo"><img src="/mindcare-mascot.svg" alt="MindCare mascot" /></div>
+        <div className="la-brand-logo"><img src="/mascot-wave.png" alt="MindCare mascot" /></div>
         <div className="la-brand-text">MindCare AI <span>Admin</span></div>
       </div>
 
@@ -36,7 +36,7 @@ export default function Sidebar({ active, onNav, mobileOpen = false, onClose }) 
 
       <div className="la-side-foot">
         <div className="la-support-card">
-          <div className="la-support-mascot"><img src="/mindcare-mascot.svg" alt="" /></div>
+          <div className="la-support-mascot"><img src="/mascot-wave.png" alt="" /></div>
           <div className="la-support-text">MindCare AI supports you in managing mental wellbeing.</div>
           <button className="la-support-btn"><span className="la-dot" /> Get Support</button>
         </div>
