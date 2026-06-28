@@ -4766,7 +4766,7 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   .ai-feed { max-height: 60vh; }
   .ai-side { overflow: visible; }
   /* chat goes full-width; conversation history becomes a slide-in drawer */
-  .ai-conv-open { display: inline-flex; }
+  .ai-conv-open { display: inline-flex !important; }
   .ai-conv {
     position: fixed; top: 0; left: 0; bottom: 0; width: 84vw; max-width: 320px;
     z-index: 80; border-radius: 0; transform: translateX(-104%);
