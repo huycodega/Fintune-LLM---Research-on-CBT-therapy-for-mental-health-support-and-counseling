@@ -580,6 +580,10 @@ export default function Chat({ onNav }) {
   const [messages, setMessages] = useState(WELCOME);
   const [activeId, setActiveId] = useState(null);
   const [conversations, setConversations] = useState([]);
+  // Mobile: the conversation rail is a slide-in drawer (≡ opens it). Desktop:
+  // the rail is always inline and this state is ignored.
+  const [railOpen, setRailOpen] = useState(false);
+  const closeRailOnMobile = () => { if (window.innerWidth <= 1080) setRailOpen(false); };
   const [library, setLibrary] = useState([]);     // lessons+resources for clickable recs
   const [recDetail, setRecDetail] = useState(null);
   const [expertBooking, setExpertBooking] = useState(null); // in-chat booking flow
@@ -827,18 +831,28 @@ export default function Chat({ onNav }) {
   }
 
   return (
-    <div className="ai-page">
+    <div className={`ai-page ${railOpen ? "rail-open" : ""}`}>
+      <div className="ai-rail-scrim" onClick={() => setRailOpen(false)} />
       <div className="ai-grid">
-        {/* ── LEFT: conversation rail ── */}
+        {/* ── LEFT: conversation rail (inline on desktop, drawer on mobile) ── */}
         <ConversationNav
           conversations={conversations}
           activeId={activeId}
-          onOpen={openConversation}
-          onNew={newChat}
+          onOpen={(id) => { openConversation(id); closeRailOnMobile(); }}
+          onNew={() => { newChat(); closeRailOnMobile(); }}
         />
 
         {/* ── CENTER: chat ── */}
         <div className="ai-main">
+          {/* Mobile-only: open the conversation history drawer */}
+          <button className="ai-conv-open" onClick={() => setRailOpen(true)}
+                  aria-label="Open conversations">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+            <span>Conversations</span>
+          </button>
           {/* Feed */}
           <div className="ai-feed">
             {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
