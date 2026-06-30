@@ -31,7 +31,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
-    moderation_store, scope_router,
+    moderation_store, scope_router, self_data,
 )
 
 
@@ -98,6 +98,28 @@ _GREETING_PAT = re.compile(
     r"[\s,.!~]*(there|bot|mindcare|ai|friend|b[aạ]n|nh[eé])?[\s,.!?~]*$",
     re.IGNORECASE,
 )
+
+
+def _info_reply(db, u, info: str):
+    """Build the direct answer for a factual info intent, or None on failure.
+    Self-data is read from the DB (real records only); meta/offtopic use the
+    scope-router canned replies."""
+    if info in ("meta", "offtopic"):
+        return scope_router.reply_for(info)
+    fn = {
+        "profile":       lambda: self_data.profile(db, u.id),
+        "appointments":  lambda: self_data.appointments(db, u.id),
+        "lessons":       lambda: self_data.lessons(db),
+        "psychologists": lambda: self_data.psychologists(db),
+        "mood":          lambda: self_data.mood(db, u.id),
+        "screening":     lambda: self_data.screening(db, u.id),
+    }.get(info)
+    if not fn:
+        return None
+    try:
+        return fn()
+    except Exception:
+        return None
 
 
 def _is_greeting(text: str) -> bool:
@@ -349,6 +371,41 @@ def chat(body: ChatIn, request: Request,
                          "anything feels urgent while you wait, the resources "
                          "below are here for you any time."),
         }
+
+    # ---- Direct-answer gate: factual self-data / meta / off-topic ----
+    # A benign informational question ("who am I", "my appointments", "what
+    # lessons are there", "how does MindCare work") should be answered DIRECTLY
+    # from the database — not turned into a CBT draft for clinician review. Runs
+    # on L2/L3 (L0/L1 already returned). Strict guards keep it safe: it fires
+    # only on an EXPLICIT info pattern with NO distress signal AND a clean safety
+    # regex (not L0/L1), so a genuine moderate-risk message is never intercepted.
+    if settings.scope_router_enabled and level in ("L2", "L3"):
+        info = scope_router.info_intent(text)
+        if info and safety_gate._heuristic(text).get("triage_level") \
+                not in ("L0", "L1"):
+            reply = _info_reply(db, u, info)
+            if reply:
+                sess = models.Session(
+                    **base, status="answered", analysis={"info_intent": info},
+                    final_reply_enc=encrypt_phi(reply),
+                    final_technique=f"info_{info}",
+                    completed_at=datetime.now(timezone.utc))
+                db.add(sess); db.flush()
+                moderation_store.record_ai_message(
+                    db, convo, user_message, reply, level, "not_required",
+                    confidence=triage.get("confidence"), model_name="info_gate")
+                audit_mod.audit(db, action=f"info_{info}", actor=user, ip=ip,
+                                 resource_type="session", resource_id=sess.id,
+                                 detail={"info_intent": info})
+                return {
+                    "session_id": str(sess.id),
+                    "conversation_id": str(convo.id),
+                    "outcome": "answered", "triage": triage,
+                    "final": {"technique": f"info_{info}", "response": reply},
+                    "drafts": [{"idx": 0, "technique": f"info_{info}",
+                                "response": reply}],
+                    "mode": "info_gate",
+                }
 
     # ---- Scope gate (L3 routine only) ----
     # An off-topic or "about MindCare" question on a SAFE, routine turn doesn't

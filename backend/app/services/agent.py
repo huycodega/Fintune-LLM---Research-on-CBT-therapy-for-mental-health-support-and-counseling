@@ -719,111 +719,37 @@ def _tool_summarize_progress(args: Dict, state: Dict) -> str:
 # blocks in the reply so the actual data is always shown (anti-fabrication: the
 # DB is the source of truth, not the responder's prose).
 def _tool_get_my_data(args: Dict, state: Dict) -> str:
+    from app.services import self_data
     kind = (args.get("kind") or "").strip().lower()
     uid = state.get("user_id")
     if not uid:
         return "No signed-in user to look up."
+    fn = {
+        "profile":           lambda db: self_data.profile(db, uid),
+        "appointments":      lambda db: self_data.appointments(db, uid),
+        "mood":              lambda db: self_data.mood(db, uid),
+        "screening_history": lambda db: self_data.screening(db, uid),
+    }.get(kind)
+    if not fn:
+        return f"Unknown data kind: {kind}"
     try:
         with db_session() as db:
-            if kind == "profile":
-                u = db.get(models.User, uid)
-                if not u:
-                    return "Profile not found."
-                joined = u.created_at.date().isoformat() if u.created_at else "—"
-                line = (f"👤 Profile: signed in as {u.username}, "
-                        f"MindCare member since {joined}.")
-                state["facts"].append(line)
-                return line
-
-            if kind == "appointments":
-                rows = (db.query(models.Appointment, models.Psychologist)
-                        .join(models.Psychologist,
-                              models.Appointment.psychologist_id
-                              == models.Psychologist.id)
-                        .filter(models.Appointment.user_id == uid)
-                        .order_by(models.Appointment.date.desc())
-                        .limit(10).all())
-                if not rows:
-                    line = "📅 You have no appointments booked."
-                    state["facts"].append(line)
-                    return line
-                items = [f"- {a.date.isoformat()} {a.slot} with {p.name} "
-                         f"— {a.status}" for a, p in rows]
-                block = "📅 Your appointments:\n" + "\n".join(items)
-                state["facts"].append(block)
-                return block
-
-            if kind == "mood":
-                rows = (db.query(models.Screening)
-                        .filter(models.Screening.user_id == uid,
-                                models.Screening.mood_score.isnot(None))
-                        .order_by(models.Screening.created_at.desc())
-                        .limit(5).all())
-                if not rows:
-                    line = "🙂 No mood check-ins recorded yet."
-                    state["facts"].append(line)
-                    return line
-                latest = rows[0]
-                trend = ", ".join(str(r.mood_score) for r in reversed(rows))
-                block = (f"🙂 Latest mood: {latest.mood_score}/10 "
-                         f"({latest.created_at.date().isoformat()}). "
-                         f"Recent: {trend}.")
-                state["facts"].append(block)
-                return block
-
-            if kind == "screening_history":
-                rows = (db.query(models.Screening)
-                        .filter(models.Screening.user_id == uid)
-                        .order_by(models.Screening.created_at.desc())
-                        .limit(5).all())
-                lines = []
-                for r in rows:
-                    d = r.created_at.date().isoformat()
-                    parts = []
-                    if r.phq9_score is not None:
-                        parts.append(f"PHQ-9 {r.phq9_score}"
-                                     + (f" ({r.phq9_level})" if r.phq9_level else ""))
-                    if r.gad7_score is not None:
-                        parts.append(f"GAD-7 {r.gad7_score}"
-                                     + (f" ({r.gad7_level})" if r.gad7_level else ""))
-                    if parts:
-                        lines.append(f"- {d}: " + ", ".join(parts))
-                if not lines:
-                    line = "📋 No PHQ-9 / GAD-7 results recorded yet."
-                    state["facts"].append(line)
-                    return line
-                block = "📋 Your screening history:\n" + "\n".join(lines)
-                state["facts"].append(block)
-                return block
-
-            return f"Unknown data kind: {kind}"
+            block = fn(db)
     except Exception as e:
         log.warning("agent get_my_data(%s) failed: %s", kind, e)
         return "That information is unavailable right now."
+    state["facts"].append(block)
+    return block
 
 
 def _tool_list_psychologists(args: Dict, state: Dict) -> str:
+    from app.services import self_data
     try:
         with db_session() as db:
-            rows = (db.query(models.Psychologist)
-                    .filter_by(active=True)
-                    .order_by(models.Psychologist.name).limit(10).all())
+            block = self_data.psychologists(db)
     except Exception as e:
         log.warning("agent list_psychologists failed: %s", e)
         return "The expert directory is unavailable right now."
-    if not rows:
-        line = "No counselling experts are listed yet."
-        state["facts"].append(line)
-        return line
-    items = []
-    for p in rows:
-        bits = [p.name]
-        if p.specialty:
-            bits.append(p.specialty)
-        if p.experience:
-            bits.append(p.experience)
-        items.append("- " + " — ".join(bits))
-    block = "🧑‍⚕️ Counselling experts you can book:\n" + "\n".join(items)
     state["facts"].append(block)
     return block
 

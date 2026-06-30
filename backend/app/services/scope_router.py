@@ -55,6 +55,79 @@ _OFFTOPIC_PAT = re.compile(
     r"what time is it|what'?s the date|do my homework|my assignment)\b", re.I)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Factual self-data intents — questions a user asks about THEIR OWN records or
+# the app's catalogue ("who am I", "my appointments", "what lessons are there",
+# "which psychologists can I see"). These deserve a DIRECT data answer, not a CBT
+# draft + clinician review. Patterns are tight and explicit; the caller also
+# guards with the distress check below + the safety regex, so an emotional
+# message is never short-circuited.
+# ─────────────────────────────────────────────────────────────────────────────
+_DATA_PATS = [
+    ("profile", re.compile(
+        r"\bwho am i\b|what'?s my (name|username|profile|account)|"
+        r"what do you know about me\b|my (account|profile) (info|details)", re.I)),
+    ("appointments", re.compile(
+        r"\b(my )?appointments?\b|my booking|upcoming (appointment|booking|session)|"
+        r"when (is|are) my (appointment|session|consultation)|my consultation", re.I)),
+    ("psychologists", re.compile(
+        r"\bpsychologists?\b|\bcounsell?ors?\b|"
+        r"(list|which|available|any|book a?) (psychologist|expert|counsell?or|therapist)|"
+        r"\bexperts?\b.*(available|list|book|see)|therapists? available", re.I)),
+    ("lessons", re.compile(
+        r"\b(what|which|list|available|any) lessons?\b|do you have (any )?lessons|"
+        r"\bcourses?\b.*(available|list|have)|lessons? (are there|do you have)", re.I)),
+    ("mood", re.compile(
+        r"\bmy mood\b|mood (score|history|trend|chart)|how (has )?my mood", re.I)),
+    ("screening", re.compile(
+        r"\bmy (phq|gad|screening)\b|\bphq[- ]?9\b|\bgad[- ]?7\b|"
+        r"screening (results?|scores?|history)|my (results?|scores?) (on|from) (the )?"
+        r"(phq|gad|screening)", re.I)),
+]
+
+
+# Distress / risk veto for the DATA intents. Deliberately WIDE: over-vetoing a
+# data query is safe (it just falls through to the normal flow), while
+# under-vetoing would answer a distressed person with a data dump. Used instead
+# of _PERSONAL_PAT here because that pattern flags "my mood"/"my feelings" — the
+# exact phrasing of a legitimate data question ("show my mood history").
+_DISTRESS_VETO = re.compile(
+    r"\b(feel|feeling|felt|emotion\w*|anxious|anxiety|nervous|panic|"
+    r"sad|sadness|depress\w*|unhappy|miserable|down|low|hopeless|worthless|"
+    r"lonely|alone|isolated|empty|numb|overwhelm\w*|stress\w*|struggl\w*|"
+    r"cope|coping|exhaust\w*|tired|drained|burn(ed|t)? ?out|cry\w*|tears?|"
+    r"upset|angry|anger|frustrat\w*|scared|afraid|fear|worried|worry|"
+    r"overthink\w*|ruminat\w*|spiral\w*|hurt\w*|pain\w*|suffer\w*|"
+    r"die|death|suicid\w*|kill|end (it|my life|things)|self[- ]?harm|"
+    r"harm myself|give up|hate myself|no point|terrible|awful|worse|rough|"
+    r"can'?t (sleep|stop|cope|go on|take|handle))\b", re.I)
+
+
+def info_intent(text: str):
+    """Return a factual-info label to answer DIRECTLY, or None.
+
+    One of: 'profile' | 'appointments' | 'lessons' | 'psychologists' | 'mood' |
+    'screening' | 'meta' | 'offtopic'. Returns None when the message carries any
+    distress/risk signal (a real support message must never be intercepted) or
+    matches no explicit info pattern.
+    """
+    low = (text or "").strip().lower()
+    if not low:
+        return None
+    # Explicit self-data intents — checked first, vetoed by any distress signal.
+    for label, pat in _DATA_PATS:
+        if pat.search(low):
+            return None if _DISTRESS_VETO.search(low) else label
+    # Meta / off-topic — keyword only (safe on L2); never intercept wellbeing.
+    if _PERSONAL_PAT.search(low):
+        return None
+    if _META_PAT.search(low):
+        return "meta"
+    if _OFFTOPIC_PAT.search(low):
+        return "offtopic"
+    return None
+
+
 def classify(text: str) -> str:
     """Return 'personal' | 'meta' | 'offtopic'. Biased toward 'personal'."""
     low = (text or "").strip().lower()
