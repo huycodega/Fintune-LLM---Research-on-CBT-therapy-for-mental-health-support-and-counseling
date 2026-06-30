@@ -200,7 +200,8 @@ class CBTAgentService:
 
     @modal.method()
     def chat(self, messages: list, tools: list = None,
-             temperature: float = 0.3, max_new_tokens: int = 512) -> dict:
+             temperature: float = 0.3, max_new_tokens: int = 512,
+             force_tool_call: bool = False) -> dict:
         import torch
         t0 = time.time()
 
@@ -219,26 +220,52 @@ class CBTAgentService:
             prompt = self.tokenizer.apply_chat_template(
                 norm, tokenize=False, add_generation_prompt=True)
 
+        # ── Constrained decoding (lightweight, no extra deps) ──────────────
+        # The orchestrator must ALWAYS answer with a tool call (its system
+        # prompt forbids prose), yet a 7B sometimes emits free text — measured
+        # ~47% prose. When force_tool_call is on AND tools are offered, we
+        # PREFILL the Qwen2.5 tool-call opener so the model is constrained to
+        # continue a JSON tool call instead of prose, and STOP at the closing
+        # tag so it can't ramble afterwards. The prefilled opener is prepended
+        # back before parsing. With no tools (e.g. clinician copilot prose), we
+        # never force — behaviour is unchanged.
+        forced_prefix = ""
+        if force_tool_call and tools:
+            forced_prefix = "<tool_call>\n"
+            prompt = prompt + forced_prefix
+
         inputs = self.tokenizer(
             prompt, return_tensors="pt",
             truncation=True, max_length=6144,
         ).to(self.model.device)
 
         do_sample = temperature and temperature > 0
+        gen_kwargs = dict(
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature if do_sample else None,
+            top_p=0.9 if do_sample else None,
+            num_return_sequences=1,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+        if forced_prefix:
+            # Tighten output to a single tool call (transformers>=4.43).
+            gen_kwargs["stop_strings"] = ["</tool_call>"]
+            gen_kwargs["tokenizer"] = self.tokenizer
         with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=do_sample,
-                temperature=temperature if do_sample else None,
-                top_p=0.9 if do_sample else None,
-                num_return_sequences=1,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
+            try:
+                outputs = self.model.generate(**inputs, **gen_kwargs)
+            except TypeError:
+                # Older transformers without stop_strings — drop it and retry.
+                gen_kwargs.pop("stop_strings", None)
+                gen_kwargs.pop("tokenizer", None)
+                outputs = self.model.generate(**inputs, **gen_kwargs)
 
         prompt_len = inputs["input_ids"].shape[1]
         raw = self.tokenizer.decode(
             outputs[0][prompt_len:], skip_special_tokens=True).strip()
+        if forced_prefix:
+            raw = forced_prefix + raw   # restore opener for parsing + logs
         print(f"[AGENT RAW]: {repr(raw[:400])}")
 
         content, tool_calls = _parse_tool_calls(raw)
@@ -246,6 +273,7 @@ class CBTAgentService:
             "content": content,
             "tool_calls": tool_calls,
             "raw": raw,
+            "forced": bool(forced_prefix),
             "latency_ms": round((time.time() - t0) * 1000),
             "model": HF_REPO,
         }
@@ -264,6 +292,7 @@ def chat(body: dict):
         tools=body.get("tools", []),
         temperature=float(body.get("temperature", 0.3)),
         max_new_tokens=int(body.get("max_new_tokens", 512)),
+        force_tool_call=bool(body.get("force_tool_call", False)),
     )
 
 

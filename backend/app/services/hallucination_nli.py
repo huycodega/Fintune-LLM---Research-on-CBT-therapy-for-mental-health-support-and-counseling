@@ -109,10 +109,37 @@ def _softmax3(logits):
     return [e / s for e in exps]
 
 
-def grounding_nli(response: str, retrieved: List[dict]) -> float:
+def _factual_sentences(sentences: List[str], chunks: List[str]) -> List[str]:
+    """Keep only knowledge-bearing sentences: not a question, and sharing at
+    least a couple of content words with the retrieved material. Empathy /
+    validation ("That sounds really hard") and questions make no checkable
+    factual claim, so averaging grounding over them is what drives the apparent
+    'faithfulness ≈ 0' on empathic CBT replies. This isolates the claims that
+    SHOULD be grounded."""
+    ctx_tokens = set()
+    for c in chunks:
+        ctx_tokens |= {w.lower() for w in _WORD.findall(c)}
+    kept = []
+    for s in sentences:
+        if s.rstrip().endswith("?"):
+            continue
+        toks = {w.lower() for w in _WORD.findall(s)}
+        if toks and len(toks & ctx_tokens) >= 2:
+            kept.append(s)
+    return kept
+
+
+def grounding_nli(response: str, retrieved: List[dict],
+                  factual_only: bool = False) -> float:
     """
     Returns a grounding score in [0, 1]:
       mean over response-sentences of (max entailment-prob across chunks).
+
+    factual_only=True scores ONLY knowledge-bearing sentences (drops empathy,
+    validation, and questions). A purely-empathic reply makes no factual claim,
+    so it returns 1.0 (vacuously faithful) instead of being penalised — this is
+    the correct measurement for CBT replies. Default stays False so the live
+    self-correct / autosend gating is unchanged.
     """
     if not response or not retrieved:
         return 0.0
@@ -130,6 +157,11 @@ def grounding_nli(response: str, retrieved: List[dict]) -> float:
     chunks = [r.get("text", "")[:1500] for r in retrieved if r.get("text")]
     if not chunks:
         return 0.0
+
+    if factual_only:
+        sentences = _factual_sentences(sentences, chunks)
+        if not sentences:
+            return 1.0   # no factual claim to ground → not a hallucination
 
     pairs = [(chunk, sent) for sent in sentences for chunk in chunks]
     try:

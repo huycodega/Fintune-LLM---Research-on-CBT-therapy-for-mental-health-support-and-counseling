@@ -34,6 +34,7 @@ TOOLS (wrap existing services)
 """
 import logging
 import re
+from collections import Counter
 from typing import Dict, List, Optional
 
 from app.core.config import settings
@@ -64,6 +65,8 @@ _REQUIRED_ARGS = {
     "recommend_lesson": ["topic"],
     "recommend_resource": ["topic"],
     "summarize_progress": [],
+    "get_my_data": ["kind"],
+    "list_psychologists": [],
     "suggest_screening": ["instrument", "reason"],
     "generate_cbt_response": [],
     "ask_clarification": ["question"],
@@ -184,13 +187,18 @@ TOOL_SCHEMAS: List[Dict] = [
             "description": (
                 "Find published CBT micro-lessons matching a topic so you can "
                 "offer the client concrete practice. Returns real lesson titles "
-                "from the library — never invent one."),
+                "from the library — never invent one. To answer 'what lessons "
+                "are there / do you have', pass list_all=true to list the "
+                "available lessons instead of matching a topic."),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "topic": {"type": "string",
                               "description": "Theme to match, e.g. 'stress', "
                               "'sleep', 'all-or-nothing thinking'."},
+                    "list_all": {"type": "boolean",
+                                 "description": "Set true to LIST the available "
+                                 "lessons (for 'what lessons are there')."},
                 },
                 "required": ["topic"],
             },
@@ -223,6 +231,41 @@ TOOL_SCHEMAS: List[Dict] = [
                 "(recurring themes, techniques tried, total prior turns) so you "
                 "can acknowledge progress and stay consistent. Returning-client "
                 "context only — do NOT narrate it as a shared transcript."),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_data",
+            "description": (
+                "Look up THIS client's own MindCare records to answer a factual "
+                "question about themselves. Use it for: 'who am I' (profile), "
+                "'my appointments' (upcoming/past bookings), 'my mood' (recent "
+                "mood check-ins), 'my screening results' (PHQ-9/GAD-7 history). "
+                "Returns REAL records only — never invent dates, names, or "
+                "scores. After calling, finish with generate_cbt_response."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string",
+                             "enum": ["profile", "appointments", "mood",
+                                      "screening_history"],
+                             "description": "Which record to fetch."},
+                },
+                "required": ["kind"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_psychologists",
+            "description": (
+                "List the counselling experts the client can book a consultation "
+                "with (name, specialty, experience). Use it for 'which "
+                "psychologists are there / who can I talk to'. Returns the real "
+                "directory — never invent a person."),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -334,6 +377,14 @@ _SYSTEM_PROMPT = (
     "     • Persistent low mood or anxiety signals (and no recent self-check): call "
     "suggest_screening(instrument=\"phq9\"|\"gad7\", reason=...) to gently invite a "
     "validated check-in. At most once; never diagnose.\n"
+    "     • The client asks about THEIR OWN data or the app's offerings: fetch the "
+    "REAL records first, then generate. 'who am I' → get_my_data(kind=\"profile\"); "
+    "'my appointments' → get_my_data(kind=\"appointments\"); 'my mood' → "
+    "get_my_data(kind=\"mood\"); 'my screening/PHQ-9/GAD-7 results' → "
+    "get_my_data(kind=\"screening_history\"); 'what lessons are there' → "
+    "recommend_lesson(list_all=true); 'which psychologists/experts can I see' → "
+    "list_psychologists(). NEVER invent appointments, scores, lessons, or names — "
+    "only state what the tool returned.\n"
     "  4. Finish with exactly ONE terminal action:\n"
     "       • generate_cbt_response — the normal path, AFTER retrieving.\n"
     "       • ask_clarification — ONLY if the message is too vague to help.\n"
@@ -347,7 +398,9 @@ _SYSTEM_PROMPT = (
     "recommend_lesson(topic=\"exam stress\") → generate_cbt_response (offer the "
     "returned lesson by name).\n"
     "  C) Returning client (\"the same spiral is back\"): summarize_progress() → "
-    "retrieve_cbt_knowledge(...) → generate_cbt_response.\n\n"
+    "retrieve_cbt_knowledge(...) → generate_cbt_response.\n"
+    "  D) \"What are my upcoming appointments?\": get_my_data(kind=\"appointments\") "
+    "→ generate_cbt_response (state ONLY the returned bookings).\n\n"
     "Safety rules:\n"
     "  • You may only INCREASE caution. Never downplay risk.\n"
     "  • If anything hints at self-harm, hopelessness, or danger, escalate.\n"
@@ -590,14 +643,24 @@ def _top_recommendations(topic: str, limit: int = 2) -> Dict:
     return out
 
 
+_LIST_ALL_WORDS = {"", "all", "any", "everything", "available", "list",
+                   "lessons", "what", "show"}
+
+
 def _tool_recommend_lesson(args: Dict, state: Dict) -> str:
-    topic = (args.get("topic") or state.get("user_scrubbed", "")).strip()
+    raw = (args.get("topic") or "").strip()
+    # "what lessons are there" → list mode (explicit flag or a generic topic).
+    list_all = bool(args.get("list_all")) or raw.lower() in _LIST_ALL_WORDS
     try:
         with db_session() as db:
             rows = (db.query(models.Lesson)
                     .filter_by(status="published")
                     .order_by(models.Lesson.updated_at.desc()).limit(50).all())
-            picked = _rank_published(rows, topic, 2)
+            if list_all:
+                picked = rows[:6]
+            else:
+                topic = raw or state.get("user_scrubbed", "")
+                picked = _rank_published(rows, topic, 2)
             items = [{"title": r.title, "category": r.category,
                       "duration": r.duration} for r in picked]
     except Exception as e:
@@ -606,7 +669,8 @@ def _tool_recommend_lesson(args: Dict, state: Dict) -> str:
     if not items:
         return "No lessons in the library yet."
     state["recommendations"]["lessons"].extend(items)
-    return "Matching CBT lessons:\n" + "\n".join(
+    header = "Available CBT lessons:" if list_all else "Matching CBT lessons:"
+    return header + "\n" + "\n".join(
         f"- {it['title']}" + (f" ({it['duration']})" if it['duration'] else "")
         for it in items)
 
@@ -648,6 +712,120 @@ def _tool_summarize_progress(args: Dict, state: Dict) -> str:
             f"transcript):\n- Prior turns: {mem.get('turn_count', 0)}\n"
             f"- Recurring themes: {themes}\n- Techniques tried: {techs}\n"
             f"- Gist: {mem.get('summary', '—') or '—'}")
+
+
+# ── self-data tools — read THIS user's own records (real, never fabricated) ───
+# Each appends a verbatim block to state["facts"]; _do_generate surfaces those
+# blocks in the reply so the actual data is always shown (anti-fabrication: the
+# DB is the source of truth, not the responder's prose).
+def _tool_get_my_data(args: Dict, state: Dict) -> str:
+    kind = (args.get("kind") or "").strip().lower()
+    uid = state.get("user_id")
+    if not uid:
+        return "No signed-in user to look up."
+    try:
+        with db_session() as db:
+            if kind == "profile":
+                u = db.get(models.User, uid)
+                if not u:
+                    return "Profile not found."
+                joined = u.created_at.date().isoformat() if u.created_at else "—"
+                line = (f"👤 Profile: signed in as {u.username}, "
+                        f"MindCare member since {joined}.")
+                state["facts"].append(line)
+                return line
+
+            if kind == "appointments":
+                rows = (db.query(models.Appointment, models.Psychologist)
+                        .join(models.Psychologist,
+                              models.Appointment.psychologist_id
+                              == models.Psychologist.id)
+                        .filter(models.Appointment.user_id == uid)
+                        .order_by(models.Appointment.date.desc())
+                        .limit(10).all())
+                if not rows:
+                    line = "📅 You have no appointments booked."
+                    state["facts"].append(line)
+                    return line
+                items = [f"- {a.date.isoformat()} {a.slot} with {p.name} "
+                         f"— {a.status}" for a, p in rows]
+                block = "📅 Your appointments:\n" + "\n".join(items)
+                state["facts"].append(block)
+                return block
+
+            if kind == "mood":
+                rows = (db.query(models.Screening)
+                        .filter(models.Screening.user_id == uid,
+                                models.Screening.mood_score.isnot(None))
+                        .order_by(models.Screening.created_at.desc())
+                        .limit(5).all())
+                if not rows:
+                    line = "🙂 No mood check-ins recorded yet."
+                    state["facts"].append(line)
+                    return line
+                latest = rows[0]
+                trend = ", ".join(str(r.mood_score) for r in reversed(rows))
+                block = (f"🙂 Latest mood: {latest.mood_score}/10 "
+                         f"({latest.created_at.date().isoformat()}). "
+                         f"Recent: {trend}.")
+                state["facts"].append(block)
+                return block
+
+            if kind == "screening_history":
+                rows = (db.query(models.Screening)
+                        .filter(models.Screening.user_id == uid)
+                        .order_by(models.Screening.created_at.desc())
+                        .limit(5).all())
+                lines = []
+                for r in rows:
+                    d = r.created_at.date().isoformat()
+                    parts = []
+                    if r.phq9_score is not None:
+                        parts.append(f"PHQ-9 {r.phq9_score}"
+                                     + (f" ({r.phq9_level})" if r.phq9_level else ""))
+                    if r.gad7_score is not None:
+                        parts.append(f"GAD-7 {r.gad7_score}"
+                                     + (f" ({r.gad7_level})" if r.gad7_level else ""))
+                    if parts:
+                        lines.append(f"- {d}: " + ", ".join(parts))
+                if not lines:
+                    line = "📋 No PHQ-9 / GAD-7 results recorded yet."
+                    state["facts"].append(line)
+                    return line
+                block = "📋 Your screening history:\n" + "\n".join(lines)
+                state["facts"].append(block)
+                return block
+
+            return f"Unknown data kind: {kind}"
+    except Exception as e:
+        log.warning("agent get_my_data(%s) failed: %s", kind, e)
+        return "That information is unavailable right now."
+
+
+def _tool_list_psychologists(args: Dict, state: Dict) -> str:
+    try:
+        with db_session() as db:
+            rows = (db.query(models.Psychologist)
+                    .filter_by(active=True)
+                    .order_by(models.Psychologist.name).limit(10).all())
+    except Exception as e:
+        log.warning("agent list_psychologists failed: %s", e)
+        return "The expert directory is unavailable right now."
+    if not rows:
+        line = "No counselling experts are listed yet."
+        state["facts"].append(line)
+        return line
+    items = []
+    for p in rows:
+        bits = [p.name]
+        if p.specialty:
+            bits.append(p.specialty)
+        if p.experience:
+            bits.append(p.experience)
+        items.append("- " + " — ".join(bits))
+    block = "🧑‍⚕️ Counselling experts you can book:\n" + "\n".join(items)
+    state["facts"].append(block)
+    return block
 
 
 # Practice-seeking signals — when the client clearly wants something to DO and
@@ -726,6 +904,23 @@ def _rec_footer(state: Dict) -> str:
             seen.add(ln)
             uniq.append(ln)
     return "\n\nFrom your library, these might help:\n" + "\n".join(uniq)
+
+
+def _facts_footer(state: Dict) -> str:
+    """Surface the REAL records the self-data tools pulled (profile,
+    appointments, mood, screening, experts) verbatim from the DB, so the reply
+    always shows the actual data instead of the responder paraphrasing (and
+    possibly fabricating) it. Empty string when no self-data was fetched."""
+    facts = state.get("facts") or []
+    if not facts:
+        return ""
+    seen, uniq = set(), []
+    for f in facts:
+        f = (f or "").strip()
+        if f and f not in seen:
+            seen.add(f)
+            uniq.append(f)
+    return ("\n\n" + "\n\n".join(uniq)) if uniq else ""
 
 
 def _ensure_grounded(state: Dict, trace: List[Dict], step: int) -> None:
@@ -834,6 +1029,11 @@ def _do_generate(args: Dict, state: Dict,
             if ln not in seen:
                 seen.add(ln); uniq.append(ln)
         analysis["suggested_materials"] = "; ".join(uniq)
+    # Surface any factual self-data the agent fetched (profile / appointments /
+    # mood / screening / experts) so the responder answers from REAL records and
+    # never says "I can't access that" or invents details.
+    if state.get("facts"):
+        analysis["user_facts"] = "\n".join(state["facts"])
     # Tell the responder which planned step to work on this turn.
     plan = state.get("plan")
     if plan and plan.get("steps"):
@@ -869,6 +1069,16 @@ def _do_generate(args: Dict, state: Dict,
             if "from your library" in low or any(t and t.lower() in low for t in titles):
                 continue
             d["response"] = resp.rstrip() + footer
+    # Append the REAL self-data records verbatim (profile / appointments / mood /
+    # screening / experts). The DB is the source of truth — append unless the
+    # responder already reproduced the block, so the user always sees actual data.
+    facts_block = _facts_footer(state)
+    if facts_block:
+        first_line = facts_block.strip().splitlines()[0]
+        for d in drafts:
+            resp = d.get("response") or ""
+            if resp and first_line not in resp:
+                d["response"] = resp.rstrip() + facts_block
     # Append the optional screening check-in CTA (if the agent suggested one).
     screen_cta = _screening_footer(state)
     if screen_cta:
@@ -889,6 +1099,75 @@ def _do_generate(args: Dict, state: Dict,
         "recommendations": state.get("recommendations"),
         "forced_enrichment": state.get("forced_enrichment", False),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Context curation — keep the ORCHESTRATOR's context short and clean.
+#
+# A 7B degrades fast when its context fills with long, noisy tool observations.
+# What the orchestrator echoes back to itself does NOT need the full result: the
+# real retrieved passages live in state["retrieved"] (used at generation), and
+# the full text is kept in the trace. So we feed the model only a compact view —
+# enough to decide the next step — capping length and trimming retrieval dumps to
+# the first couple of passages. Pure upside: nothing the final reply needs is lost.
+# ─────────────────────────────────────────────────────────────────────────────
+_OBS_CAP = 500
+
+
+def _first_tool(resp: Dict) -> str:
+    tc = (resp or {}).get("tool_calls") or []
+    return tc[0].get("name") if tc else "_prose"
+
+
+def _vote_decide(messages: List[Dict], tools: List[Dict]):
+    """Self-consistency: sample the orchestrator N times and pick the MAJORITY
+    first-tool decision (a 7B routes more reliably by vote). Returns
+    (response, confidence in [0,1]). N=1 → a single call, confidence 1.0 — the
+    default, byte-identical to the old behaviour."""
+    n = max(1, int(getattr(settings, "agent_self_consistency", 1) or 1))
+    if n <= 1:
+        return agent_client.chat(messages, tools=tools), 1.0
+    samples = [r for r in (agent_client.chat(messages, tools=tools)
+                           for _ in range(n)) if r is not None]
+    if not samples:
+        return None, 0.0
+    votes = Counter(_first_tool(r) for r in samples)
+    winner, count = votes.most_common(1)[0]
+    chosen = next(r for r in samples if _first_tool(r) == winner)
+    return chosen, count / len(samples)
+
+
+def _low_confidence_escalation(conf: float, trace: List[Dict],
+                               step: int) -> Optional[Dict]:
+    """Confidence gate: when the terminal decision was reached with low vote
+    agreement, route to a clinician rather than auto-answering. Safe (escalate
+    only RAISES caution). Inactive unless agent_confidence_floor > 0 (and voting
+    is on, which is the only way conf < 1.0)."""
+    floor = float(getattr(settings, "agent_confidence_floor", 0.0) or 0.0)
+    if floor <= 0 or conf >= floor:
+        return None
+    metrics.inc("cbt_agent_lowconf_escalate_total")
+    trace.append({"step": step, "tool": "escalate_to_clinician",
+                  "arguments": {"reason": "low orchestrator confidence"},
+                  "note": f"forced escalate (confidence {conf:.2f} < {floor})"})
+    return {"outcome": "escalate",
+            "escalate_reason": ("The assistant was uncertain how best to help "
+                                "here; a clinician will follow up to be safe."),
+            "trace": trace}
+
+
+def _curate_observation(name: str, text: str) -> str:
+    text = (text or "").strip()
+    if name == "retrieve_cbt_knowledge":
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        if len(lines) > 1:
+            head, passages = lines[:1], [ln[:160] for ln in lines[1:3]]
+            extra = len(lines) - 1 - len(passages)
+            tail = [f"(+{extra} more passages retrieved)"] if extra > 0 else []
+            return "\n".join(head + passages + tail)
+    if len(text) > _OBS_CAP:
+        return text[:_OBS_CAP].rstrip() + " …"
+    return text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -927,6 +1206,7 @@ def run_agent(*, user_scrubbed: str,
         "user_id": user_id,
         "retrieved": [],
         "recommendations": {"lessons": [], "resources": []},
+        "facts": [],   # verbatim self-data blocks (profile/appointments/…)
     }
 
     task = (
@@ -948,11 +1228,13 @@ def run_agent(*, user_scrubbed: str,
         "recommend_lesson": _tool_recommend_lesson,
         "recommend_resource": _tool_recommend_resource,
         "summarize_progress": _tool_summarize_progress,
+        "get_my_data": _tool_get_my_data,
+        "list_psychologists": _tool_list_psychologists,
         "suggest_screening": _tool_suggest_screening,
     }
 
     for step in range(settings.agent_max_steps):
-        resp = agent_client.chat(messages, tools=TOOL_SCHEMAS)
+        resp, step_conf = _vote_decide(messages, TOOL_SCHEMAS)
         if resp is None:
             # Orchestrator died mid-loop. If we already gathered context,
             # still produce a response; otherwise fall back entirely.
@@ -975,7 +1257,8 @@ def run_agent(*, user_scrubbed: str,
             # toward a terminal action; record its message for context.
             metrics.inc("cbt_agent_prose_total")
             content = (resp.get("content") or "").strip()
-            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "assistant",
+                             "content": content[:_OBS_CAP]})
             messages.append({"role": "user", "content":
                              "Choose a terminal action now: call "
                              "generate_cbt_response, ask_clarification, or "
@@ -1004,6 +1287,9 @@ def run_agent(*, user_scrubbed: str,
                 esc = _risk_escalation(state, trace, step)
                 if esc is not None:
                     return esc
+                low = _low_confidence_escalation(step_conf, trace, step)
+                if low is not None:
+                    return low
                 grounded = bool(state.get("retrieved"))
                 _ensure_grounded(state, trace, step)   # never generate ungrounded
                 result = _do_generate(args, state, n_responses, temperature)
@@ -1017,6 +1303,9 @@ def run_agent(*, user_scrubbed: str,
                 esc = _risk_escalation(state, trace, step)
                 if esc is not None:
                     return esc
+                low = _low_confidence_escalation(step_conf, trace, step)
+                if low is not None:
+                    return low
                 q = (args.get("question") or
                      "Could you tell me a bit more about what's been "
                      "happening?").strip()
@@ -1044,7 +1333,7 @@ def run_agent(*, user_scrubbed: str,
             messages.append({"role": "assistant", "content": "",
                              "tool_calls": [call]})
             messages.append({"role": "tool", "name": name,
-                             "content": result_text})
+                             "content": _curate_observation(name, result_text)})
             trace.append({"step": step, "tool": name, "arguments": args,
                           "missing_args": missing,
                           "result": result_text[:200]})

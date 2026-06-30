@@ -18,9 +18,131 @@ Safety gate: Huysun29/cbt-qwen2.5-7b-v2 (run prior to this builder)
 import hashlib
 from typing import Dict, List, Optional
 
-from app.services.preflight import CANONICAL_TECHNIQUES
+from app.services.preflight import CANONICAL_TECHNIQUES, canonical_technique
 
 _TECH_LIST = ", ".join(CANONICAL_TECHNIQUES)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Technique scaffolding — the concrete, clinically-conventional micro-steps for
+# each CBT technique. The responder scores well on empathy but weakly on
+# TECHNIQUE CORRECTNESS (eval tech-correct ≈ 1.8/5): it names a technique but
+# doesn't actually execute its steps. Injecting the canonical step sequence for
+# the chosen technique gives the model a recipe to follow, so the reply applies
+# the method properly. Keyed by canonical technique name (preflight set).
+# ─────────────────────────────────────────────────────────────────────────────
+TECHNIQUE_STEPS = {
+    "Cognitive restructuring": [
+        "Pinpoint the specific automatic/hot thought",
+        "Name the cognitive distortion in it",
+        "Weigh the evidence for and against the thought",
+        "Build a fairer, balanced alternative thought",
+        "Agree one small step to practise the new thought",
+    ],
+    "Thought record": [
+        "Name the situation and the feeling (rate 0–100)",
+        "Capture the automatic thought",
+        "List evidence for and against it",
+        "Write a balanced thought and re-rate the feeling",
+    ],
+    "Decatastrophizing": [
+        "Name the feared worst case",
+        "Estimate how likely it realistically is",
+        "Identify the most likely outcome instead",
+        "Plan how you'd cope even if the worst happened",
+    ],
+    "Behavioral activation": [
+        "Validate low motivation and pick one valued activity",
+        "Break it into a tiny first step",
+        "Schedule exactly when to do it",
+        "Plan a brief review of how it felt",
+    ],
+    "Problem-solving": [
+        "Define the problem concretely",
+        "Brainstorm several options without judging",
+        "Weigh pros and cons of each",
+        "Pick one and plan the first action",
+    ],
+    "Socratic questioning": [
+        "Ask what the evidence for the belief is",
+        "Explore alternative explanations",
+        "Examine the real consequences if it were true",
+        "Guide the client to a more balanced conclusion",
+    ],
+    "Cognitive reframing": [
+        "Reflect the current interpretation back",
+        "Offer a fairer, more flexible way to see it",
+        "Check how the reframe changes the feeling",
+    ],
+    "Reality testing": [
+        "State the belief as a testable prediction",
+        "Gather the evidence for and against it",
+        "Compare belief to the evidence and revise",
+    ],
+    "Psychoeducation": [
+        "Normalise the experience",
+        "Explain the relevant CBT concept simply",
+        "Link it back to what the client described",
+    ],
+    "Relaxation training": [
+        "Introduce one technique (e.g. paced breathing)",
+        "Walk through it step by step, concretely",
+        "Suggest when to practise it",
+    ],
+    "Mindfulness": [
+        "Invite attention to the present moment",
+        "Guide noticing thoughts/feelings without judging",
+        "Suggest a short daily practice",
+    ],
+    "Worry postponement": [
+        "Acknowledge the worry without engaging it now",
+        "Set a fixed daily 'worry time'",
+        "Refocus on the present until then",
+    ],
+    "Self-compassion": [
+        "Notice the self-critical voice",
+        "Reframe it as you'd speak to a friend",
+        "Offer one kind, realistic statement",
+    ],
+    "Pros and cons analysis": [
+        "List the pros of the option/belief",
+        "List the cons",
+        "Weigh them and draw a balanced conclusion",
+    ],
+    "Graded exposure": [
+        "Build a small ladder of feared steps",
+        "Start with the easiest manageable step",
+        "Plan to stay with it until anxiety eases, then step up",
+    ],
+    "Behavioral experiment": [
+        "State the belief as a prediction to test",
+        "Design a small real-world test",
+        "Plan what to observe and how to review it",
+    ],
+    "Activity scheduling": [
+        "Identify valued/pleasant activities",
+        "Schedule them into specific time slots",
+        "Plan to rate mood before and after",
+    ],
+    "Grounding techniques": [
+        "Bring attention to the body and surroundings",
+        "Guide a concrete exercise (e.g. 5-4-3-2-1 senses)",
+        "Check in on how grounded the client feels",
+    ],
+}
+
+
+def _technique_scaffold(technique_hint: Optional[str]) -> str:
+    """Render the canonical micro-steps for the hinted technique, or '' when the
+    technique isn't recognised / has no scaffold (then the model just gets the
+    hint as before — no behaviour change)."""
+    canon = canonical_technique(technique_hint or "")
+    steps = TECHNIQUE_STEPS.get(canon or "")
+    if not steps:
+        return ""
+    numbered = "; ".join(f"{i}) {s}" for i, s in enumerate(steps, 1))
+    return (f"\n- How to APPLY {canon} correctly (work these steps in your "
+            f"Plan/Response, adapt wording to the client): {numbered}")
 
 
 SYSTEM_PROMPT = (
@@ -141,6 +263,7 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
         f"- Cognitive distortions: {analysis.get('cognitive_distortions','')}\n"
         f"- Technique hint: {analysis.get('technique_hint','')}"
     )
+    base += _technique_scaffold(analysis.get("technique_hint"))
     materials = (analysis.get("suggested_materials") or "").strip()
     if materials:
         base += (
@@ -151,6 +274,13 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
     if plan:
         base += ("\n- Session plan — advance THIS step in your Plan/Response, "
                  "do not restart earlier steps: " + plan)
+    facts = (analysis.get("user_facts") or "").strip()
+    if facts:
+        base += (
+            "\n- The client asked about their OWN data; these are their REAL "
+            "records from the system. Answer using ONLY these — do not invent "
+            "or alter any dates, names, or scores, and do not say you cannot "
+            "access them:\n" + facts)
     return base
 
 

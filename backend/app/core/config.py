@@ -72,6 +72,21 @@ class Settings(BaseSettings):
     agent_model_repo: str = "Huysun29/cbt-qwen2.5-7b-v2"
     agent_max_steps: int = 6
     agent_temperature: float = 0.3   # low: orchestrator should route, not riff
+    # Constrained decoding: prefill the Qwen2.5 tool-call opener so the 7B
+    # orchestrator emits a JSON tool call instead of free prose (it measured
+    # ~47% prose otherwise). Only applies when tools are offered; the Modal
+    # endpoint ignores the flag if it predates this feature, so it's safe to
+    # leave on. Set False to revert to unconstrained decoding.
+    agent_force_tool_call: bool = True
+    # Self-consistency: sample the orchestrator's per-step decision N times and
+    # take the majority tool — a small 7B gains reliability from voting. 1 = off
+    # (single call, unchanged behaviour). Costs N× orchestrator calls per step.
+    agent_self_consistency: int = 1
+    # Confidence-gated escalation: when voting is on and the TERMINAL decision is
+    # split below this share (e.g. 0.5 = no majority), route the turn to a
+    # clinician instead of auto-answering — uncertainty becomes safety. 0 = off.
+    # Inactive while self_consistency = 1 (confidence is always 1.0 then).
+    agent_confidence_floor: float = 0.0
 
     # ---- scope router ----
     # Off-topic / "about MindCare" questions on a ROUTINE (L3) turn get a short

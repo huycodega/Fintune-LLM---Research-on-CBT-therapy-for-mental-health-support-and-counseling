@@ -54,7 +54,8 @@ def chat(messages: List[Dict],
          tools: Optional[List[Dict]] = None,
          temperature: Optional[float] = None,
          max_new_tokens: int = 512,
-         timeout: Optional[int] = None) -> Optional[Dict]:
+         timeout: Optional[int] = None,
+         force_tool_call: Optional[bool] = None) -> Optional[Dict]:
     """
     One orchestrator step. Returns {"content", "tool_calls", "raw"} or None
     on failure (caller is expected to fall back to the fixed pipeline).
@@ -71,12 +72,19 @@ def chat(messages: List[Dict],
     if timeout is None:
         timeout = settings.modal_call_timeout
 
+    # Force a tool call ONLY when tools are offered (never for plain-text
+    # completions like the clinician copilot). Defaults to the global setting.
+    if force_tool_call is None:
+        force_tool_call = settings.agent_force_tool_call
+    force_tool_call = bool(force_tool_call and tools)
+
     body = json.dumps({
         "messages": messages,
         "tools": tools or [],
         "temperature": (settings.agent_temperature
                         if temperature is None else temperature),
         "max_new_tokens": max_new_tokens,
+        "force_tool_call": force_tool_call,
     }).encode()
 
     req = urllib.request.Request(
