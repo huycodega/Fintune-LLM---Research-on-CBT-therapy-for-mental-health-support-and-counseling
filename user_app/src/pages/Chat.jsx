@@ -779,13 +779,19 @@ export default function Chat({ onNav }) {
       }
     };
 
-    let knownIds = null;
+    // Snapshot existing session ids NOW (t=0, before the backend commits the new
+    // one) — not lazily at poll time. Otherwise, if the backend finishes and
+    // commits the session before the snapshot, the new session is already in the
+    // set and the recovery poll never spots it → the bubble stays "thinking"
+    // until a manual reload (exactly the dropped/hung-response case on a long
+    // cold-start L2 turn).
+    const knownIdsP = api.mySessions()
+      .then((s0) => new Set((s0.sessions || []).map((x) => x.id)))
+      .catch(() => new Set());
     const startReplyPoll = async () => {
       if (settled || pollRef.current) return;
-      if (knownIds === null) {
-        try { const s0 = await api.mySessions(); knownIds = new Set((s0.sessions || []).map((x) => x.id)); }
-        catch { knownIds = new Set(); }
-      }
+      const knownIds = await knownIdsP;
+      if (settled) return;
       const t0 = Date.now();
       pollRef.current = setInterval(async () => {
         if (settled) { clearInterval(pollRef.current); return; }
