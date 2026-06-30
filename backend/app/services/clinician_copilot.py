@@ -31,8 +31,15 @@ _UNAVAILABLE = ("Copilot is unavailable (agent orchestrator offline). "
 _SYSTEM = (
     "You are a clinical supervision copilot assisting a licensed mental-health "
     "clinician who is reviewing an AI-drafted CBT response before it reaches a "
-    "student client. Be concise, clinically precise, and cautious. You advise; "
-    "the clinician decides. Never invent facts not present in the case data.")
+    "student client. Be concise, clinically precise, and BALANCED — caution does "
+    "NOT mean defaulting to rejection. You advise; the clinician decides. Never "
+    "invent facts not present in the case data.\n"
+    "How to read the metrics: the draft has ALREADY passed the deterministic "
+    "safety gate, so it is not a crisis case. preflight_pass=True means the reply "
+    "is well-formed and rule-compliant. A LOW grounding score is EXPECTED and "
+    "normal for warm, empathic CBT replies (they make few factual claims) — it is "
+    "NOT by itself a reason to reject. Judge mainly on safety, empathy, and "
+    "clinical appropriateness of the actual text.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -93,10 +100,18 @@ def summarize_case(session, drafts, intake) -> str:
 
 def suggest_decision(session, drafts, intake) -> str:
     ctx = _case_context(session, drafts, intake)
-    user = (ctx + "\n\n[TASK]\nAdvise the clinician: which action fits best — "
-            "APPROVE (and which draft #), EDIT (what to change), or REJECT "
-            "(why)? Justify using the grounding scores, preflight flags, and "
-            "clinical appropriateness. Be explicit this is advisory only.")
+    user = (ctx + "\n\n[TASK]\nRecommend ONE action and justify it briefly "
+            "(advisory only):\n"
+            "• APPROVE (state which draft #) — when a draft is safe, empathic, "
+            "and clinically appropriate. This should be the DEFAULT for a sound "
+            "draft; a low grounding score alone is NOT a reason to reject.\n"
+            "• EDIT — when it's close but needs a specific, named fix.\n"
+            "• REJECT — ONLY when the text is unsafe, clinically inappropriate, "
+            "fabricates a clinical claim, or there is NO draft (high-risk L1), in "
+            "which case routing to a human clinician is the correct action.\n"
+            "Weigh the safety, empathy and appropriateness of the actual reply — "
+            "not the raw grounding number. Start your answer with the chosen "
+            "action word.")
     return agent_client.complete(_SYSTEM, user, max_new_tokens=400) or _UNAVAILABLE
 
 
