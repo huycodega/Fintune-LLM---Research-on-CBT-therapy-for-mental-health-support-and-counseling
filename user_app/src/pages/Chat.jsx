@@ -234,6 +234,15 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
                   <span className="ai-rec-arrow">›</span>
                 </button>
               ))}
+              {c.kind === "resources" && (c.items || []).map((it) => (
+                <button key={it.id} className="ai-rec-chip"
+                        onClick={() => onLessonCard && onLessonCard(it)}>
+                  <span className="ai-rec-emoji">📗</span>
+                  <span className="ai-rec-title">{it.title}</span>
+                  {it.type && <span className="ai-rec-meta">{it.type}</span>}
+                  <span className="ai-rec-arrow">›</span>
+                </button>
+              ))}
               {c.kind === "psychologists" && (c.items || []).map((it) => (
                 <button key={it.id} className="ai-book-expert"
                         onClick={() => onExpertCard && onExpertCard(it)}>
@@ -701,9 +710,9 @@ export default function Chat({ onNav }) {
   // in the library, loaded from the same published set); otherwise jump to the
   // Lessons page.
   function openLessonCard(item) {
-    const lib = library.find((x) => x.kind === "lesson" && x.id === item.id);
+    const lib = library.find((x) => x.id === item.id);
     if (lib) setRecDetail(lib);
-    else if (onNav) onNav("baihoc");
+    else if (onNav) onNav(item.type ? "tainguyen" : "baihoc");
   }
   async function pickExpert(e) {
     setExpertBooking((b) => ({ ...b, step: "slots", loading: true, expert: e, error: "" }));

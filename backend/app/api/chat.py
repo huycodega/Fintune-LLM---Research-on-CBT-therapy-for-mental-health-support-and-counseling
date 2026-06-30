@@ -133,6 +133,11 @@ def _info_reply(db, u, infos):
                 texts.append(self_data.lessons(db))
                 if items:
                     cards.append({"kind": "lessons", "items": items})
+            elif info == "resources":
+                items = self_data.resources_cards(db)
+                texts.append(self_data.resources(db))
+                if items:
+                    cards.append({"kind": "resources", "items": items})
             elif info == "psychologists":
                 items = self_data.psychologists_cards(db)
                 texts.append(self_data.psychologists(db))

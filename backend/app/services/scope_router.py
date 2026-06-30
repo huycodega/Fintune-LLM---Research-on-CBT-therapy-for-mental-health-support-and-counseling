@@ -77,6 +77,10 @@ _DATA_PATS = [
     ("lessons", re.compile(
         r"\b(what|which|list|available|any) lessons?\b|do you have (any )?lessons|"
         r"\bcourses?\b.*(available|list|have)|lessons? (are there|do you have)", re.I)),
+    ("resources", re.compile(
+        r"\b(what|which|list|available|any) resources?\b|do you have (any )?resources|"
+        r"support resources|self[- ]?help (resources|materials)|"
+        r"resources? (are there|do you have|available)", re.I)),
     ("mood", re.compile(
         r"\bmy mood\b|mood (score|history|trend|chart)|how (has )?my mood", re.I)),
     ("screening", re.compile(
@@ -140,8 +144,8 @@ _INFO_LOOKS = re.compile(
     r"\?|^\s*(who|what|which|when|where|how|can|could|do|does|is|are|list|show|"
     r"tell me|remind me)\b|\bmy \w", re.I)
 
-_INFO_LABELS = {"profile", "appointments", "lessons", "psychologists",
-                "mood", "screening", "meta", "offtopic"}
+_INFO_LABELS = {"profile", "appointments", "lessons", "resources",
+                "psychologists", "mood", "screening", "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "
@@ -149,6 +153,7 @@ _INFO_SYS = (
     "profile = asks about their own account/identity (who am I, my name).\n"
     "appointments = asks about their own bookings / consultation schedule.\n"
     "lessons = asks what CBT lessons or courses are available.\n"
+    "resources = asks what support resources (articles, audio, tools) are available.\n"
     "psychologists = asks which experts/counsellors they can see or book.\n"
     "mood = asks about their own recorded mood history or scores.\n"
     "screening = asks about their own PHQ-9 / GAD-7 results.\n"

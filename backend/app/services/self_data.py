@@ -23,6 +23,13 @@ def lessons_cards(db) -> list:
              "category": x.category} for x in rows]
 
 
+def resources_cards(db) -> list:
+    rows = (db.query(models.Resource).filter_by(status="published")
+            .order_by(models.Resource.updated_at.desc()).limit(8).all())
+    return [{"id": str(x.id), "title": x.title, "type": x.type,
+             "category": x.category} for x in rows]
+
+
 def psychologists_cards(db) -> list:
     rows = (db.query(models.Psychologist).filter_by(active=True)
             .order_by(models.Psychologist.name).limit(10).all())
@@ -65,6 +72,16 @@ def lessons(db) -> str:
     rows = [f"- {x['title']}" + (f" ({x['duration']})" if x['duration'] else "")
             for x in items]
     return "Here are the lessons available — tap one to open it:\n" + "\n".join(rows)
+
+
+def resources(db) -> str:
+    items = resources_cards(db)
+    if not items:
+        return "There are no support resources available yet."
+    rows = [f"- {x['title']}" + (f" [{x['type']}]" if x['type'] else "")
+            for x in items]
+    return ("Here are the support resources available — tap one to open it:\n"
+            + "\n".join(rows))
 
 
 def psychologists(db) -> str:
