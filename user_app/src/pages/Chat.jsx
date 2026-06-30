@@ -591,6 +591,7 @@ export default function Chat({ onNav }) {
   const inputRef = useRef(null);
   const pollRef = useRef(null);
   const pendingRef = useRef(null);  // { sid, idx } while a clinician review is outstanding
+  const sendingRef = useRef(false); // synchronous double-submit guard (state is too slow)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -735,7 +736,11 @@ export default function Chat({ onNav }) {
 
   async function sendText(raw) {
     const text = (raw ?? input).trim();
-    if (!text || busy) return;
+    // Guard with a ref, not `busy` (state) — two rapid Enter/clicks fire within
+    // the same render and both read the stale busy=false, sending twice. The ref
+    // updates synchronously so the second call bails out immediately.
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
 
     const aiIdx = messages.length + 1;
     setMessages((prev) => [...prev, { role: "user", time: nowTime(), read: true, text }, { role: "ai", typing: true }]);
@@ -819,6 +824,7 @@ export default function Chat({ onNav }) {
       // Gateway cut the long request — let the poll recover the saved reply.
       if (!settled) startReplyPoll();
     } finally {
+      sendingRef.current = false;
       setBusy(false);
     }
   }

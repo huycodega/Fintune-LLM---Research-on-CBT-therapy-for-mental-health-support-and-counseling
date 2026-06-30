@@ -380,7 +380,9 @@ def chat(body: ChatIn, request: Request,
     # only on an EXPLICIT info pattern with NO distress signal AND a clean safety
     # regex (not L0/L1), so a genuine moderate-risk message is never intercepted.
     if settings.scope_router_enabled and level in ("L2", "L3"):
-        info = scope_router.info_intent(text)
+        info = (scope_router.info_intent_smart(text)
+                if settings.scope_router_semantic
+                else scope_router.info_intent(text))
         if info and safety_gate._heuristic(text).get("triage_level") \
                 not in ("L0", "L1"):
             reply = _info_reply(db, u, info)

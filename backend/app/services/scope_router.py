@@ -128,6 +128,72 @@ def info_intent(text: str):
     return None
 
 
+# Semantic fallback for info_intent: a message that LOOKS like an info/data
+# question (a question cue, or "my …") but matched no keyword pattern — the novel
+# phrasings keywords can't enumerate. We only spend an LLM call on these.
+_INFO_LOOKS = re.compile(
+    r"\?|^\s*(who|what|which|when|where|how|can|could|do|does|is|are|list|show|"
+    r"tell me|remind me)\b|\bmy \w", re.I)
+
+_INFO_LABELS = {"profile", "appointments", "lessons", "psychologists",
+                "mood", "screening", "meta", "offtopic"}
+
+_INFO_SYS = (
+    "You route a user message in MindCare, a student mental-health app, to ONE "
+    "label. Reply with EXACTLY one word:\n"
+    "profile = asks about their own account/identity (who am I, my name).\n"
+    "appointments = asks about their own bookings / consultation schedule.\n"
+    "lessons = asks what CBT lessons or courses are available.\n"
+    "psychologists = asks which experts/counsellors they can see or book.\n"
+    "mood = asks about their own recorded mood history or scores.\n"
+    "screening = asks about their own PHQ-9 / GAD-7 results.\n"
+    "meta = asks ABOUT MindCare itself (how it works, privacy, is it human).\n"
+    "offtopic = an unrelated request (coding, math, trivia, weather, translation).\n"
+    "none = anything else — ESPECIALLY any feelings, distress, or request for "
+    "emotional support. When unsure, answer none.\n"
+    "Answer with one word only."
+)
+
+
+def _llm_info(text: str):
+    """Ask the LLM for an info label. Returns a label in _INFO_LABELS or None on
+    any problem (caller treats None as 'not an info query'). Never raises."""
+    import re as _re
+    try:
+        from app.services import llm_client, pii_scrubber
+        safe = pii_scrubber.scrub(text or "")[:500]
+        gen = llm_client.generate(
+            [{"role": "system", "content": _INFO_SYS},
+             {"role": "user", "content": safe}],
+            n=1, temperature=0.0)
+        if not gen or gen.get("degraded"):
+            return None
+        out = (gen.get("responses") or [""])[0].lower()
+        clean = _re.sub(r"[^a-z]", "", out)
+        for lab in _INFO_LABELS:
+            if lab in clean:
+                return lab
+        return None
+    except Exception:
+        return None
+
+
+def info_intent_smart(text: str):
+    """Keyword-first info detection; for the AMBIGUOUS remainder that still looks
+    like an info question (and carries NO distress), ask the LLM. Best-effort —
+    PII-scrubbed, and any failure/uncertainty falls back to None, so a real
+    support message is never intercepted and latency is paid only on the tail."""
+    kw = info_intent(text)
+    if kw:
+        return kw
+    low = (text or "").strip().lower()
+    if not low or _DISTRESS_VETO.search(low) or _PERSONAL_PAT.search(low):
+        return None
+    if not _INFO_LOOKS.search(low):
+        return None
+    return _llm_info(text)
+
+
 def classify(text: str) -> str:
     """Return 'personal' | 'meta' | 'offtopic'. Biased toward 'personal'."""
     low = (text or "").strip().lower()
