@@ -1,19 +1,46 @@
 """
-Self-data lookups — a user's OWN MindCare records, formatted as a short, direct
-reply. Pure read-only helpers shared by:
+Self-data lookups — a user's OWN MindCare records, as both a text reply and
+structured "cards" the chat UI can render as interactive (tappable) items.
 
-  • the chat "direct-answer gate" (answers factual questions like "who am I" /
-    "my appointments" instantly, without a CBT draft or clinician review), and
-  • the agent's get_my_data / list_psychologists tools,
+Shared by:
+  • the chat direct-answer gate (answers "who am I" / "my appointments" /
+    "what lessons are there" instantly — text for history + cards for the UI),
+  • the agent's get_my_data / list_psychologists tools (text only).
 
-so both surface IDENTICAL, real data — never fabricated. Nothing here is PHI
-beyond the user's own account, which is being returned to that same user.
+The *_cards functions return plain dicts (real records only, never fabricated);
+the text functions format from them so the two never drift.
 """
 from __future__ import annotations
 
 from app.db import models
 
 
+# ── structured (for interactive UI cards) ────────────────────────────────────
+def lessons_cards(db) -> list:
+    rows = (db.query(models.Lesson).filter_by(status="published")
+            .order_by(models.Lesson.updated_at.desc()).limit(8).all())
+    return [{"id": str(x.id), "title": x.title, "duration": x.duration,
+             "category": x.category} for x in rows]
+
+
+def psychologists_cards(db) -> list:
+    rows = (db.query(models.Psychologist).filter_by(active=True)
+            .order_by(models.Psychologist.name).limit(10).all())
+    return [{"id": str(p.id), "name": p.name, "specialty": p.specialty,
+             "experience": p.experience, "phone": p.phone} for p in rows]
+
+
+def appointments_cards(db, uid) -> list:
+    rows = (db.query(models.Appointment, models.Psychologist)
+            .join(models.Psychologist,
+                  models.Appointment.psychologist_id == models.Psychologist.id)
+            .filter(models.Appointment.user_id == uid)
+            .order_by(models.Appointment.date.desc()).limit(10).all())
+    return [{"date": a.date.isoformat(), "slot": a.slot, "name": p.name,
+             "status": a.status} for a, p in rows]
+
+
+# ── text (for the reply body + agent footer + history) ───────────────────────
 def profile(db, uid) -> str:
     u = db.get(models.User, uid)
     if not u:
@@ -23,42 +50,37 @@ def profile(db, uid) -> str:
 
 
 def appointments(db, uid) -> str:
-    rows = (db.query(models.Appointment, models.Psychologist)
-            .join(models.Psychologist,
-                  models.Appointment.psychologist_id == models.Psychologist.id)
-            .filter(models.Appointment.user_id == uid)
-            .order_by(models.Appointment.date.desc()).limit(10).all())
-    if not rows:
+    items = appointments_cards(db, uid)
+    if not items:
         return "You have no appointments booked yet."
-    items = [f"- {a.date.isoformat()} {a.slot} with {p.name} — {a.status}"
-             for a, p in rows]
-    return "Here are your appointments:\n" + "\n".join(items)
+    rows = [f"- {a['date']} {a['slot']} with {a['name']} — {a['status']}"
+            for a in items]
+    return "Here are your appointments:\n" + "\n".join(rows)
 
 
 def lessons(db) -> str:
-    rows = (db.query(models.Lesson).filter_by(status="published")
-            .order_by(models.Lesson.updated_at.desc()).limit(8).all())
-    if not rows:
+    items = lessons_cards(db)
+    if not items:
         return "There are no lessons available yet."
-    items = [f"- {x.title}" + (f" ({x.duration})" if x.duration else "")
-             for x in rows]
-    return "Here are the lessons available:\n" + "\n".join(items)
+    rows = [f"- {x['title']}" + (f" ({x['duration']})" if x['duration'] else "")
+            for x in items]
+    return "Here are the lessons available — tap one to open it:\n" + "\n".join(rows)
 
 
 def psychologists(db) -> str:
-    rows = (db.query(models.Psychologist).filter_by(active=True)
-            .order_by(models.Psychologist.name).limit(10).all())
-    if not rows:
+    items = psychologists_cards(db)
+    if not items:
         return "No counselling experts are listed yet."
-    items = []
-    for p in rows:
-        bits = [p.name]
-        if p.specialty:
-            bits.append(p.specialty)
-        if p.experience:
-            bits.append(p.experience)
-        items.append("- " + " — ".join(bits))
-    return "Here are the counselling experts you can book:\n" + "\n".join(items)
+    rows = []
+    for p in items:
+        bits = [p["name"]]
+        if p["specialty"]:
+            bits.append(p["specialty"])
+        if p["experience"]:
+            bits.append(p["experience"])
+        rows.append("- " + " — ".join(bits))
+    return ("Here are the counselling experts you can book — tap one to see "
+            "their times:\n" + "\n".join(rows))
 
 
 def mood(db, uid) -> str:

@@ -100,26 +100,47 @@ _GREETING_PAT = re.compile(
 )
 
 
-def _info_reply(db, u, info: str):
-    """Build the direct answer for a factual info intent, or None on failure.
-    Self-data is read from the DB (real records only); meta/offtopic use the
-    scope-router canned replies."""
-    if info in ("meta", "offtopic"):
-        return scope_router.reply_for(info)
-    fn = {
-        "profile":       lambda: self_data.profile(db, u.id),
-        "appointments":  lambda: self_data.appointments(db, u.id),
-        "lessons":       lambda: self_data.lessons(db),
-        "psychologists": lambda: self_data.psychologists(db),
-        "mood":          lambda: self_data.mood(db, u.id),
-        "screening":     lambda: self_data.screening(db, u.id),
-    }.get(info)
-    if not fn:
-        return None
-    try:
-        return fn()
-    except Exception:
-        return None
+def _info_reply(db, u, infos):
+    """Build the direct answer for one or more factual info intents.
+
+    Returns (text, cards): `text` is the combined reply (real DB records only,
+    stored for history); `cards` is a list of {kind, items} the chat UI renders
+    as tappable items (lessons → open, psychologists → book, appointments).
+    Returns ("", []) on total failure.
+    """
+    texts, cards = [], []
+    seen = set()
+    for info in infos:
+        if info in seen:
+            continue
+        seen.add(info)
+        try:
+            if info in ("meta", "offtopic"):
+                texts.append(scope_router.reply_for(info))
+            elif info == "profile":
+                texts.append(self_data.profile(db, u.id))
+            elif info == "mood":
+                texts.append(self_data.mood(db, u.id))
+            elif info == "screening":
+                texts.append(self_data.screening(db, u.id))
+            elif info == "appointments":
+                items = self_data.appointments_cards(db, u.id)
+                texts.append(self_data.appointments(db, u.id))
+                if items:
+                    cards.append({"kind": "appointments", "items": items})
+            elif info == "lessons":
+                items = self_data.lessons_cards(db)
+                texts.append(self_data.lessons(db))
+                if items:
+                    cards.append({"kind": "lessons", "items": items})
+            elif info == "psychologists":
+                items = self_data.psychologists_cards(db)
+                texts.append(self_data.psychologists(db))
+                if items:
+                    cards.append({"kind": "psychologists", "items": items})
+        except Exception:
+            continue
+    return "\n\n".join(t for t in texts if t), cards
 
 
 def _is_greeting(text: str) -> bool:
@@ -380,32 +401,35 @@ def chat(body: ChatIn, request: Request,
     # only on an EXPLICIT info pattern with NO distress signal AND a clean safety
     # regex (not L0/L1), so a genuine moderate-risk message is never intercepted.
     if settings.scope_router_enabled and level in ("L2", "L3"):
-        info = (scope_router.info_intent_smart(text)
-                if settings.scope_router_semantic
-                else scope_router.info_intent(text))
-        if info and safety_gate._heuristic(text).get("triage_level") \
+        infos = (scope_router.info_intents_smart(text)
+                 if settings.scope_router_semantic
+                 else scope_router.info_intents(text))
+        if infos and safety_gate._heuristic(text).get("triage_level") \
                 not in ("L0", "L1"):
-            reply = _info_reply(db, u, info)
+            reply, cards = _info_reply(db, u, infos)
             if reply:
+                tech = "info_" + "_".join(infos)
                 sess = models.Session(
-                    **base, status="answered", analysis={"info_intent": info},
+                    **base, status="answered",
+                    analysis={"info_intents": infos},
                     final_reply_enc=encrypt_phi(reply),
-                    final_technique=f"info_{info}",
+                    final_technique=tech[:60],
                     completed_at=datetime.now(timezone.utc))
                 db.add(sess); db.flush()
                 moderation_store.record_ai_message(
                     db, convo, user_message, reply, level, "not_required",
                     confidence=triage.get("confidence"), model_name="info_gate")
-                audit_mod.audit(db, action=f"info_{info}", actor=user, ip=ip,
+                audit_mod.audit(db, action="info_gate", actor=user, ip=ip,
                                  resource_type="session", resource_id=sess.id,
-                                 detail={"info_intent": info})
+                                 detail={"info_intents": infos})
                 return {
                     "session_id": str(sess.id),
                     "conversation_id": str(convo.id),
                     "outcome": "answered", "triage": triage,
-                    "final": {"technique": f"info_{info}", "response": reply},
-                    "drafts": [{"idx": 0, "technique": f"info_{info}",
+                    "final": {"technique": tech[:60], "response": reply},
+                    "drafts": [{"idx": 0, "technique": tech[:60],
                                 "response": reply}],
+                    "cards": cards,
                     "mode": "info_gate",
                 }
 

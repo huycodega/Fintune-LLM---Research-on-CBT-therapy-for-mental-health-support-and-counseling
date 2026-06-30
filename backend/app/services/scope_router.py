@@ -103,29 +103,34 @@ _DISTRESS_VETO = re.compile(
     r"can'?t (sleep|stop|cope|go on|take|handle))\b", re.I)
 
 
-def info_intent(text: str):
-    """Return a factual-info label to answer DIRECTLY, or None.
-
-    One of: 'profile' | 'appointments' | 'lessons' | 'psychologists' | 'mood' |
-    'screening' | 'meta' | 'offtopic'. Returns None when the message carries any
-    distress/risk signal (a real support message must never be intercepted) or
-    matches no explicit info pattern.
-    """
+def info_intents(text: str) -> list:
+    """Return ALL factual-info labels to answer directly (a compound question
+    like 'my mood / my screening results' yields both), or []. Labels are a
+    subset of: profile, appointments, lessons, psychologists, mood, screening,
+    meta, offtopic. Returns [] when the message carries any distress/risk signal
+    (a real support message must never be intercepted) or matches nothing."""
     low = (text or "").strip().lower()
     if not low:
-        return None
-    # Explicit self-data intents — checked first, vetoed by any distress signal.
-    for label, pat in _DATA_PATS:
-        if pat.search(low):
-            return None if _DISTRESS_VETO.search(low) else label
+        return []
+    # Explicit self-data intents — all that match, vetoed by any distress signal.
+    if not _DISTRESS_VETO.search(low):
+        hits = [label for label, pat in _DATA_PATS if pat.search(low)]
+        if hits:
+            return hits
     # Meta / off-topic — keyword only (safe on L2); never intercept wellbeing.
     if _PERSONAL_PAT.search(low):
-        return None
+        return []
     if _META_PAT.search(low):
-        return "meta"
+        return ["meta"]
     if _OFFTOPIC_PAT.search(low):
-        return "offtopic"
-    return None
+        return ["offtopic"]
+    return []
+
+
+def info_intent(text: str):
+    """Single-label convenience wrapper over info_intents (first match or None)."""
+    hits = info_intents(text)
+    return hits[0] if hits else None
 
 
 # Semantic fallback for info_intent: a message that LOOKS like an info/data
@@ -178,20 +183,27 @@ def _llm_info(text: str):
         return None
 
 
-def info_intent_smart(text: str):
-    """Keyword-first info detection; for the AMBIGUOUS remainder that still looks
-    like an info question (and carries NO distress), ask the LLM. Best-effort —
-    PII-scrubbed, and any failure/uncertainty falls back to None, so a real
-    support message is never intercepted and latency is paid only on the tail."""
-    kw = info_intent(text)
+def info_intents_smart(text: str) -> list:
+    """Keyword-first (multi-label); for the AMBIGUOUS remainder that still looks
+    like an info question (and carries NO distress), ask the LLM for one label.
+    Best-effort — PII-scrubbed, any failure/uncertainty → [] so a real support
+    message is never intercepted and latency is paid only on the tail."""
+    kw = info_intents(text)
     if kw:
         return kw
     low = (text or "").strip().lower()
     if not low or _DISTRESS_VETO.search(low) or _PERSONAL_PAT.search(low):
-        return None
+        return []
     if not _INFO_LOOKS.search(low):
-        return None
-    return _llm_info(text)
+        return []
+    lab = _llm_info(text)
+    return [lab] if lab else []
+
+
+def info_intent_smart(text: str):
+    """Single-label convenience wrapper over info_intents_smart."""
+    hits = info_intents_smart(text)
+    return hits[0] if hits else None
 
 
 def classify(text: str) -> str:

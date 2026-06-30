@@ -204,11 +204,17 @@ function freeSlotsByDay(avail) {
 }
 
 /* ── Chat bubble ───────────────────────────────────────────────── */
-function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt }) {
+function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
+                     onLessonCard, onExpertCard }) {
   const isAI = msg.role === "ai";
   const { body, recs } = isAI
     ? parseRecs(msg.text, library)
     : { body: msg.text, recs: [] };
+  // Interactive data cards from the info-gate (lessons / psychologists /
+  // appointments). When present, show only the intro line of the text — the list
+  // itself is rendered as tappable cards below (the full text stays in history).
+  const cards = isAI && Array.isArray(msg.cards) ? msg.cards : [];
+  const displayBody = cards.length ? (body.split("\n")[0] || body) : body;
   return (
     <div className={`ai-row ${isAI ? "ai" : "user"}`}>
       {isAI && (
@@ -216,7 +222,38 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt }) {
       )}
       <div className="ai-msg">
         <div className={`ai-bubble ${isAI ? "ai-bubble-ai" : "ai-bubble-user"} ${msg.error ? "ai-bubble-error" : ""}`}>
-          <MsgText text={body} />
+          <MsgText text={displayBody} />
+          {cards.map((c, ci) => (
+            <div className="ai-recs" key={"card" + ci}>
+              {c.kind === "lessons" && (c.items || []).map((it) => (
+                <button key={it.id} className="ai-rec-chip"
+                        onClick={() => onLessonCard && onLessonCard(it)}>
+                  <span className="ai-rec-emoji">📘</span>
+                  <span className="ai-rec-title">{it.title}</span>
+                  {it.duration && <span className="ai-rec-meta">{it.duration}</span>}
+                  <span className="ai-rec-arrow">›</span>
+                </button>
+              ))}
+              {c.kind === "psychologists" && (c.items || []).map((it) => (
+                <button key={it.id} className="ai-book-expert"
+                        onClick={() => onExpertCard && onExpertCard(it)}>
+                  <span className="ai-book-avatar">{(it.name || "?").slice(0, 1).toUpperCase()}</span>
+                  <span className="ai-book-exp-info">
+                    <span className="ai-book-exp-name">{it.name}</span>
+                    <span className="ai-book-exp-spec">{it.specialty || "Counselling"}{it.experience ? ` · ${it.experience}` : ""}</span>
+                  </span>
+                  <span className="ai-rec-arrow">›</span>
+                </button>
+              ))}
+              {c.kind === "appointments" && (c.items || []).map((it, k) => (
+                <div key={k} className="ai-rec-chip ai-rec-chip-static">
+                  <span className="ai-rec-emoji">📅</span>
+                  <span className="ai-rec-title">{it.date} {it.slot} · {it.name}</span>
+                  <span className="ai-rec-meta">{it.status}</span>
+                </div>
+              ))}
+            </div>
+          ))}
           {recs.length > 0 && (
             <div className="ai-recs">
               <div className="ai-recs-label">📚 From your library</div>
@@ -660,6 +697,14 @@ export default function Chat({ onNav }) {
       if (onNav) onNav("tuvan");   // fall back to the full Counselling page
     }
   }
+  // Tap a lesson card from an info-gate reply → open its detail (the lesson is
+  // in the library, loaded from the same published set); otherwise jump to the
+  // Lessons page.
+  function openLessonCard(item) {
+    const lib = library.find((x) => x.kind === "lesson" && x.id === item.id);
+    if (lib) setRecDetail(lib);
+    else if (onNav) onNav("baihoc");
+  }
   async function pickExpert(e) {
     setExpertBooking((b) => ({ ...b, step: "slots", loading: true, expert: e, error: "" }));
     try {
@@ -817,7 +862,7 @@ export default function Chat({ onNav }) {
       // so the user always has a real-person lifeline to reach for.
       const resources = r.crisis_resources || null;
       if (r.outcome === "answered") {
-        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you." });
+        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards });
       } else if (r.outcome === "crisis") {
         show({ role: "ai", time: nowTime(), text: r.message || "I'm really glad you reached out. Your safety matters most right now.", crisis: true, resources });
       } else if (r.outcome === "pending_review") {
@@ -874,7 +919,9 @@ export default function Chat({ onNav }) {
                 <ChatBubble key={i} msg={m} library={library}
                   onOpenRec={(r) => setRecDetail(r)}
                   onTalkExpert={startExpertBooking}
-                  onManageAppt={onNav ? () => onNav("tuvan") : null} />
+                  onManageAppt={onNav ? () => onNav("tuvan") : null}
+                  onLessonCard={openLessonCard}
+                  onExpertCard={pickExpert} />
               )))
             )}
             {expertBooking && (

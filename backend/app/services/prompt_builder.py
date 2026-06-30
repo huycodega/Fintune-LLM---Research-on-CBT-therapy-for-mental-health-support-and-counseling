@@ -347,7 +347,12 @@ def build_messages(user_input_scrubbed: str,
         "1. Select the best-fit CBT technique based on distortion type and severity.\n"
         "2. State your clinical rationale in 1-2 sentences.\n"
         "3. Define 2-3 concrete micro-steps for this session.\n"
-        "4. Write the empathetic client-facing response (≤200 words).",
+        "4. Write the empathetic client-facing response (≤200 words).\n"
+        "CONTINUITY: Read CONVERSATION SO FAR. Do NOT repeat a question you "
+        "already asked or ask the client to 'share more' again if they just "
+        "did — build on what they already told you and ADVANCE to the next "
+        "step of the technique (e.g. move from naming the thought to examining "
+        "the evidence, then to a reframe or a concrete action).",
     ]
     user_text = "\n\n".join(b for b in blocks if b).strip()
     return [
