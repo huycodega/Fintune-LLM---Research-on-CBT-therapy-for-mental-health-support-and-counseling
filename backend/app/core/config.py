@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     # falls back to "personal" on any failure. Set False for keyword-only.
     scope_router_semantic: bool = True
 
+    # ---- LLM-backed rolling summaries (context + memory) ----
+    # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise
+    # the conversation thread → session_ctx["summary"] (Redis), and (B) rewrite
+    # the durable user-memory gist (UserMemory.summary). Off the critical path,
+    # best-effort: when the LLM is mock/unavailable it silently no-ops and the
+    # heuristic keyword memory stays. Set False to keep pure-heuristic memory.
+    memory_llm_summary: bool = True
+    memory_thread_summary_ttl: int = 604800   # 7 days
+
     # ---- reranker offload to Modal (optional) ----
     # bge-reranker-v2-m3 is ~2.3 GB; loading it locally alongside the embedder
     # OOMs a low-RAM container. When MODAL_RERANKER_ENDPOINT is set (or derived

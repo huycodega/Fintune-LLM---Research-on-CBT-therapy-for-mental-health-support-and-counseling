@@ -71,6 +71,27 @@ def triage_cache_set(input_hash: str, result: dict, ttl: int = 300) -> None:
 
 
 # ============================================================
+# Rolling conversation summary (LLM-written, per thread)
+# ============================================================
+def thread_summary_get(conversation_id: str) -> Optional[str]:
+    try:
+        v = get_redis().get(f"thread:summary:{conversation_id}")
+        if v is None:
+            return None
+        return v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
+    except redis.RedisError:
+        return None
+
+
+def thread_summary_set(conversation_id: str, summary: str,
+                       ttl: int = 604800) -> None:
+    try:
+        get_redis().setex(f"thread:summary:{conversation_id}", ttl, summary)
+    except redis.RedisError:
+        pass
+
+
+# ============================================================
 # Session lock (prevent two clinicians grabbing the same case)
 # ============================================================
 def acquire_review_lock(session_id: str, clinician_id: str) -> bool:

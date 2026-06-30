@@ -31,7 +31,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
-    moderation_store, scope_router, self_data,
+    moderation_store, scope_router, self_data, summarizer,
 )
 
 
@@ -454,7 +454,9 @@ def chat(body: ChatIn, request: Request,
     session_ctx = {
         "prior_count": len(prior),
         "last_technique": prior[0].final_technique if prior else None,
-        "summary": "(no summary yet)",   # extend later: LLM-summarize last N
+        # Rolling LLM summary of this thread, refreshed in the background after
+        # each turn (summarizer.refresh_after_turn). Empty on the first turn.
+        "summary": rc.thread_summary_get(str(convo.id)) or "(no summary yet)",
         "memory": user_memory.load_for_prompt(db, u.id),
         "history": _thread_history(db, convo.id),
     }
@@ -644,6 +646,8 @@ def chat(body: ChatIn, request: Request,
             db, u.id, analysis=analysis,
             technique=drafts[0]["technique"] if drafts else None,
             severity=triage["severity"])
+        background_tasks.add_task(summarizer.refresh_after_turn,
+                                  str(u.id), str(convo.id))
         return {
             "session_id": str(sess.id),
             "conversation_id": str(convo.id),
@@ -718,6 +722,8 @@ def chat(body: ChatIn, request: Request,
             db, u.id, analysis=analysis,
             technique=chosen["technique"] if chosen else None,
             severity=triage["severity"])
+        background_tasks.add_task(summarizer.refresh_after_turn,
+                                  str(u.id), str(convo.id))
         return {
             "session_id": str(sess.id),
             "conversation_id": str(convo.id),
@@ -763,6 +769,8 @@ def chat(body: ChatIn, request: Request,
     user_memory.update_after_turn(
         db, u.id, analysis=analysis,
         technique=chosen["technique"], severity=triage["severity"])
+    background_tasks.add_task(summarizer.refresh_after_turn,
+                              str(u.id), str(convo.id))
 
     return {
         "session_id": str(sess.id),

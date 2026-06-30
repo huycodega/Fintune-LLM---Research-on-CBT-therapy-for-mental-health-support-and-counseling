@@ -166,7 +166,7 @@ def _llm_info(text: str):
             [{"role": "system", "content": _INFO_SYS},
              {"role": "user", "content": safe}],
             n=1, temperature=0.0)
-        if not gen or gen.get("degraded"):
+        if not gen or gen.get("degraded") or gen.get("mode") == "mock":
             return None
         out = (gen.get("responses") or [""])[0].lower()
         clean = _re.sub(r"[^a-z]", "", out)
@@ -263,7 +263,7 @@ def _llm_classify(text: str):
             [{"role": "system", "content": _CLASSIFY_SYS},
              {"role": "user", "content": safe}],
             n=1, temperature=0.0)
-        if not gen or gen.get("degraded"):
+        if not gen or gen.get("degraded") or gen.get("mode") == "mock":
             return None
         out = (gen.get("responses") or [""])[0].lower()
         clean = _re.sub(r"[^a-z]", "", out)

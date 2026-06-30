@@ -69,6 +69,18 @@ def load_for_prompt(db: Session, user_id) -> dict:
         return {}
 
 
+def set_summary(db: Session, user_id, summary: str) -> None:
+    """Overwrite ONLY the rolling gist with an LLM-written one (the structured
+    themes/techniques counters are left untouched). Best-effort."""
+    try:
+        row = db.query(models.UserMemory).filter_by(user_id=user_id).first()
+        if row and summary:
+            row.summary = summary[:600]
+            db.flush()
+    except Exception as e:
+        log.warning("user_memory set_summary failed for %s: %s", user_id, e)
+
+
 def update_after_turn(db: Session, user_id, *, analysis: Optional[dict],
                       technique: Optional[str], severity: Optional[str]) -> None:
     """Accumulate compact facts. Heuristic (no LLM) so it works in mock mode.
