@@ -116,4 +116,5 @@ export const aiModerationApi = {
   // SOAP note (medical record) — view the saved note, or regenerate with the model.
   getSoap: (id) => request(`/items/${id}/soap`),
   regenerateSoap: (id) => request(`/items/${id}/soap/regenerate`, { method: "POST" }),
+  approveSoap: (id) => request(`/items/${id}/soap/approve`, { method: "POST" }),
 };

@@ -400,7 +400,8 @@ def get_soap(qid: str, _: dict = Depends(auth.require_admin),
     row = db.query(models.SoapNote).filter_by(session_id=qid).first()
     if not row:
         return {"exists": False}
-    return {"exists": True, "soap": _soap_to_dict(row)}
+    return {"exists": True, "approved": bool(row.exported_to_ehr),
+            "soap": _soap_to_dict(row)}
 
 
 @router.post("/items/{qid}/soap/regenerate")
@@ -416,11 +417,34 @@ def regenerate_soap(qid: str, request: Request,
     if not ai:
         soap = soap_export.synthesize(s, intake)             # template fallback
     row = soap_export.export(db, s, intake, soap=soap)
+    row.exported_to_ehr = False   # content changed → needs (re-)approval
+    db.flush()
     audit_mod.audit(db, action="soap_regenerate", actor=actor,
                     ip=auth.client_ip(request),
                     resource_type="session", resource_id=s.id,
                     detail={"ai": ai})
-    return {"ok": True, "ai": ai, "soap": _soap_to_dict(row)}
+    return {"ok": True, "ai": ai, "approved": False, "soap": _soap_to_dict(row)}
+
+
+@router.post("/items/{qid}/soap/approve")
+def approve_soap(qid: str, request: Request,
+                 actor: dict = Depends(auth.require_admin),
+                 db: Session = Depends(get_db)):
+    """Clinician approves the SOAP note → it becomes the user's official medical
+    record. Saved synchronously (real-time) and linked to the user via the
+    session. Generates a template note first if none exists yet."""
+    q, s = _load(qid, db)
+    row = db.query(models.SoapNote).filter_by(session_id=qid).first()
+    if not row:
+        drafts, intake = _drafts_intake(db, s)
+        row = soap_export.export(db, s, intake)   # ensure one exists
+    row.exported_to_ehr = True
+    db.flush()
+    audit_mod.audit(db, action="soap_approve", actor=actor,
+                    ip=auth.client_ip(request),
+                    resource_type="session", resource_id=s.id,
+                    detail={"user_id": str(s.user_id)})
+    return {"ok": True, "approved": True, "soap": _soap_to_dict(row)}
 
 
 # ── Actions ──────────────────────────────────────────────────────────────────

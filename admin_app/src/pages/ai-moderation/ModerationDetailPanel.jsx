@@ -34,21 +34,30 @@ function ReasoningCard({ reasoning }) {
 /* SOAP note (medical record) — view the saved S/O/A/P, regenerate it with the
    fine-tuned model, or download it as text. Auto-saved on approve/edit; a
    background task upgrades the template to a model-written note. */
-function SoapCard({ sessionId }) {
+function SoapCard({ sessionId, userName }) {
   const [soap, setSoap] = useState(null);
+  const [approved, setApproved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
-    setSoap(null);
+    setSoap(null); setApproved(false);
     aiModerationApi.getSoap(sessionId)
-      .then((r) => { if (alive) setSoap(r.exists ? r.soap : null); })
+      .then((r) => { if (alive && r.exists) { setSoap(r.soap); setApproved(!!r.approved); } })
       .catch(() => {});
     return () => { alive = false; };
   }, [sessionId]);
   async function regen() {
     setLoading(true);
-    try { const r = await aiModerationApi.regenerateSoap(sessionId); setSoap(r.soap); }
-    catch { /* noop */ } finally { setLoading(false); }
+    try {
+      const r = await aiModerationApi.regenerateSoap(sessionId);
+      setSoap(r.soap); setApproved(false);   // new content → needs re-approval
+    } catch { /* noop */ } finally { setLoading(false); }
+  }
+  async function approve() {
+    setSaving(true);
+    try { const r = await aiModerationApi.approveSoap(sessionId); setSoap(r.soap); setApproved(true); }
+    catch { /* noop */ } finally { setSaving(false); }
   }
   function download() {
     if (!soap) return;
@@ -64,7 +73,14 @@ function SoapCard({ sessionId }) {
   }
   return (
     <section className="am-detail-card">
-      <h3>SOAP note <small style={{ fontWeight: 400, opacity: 0.7 }}>(medical record)</small></h3>
+      <h3>SOAP note <small style={{ fontWeight: 400, opacity: 0.7 }}>(medical record)</small>
+        {approved && <span style={{ marginLeft: 8, color: "#16a34a", fontSize: 13, fontWeight: 600 }}>✓ Approved</span>}
+      </h3>
+      {approved && (
+        <p className="am-muted" style={{ marginTop: 2 }}>
+          Saved to {userName || "the user"}'s medical record.
+        </p>
+      )}
       {soap ? (
         <div className="am-note-stack">
           <p><b>Subjective:</b> {soap.subjective}</p>
@@ -73,9 +89,12 @@ function SoapCard({ sessionId }) {
           <p><b>Plan:</b> {soap.plan}</p>
         </div>
       ) : (
-        <p className="am-muted">No SOAP note yet — one is saved when the case is approved/edited.</p>
+        <p className="am-muted">No SOAP note yet — create one with “Approve & save” or “Regenerate with AI”.</p>
       )}
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <button type="button" className="am-primary-btn" disabled={saving || approved} onClick={approve}>
+          {approved ? "Approved ✓" : saving ? "Saving…" : "Approve & save to record"}
+        </button>
         <button type="button" className="am-ghost-btn" disabled={loading} onClick={regen}>
           {loading ? "Generating…" : "Regenerate with AI"}
         </button>
@@ -423,7 +442,7 @@ export default function ModerationDetailPanel({
 
       <CopilotPanel sessionId={detail.id} onUseAsNote={setNote} />
 
-      <SoapCard sessionId={detail.id} />
+      <SoapCard sessionId={detail.id} userName={fullName} />
 
       {detail.agentTrace && (
         <section className="am-detail-card">
