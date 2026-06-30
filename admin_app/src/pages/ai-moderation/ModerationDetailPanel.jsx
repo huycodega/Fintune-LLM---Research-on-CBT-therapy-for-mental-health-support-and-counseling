@@ -1,8 +1,77 @@
 import { useEffect, useState } from "react";
 import { Avatar, fmtDateTime } from "../../ui.jsx";
 import { api } from "../../api.js";
+import { aiModerationApi } from "./aiModeration.service.js";
 import { CHECKLIST_ITEMS } from "./aiModeration.types.js";
 import RiskLevelBadge from "./RiskLevelBadge.jsx";
+
+/* AI "why" panel — shows the agent's reasoning so the clinician can see how the
+   draft was reached (builds review trust). All fields best-effort. */
+function ReasoningCard({ reasoning }) {
+  if (!reasoning) return null;
+  const r = reasoning;
+  const rows = [
+    ["Emotion", r.emotion],
+    ["Distortions", r.distortions],
+    ["Technique hint", r.technique_hint],
+    ["Escalation reason", r.agent_escalation],
+    ["Self-critique", r.self_critique],
+    ["Info intents", Array.isArray(r.info_intents) ? r.info_intents.join(", ") : r.info_intents],
+    ["Action intent", r.action_intent],
+  ].filter(([, v]) => v);
+  if (!rows.length && !r.agent_plan) return null;
+  return (
+    <section className="am-detail-card">
+      <h3>Why the AI decided this</h3>
+      <div className="am-note-stack">
+        {rows.map(([k, v]) => <p key={k}><b>{k}: </b>{String(v)}</p>)}
+      </div>
+      {r.agent_plan && <pre className="am-copy-block">{JSON.stringify(r.agent_plan, null, 2)}</pre>}
+    </section>
+  );
+}
+
+/* Clinician Copilot — advisory AI assist. It never decides; the clinician still
+   approves/edits/rejects below. Best-effort: degrades to a message on failure. */
+function CopilotPanel({ sessionId }) {
+  const [loading, setLoading] = useState(false);
+  const [out, setOut] = useState(null);     // { action, result, soap }
+  const [q, setQ] = useState("");
+  async function run(action, question = "") {
+    setLoading(true); setOut(null);
+    try { setOut(await aiModerationApi.copilot(sessionId, action, question)); }
+    catch (e) { setOut({ result: e.message || "Copilot failed" }); }
+    finally { setLoading(false); }
+  }
+  return (
+    <section className="am-detail-card">
+      <h3>🤖 Clinician Copilot <small style={{ fontWeight: 400, opacity: 0.7 }}>(advisory — you decide)</small></h3>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <button type="button" className="am-ghost-btn" disabled={loading} onClick={() => run("summarize")}>Summarize</button>
+        <button type="button" className="am-ghost-btn" disabled={loading} onClick={() => run("suggest")}>Suggest decision</button>
+        <button type="button" className="am-ghost-btn" disabled={loading} onClick={() => run("explain")}>Explain triage</button>
+        <button type="button" className="am-ghost-btn" disabled={loading} onClick={() => run("soap")}>Draft SOAP</button>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className="la-input" style={{ flex: 1 }} placeholder="Ask about this case…"
+               value={q} onChange={(e) => setQ(e.target.value)}
+               onKeyDown={(e) => { if (e.key === "Enter" && q.trim() && !loading) run("ask", q.trim()); }} />
+        <button type="button" className="am-ghost-btn" disabled={loading || !q.trim()} onClick={() => run("ask", q.trim())}>Ask</button>
+      </div>
+      {loading && <p className="am-muted" style={{ marginTop: 8 }}>Copilot is thinking…</p>}
+      {out && !loading && (out.soap ? (
+        <div className="am-note-stack" style={{ marginTop: 8 }}>
+          <p><b>Subjective:</b> {out.soap.subjective}</p>
+          <p><b>Objective:</b> {out.soap.objective}</p>
+          <p><b>Assessment:</b> {out.soap.assessment}</p>
+          <p><b>Plan:</b> {out.soap.plan}</p>
+        </div>
+      ) : (
+        <p className="am-copy-block" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{out.result}</p>
+      ))}
+    </section>
+  );
+}
 
 /* "From your library" recommendation editor — lets the moderator swap the
    lessons/resources attached to the reply. Parsed line-by-line and matched by
@@ -272,6 +341,10 @@ export default function ModerationDetailPanel({
           <p><b>Moderator note</b>{detail.moderatorNote || "-"}</p>
         </div>
       </section>
+
+      <ReasoningCard reasoning={detail.reasoning} />
+
+      <CopilotPanel sessionId={detail.id} />
 
       {detail.agentTrace && (
         <section className="am-detail-card">

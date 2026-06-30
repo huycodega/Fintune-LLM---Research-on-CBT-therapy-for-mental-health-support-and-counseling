@@ -30,6 +30,7 @@ from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models
 from app.db.session import get_db
+from app.services import clinician_copilot
 
 
 router = APIRouter(prefix="/api/admin/ai-moderation")
@@ -50,6 +51,11 @@ class DecisionIn(BaseModel):
 
 class EditIn(DecisionIn):
     response: str
+
+
+class CopilotIn(BaseModel):
+    action: str                       # summarize | suggest | explain | soap | ask
+    question: Optional[str] = ""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -98,6 +104,21 @@ def _item(q, s, u, drafts, claimer_name=None):
         "risk_level": triage,
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }]
+    analysis = s.analysis or {}
+    # Surface the AI's REASONING so the clinician can see WHY it decided what it
+    # did (builds review trust). All best-effort fields from the agent loop.
+    reasoning = {
+        "emotion": analysis.get("emotion"),
+        "distortions": analysis.get("cognitive_distortions"),
+        "technique_hint": analysis.get("technique_hint"),
+        "agent_trace": analysis.get("agent_trace"),
+        "agent_plan": analysis.get("agent_plan"),
+        "agent_escalation": analysis.get("agent_escalation"),
+        "self_critique": analysis.get("agent_self_critique"),
+        "info_intents": analysis.get("info_intents"),
+        "action_intent": analysis.get("action_intent"),
+        "rag_gate": analysis.get("rag_gate"),
+    }
     return {
         "id": str(s.id),
         "conversation_id": str(s.conversation_id or s.id),
@@ -116,8 +137,14 @@ def _item(q, s, u, drafts, claimer_name=None):
             "technique": d.technique or f"Option {d.idx + 1}",
             "rationale": d.rationale, "plan": d.plan,
             "preflight_pass": d.preflight_pass,
+            "grounding_score": d.hallucination_score,
+            "well_formed": d.well_formed,
             "response": decrypt_str(d.response_enc) if d.response_enc else "",
         } for d in drafts],
+        # Top-level agent_trace kept for the existing client mapping; the richer
+        # set is under `reasoning`.
+        "agent_trace": analysis.get("agent_trace"),
+        "reasoning": reasoning,
         "revisions": [],
     }
 
@@ -272,6 +299,51 @@ def item_detail(qid: str, _: dict = Depends(auth.require_admin),
         cu = db.query(models.User).filter_by(id=q.claimed_by).first()
         claimer = _display(cu.username) if cu else None
     return _item(q, s, u, drafts, claimer_name=claimer)
+
+
+# ── Clinician Copilot (advisory — never decides) ─────────────────────────────
+@router.post("/items/{qid}/copilot")
+def copilot(qid: str, body: CopilotIn, request: Request,
+            actor: dict = Depends(auth.require_admin),
+            db: Session = Depends(get_db)):
+    """AI assist for the reviewing clinician: summarize / suggest / explain /
+    soap / ask. Read-only and advisory — the clinician still approves/edits/
+    rejects. Best-effort: a downed orchestrator returns 'copilot unavailable'."""
+    q, s = _load(qid, db)
+    draft_rows = (db.query(models.Draft).filter_by(session_id=s.id)
+                  .order_by(models.Draft.idx).all())
+    drafts = [{
+        "idx": d.idx, "technique": d.technique,
+        "hallucination_score": d.hallucination_score,
+        "preflight_pass": d.preflight_pass, "well_formed": d.well_formed,
+        "response": decrypt_str(d.response_enc) if d.response_enc else "",
+    } for d in draft_rows]
+    intake = (db.query(models.IntakeForm).filter_by(id=s.intake_id).first()
+              if s.intake_id else None)
+
+    action = (body.action or "").strip().lower()
+    result, soap = None, None
+    if action == "summarize":
+        result = clinician_copilot.summarize_case(s, drafts, intake)
+    elif action == "suggest":
+        result = clinician_copilot.suggest_decision(s, drafts, intake)
+    elif action == "explain":
+        result = clinician_copilot.explain_triage(s, drafts, intake)
+    elif action == "ask":
+        result = clinician_copilot.answer_question(
+            s, drafts, intake, body.question or "")
+    elif action == "soap":
+        soap = clinician_copilot.draft_soap(s, drafts, intake)
+        if soap is None:
+            result = ("Copilot is unavailable (agent orchestrator offline). "
+                      "Please write the note manually.")
+    else:
+        raise HTTPException(400, "Unknown copilot action")
+
+    audit_mod.audit(db, action=f"copilot_{action}", actor=actor,
+                    ip=auth.client_ip(request),
+                    resource_type="session", resource_id=s.id, detail={})
+    return {"action": action, "result": result, "soap": soap}
 
 
 # ── Actions ──────────────────────────────────────────────────────────────────

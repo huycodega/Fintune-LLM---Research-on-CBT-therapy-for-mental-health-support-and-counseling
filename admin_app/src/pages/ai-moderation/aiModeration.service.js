@@ -49,6 +49,7 @@ function mapItem(it) {
     checklist: it.checklist || {},
     histories: it.histories || it.revisions || [],
     agentTrace: it.agent_trace || null,
+    reasoning: it.reasoning || null,
     retrievedIds: it.retrieved_ids || [],
     drafts: (it.drafts && it.drafts.length)
       ? it.drafts.map((d) => ({
@@ -109,4 +110,7 @@ export const aiModerationApi = {
     request(`/items/${id}/edit-response`, { method: "PATCH", body: { response: editedResponse, note } }),
   needImprovement: (id, reason) =>
     request(`/items/${id}/need-improvement`, { method: "PATCH", body: { note: reason } }),
+  // Clinician Copilot — advisory AI assist (summarize | suggest | explain | soap | ask).
+  copilot: (id, action, question = "") =>
+    request(`/items/${id}/copilot`, { method: "POST", body: { action, question } }),
 };
