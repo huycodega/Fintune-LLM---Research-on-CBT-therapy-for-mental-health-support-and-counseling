@@ -33,7 +33,7 @@ function ReasoningCard({ reasoning }) {
 
 /* Clinician Copilot — advisory AI assist. It never decides; the clinician still
    approves/edits/rejects below. Best-effort: degrades to a message on failure. */
-function CopilotPanel({ sessionId }) {
+function CopilotPanel({ sessionId, onUseAsNote }) {
   const [loading, setLoading] = useState(false);
   const [out, setOut] = useState(null);     // { action, result, soap }
   const [q, setQ] = useState("");
@@ -43,6 +43,15 @@ function CopilotPanel({ sessionId }) {
     catch (e) { setOut({ result: e.message || "Copilot failed" }); }
     finally { setLoading(false); }
   }
+  function outText() {
+    if (out?.soap) {
+      const s = out.soap;
+      return `Subjective: ${s.subjective}\nObjective: ${s.objective}\n`
+        + `Assessment: ${s.assessment}\nPlan: ${s.plan}`;
+    }
+    return out?.result || "";
+  }
+  function copyOut() { try { navigator.clipboard.writeText(outText()); } catch { /* noop */ } }
   return (
     <section className="am-detail-card">
       <h3>🤖 Clinician Copilot <small style={{ fontWeight: 400, opacity: 0.7 }}>(advisory — you decide)</small></h3>
@@ -69,6 +78,15 @@ function CopilotPanel({ sessionId }) {
       ) : (
         <p className="am-copy-block" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{out.result}</p>
       ))}
+      {out && !loading && (out.result || out.soap) && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button type="button" className="am-ghost-btn" onClick={copyOut}>Copy</button>
+          {onUseAsNote && (
+            <button type="button" className="am-ghost-btn"
+                    onClick={() => onUseAsNote(outText())}>Use as note</button>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -120,20 +138,20 @@ function Checklist({ checklist = {} }) {
   );
 }
 
-function ReviewEditor({ detail, busy, onApprove, onReject, onEditResponse, onNeedImprovement }) {
+function ReviewEditor({ detail, busy, note, setNote,
+                       onApprove, onReject, onEditResponse, onNeedImprovement }) {
   const drafts = detail.drafts || [];
   const [idx, setIdx] = useState(0);
   const [editText, setEditText] = useState("");
-  const [note, setNote] = useState("");
   const [library, setLibrary] = useState([]);
   const [reasonMode, setReasonMode] = useState(null);   // "reject" | "improve"
   const [reason, setReason] = useState("");
 
-  // Reset when a different session is opened.
+  // Reset when a different session is opened (note is owned by the parent).
   useEffect(() => {
     setIdx(0);
     setEditText(drafts[0]?.response ?? detail.aiResponse ?? "");
-    setNote(""); setReasonMode(null); setReason("");
+    setReasonMode(null); setReason("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail.id]);
 
@@ -271,6 +289,11 @@ export default function ModerationDetailPanel({
   onEditResponse,
   onNeedImprovement,
 }) {
+  // Moderator note lifted here so the Copilot "Use as note" can prefill it.
+  // Hooks must run before the early returns below.
+  const [note, setNote] = useState("");
+  useEffect(() => { setNote(""); }, [detail?.id]);
+
   if (loading) {
     return <aside className="am-detail-panel"><div className="am-state">Loading session details...</div></aside>;
   }
@@ -344,7 +367,7 @@ export default function ModerationDetailPanel({
 
       <ReasoningCard reasoning={detail.reasoning} />
 
-      <CopilotPanel sessionId={detail.id} />
+      <CopilotPanel sessionId={detail.id} onUseAsNote={setNote} />
 
       {detail.agentTrace && (
         <section className="am-detail-card">
@@ -377,6 +400,8 @@ export default function ModerationDetailPanel({
       <ReviewEditor
         detail={detail}
         busy={busy}
+        note={note}
+        setNote={setNote}
         onApprove={onApprove}
         onReject={onReject}
         onEditResponse={onEditResponse}

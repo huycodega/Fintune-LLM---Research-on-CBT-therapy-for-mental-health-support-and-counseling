@@ -26,11 +26,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+import logging
+
 from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models
 from app.db.session import get_db
-from app.services import clinician_copilot
+from app.services import clinician_copilot, soap_export
+
+log = logging.getLogger("cbt")
 
 
 router = APIRouter(prefix="/api/admin/ai-moderation")
@@ -205,6 +209,16 @@ def _finalize(s, q, decision, final_reply, final_tech, actor, db, request):
         q.resolution = decision
         q.claimed_by = actor["uid"]
         q.claimed_at = q.claimed_at or s.reviewed_at
+    # Auto-export a SOAP note when a reply is finalized (approve/edit). Template-
+    # based + best-effort so a missing object store / DB hiccup never blocks the
+    # clinician's decision. (Reject → referral, no SOAP.)
+    if decision in ("approve", "edit"):
+        try:
+            intake = (db.query(models.IntakeForm).filter_by(id=s.intake_id).first()
+                      if s.intake_id else None)
+            soap_export.export(db, s, intake)
+        except Exception as e:
+            log.warning("SOAP auto-export skipped: %s", e)
     audit_mod.audit(db, action=f"moderation_{decision}", actor=actor,
                     ip=auth.client_ip(request),
                     resource_type="session", resource_id=s.id,
