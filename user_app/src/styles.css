@@ -6871,6 +6871,14 @@ html, body, #root { overflow-x: hidden; }
 .ai-book-foot .ai-book-cancel { margin-top: 0; }
 .ai-book-cancel:hover { color: var(--ink); }
 
+/* Inline confirm row for a write action (log mood / cancel / mark done) */
+.ai-action-confirm {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px;
+}
+.ai-action-q { font-size: 13px; font-weight: 600; color: var(--ink, #1f2a38); }
+.ai-action-confirm .ai-expert-cta { margin-top: 0; }
+.ai-action-confirm .ai-book-cancel { margin-top: 0; }
+
 /* Appointment confirmation card (sent back after booking) */
 .ai-appt-card {
   margin-top: 10px; padding: 12px 14px; border-radius: 12px;

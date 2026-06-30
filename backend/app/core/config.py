@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     # ask the LLM to catch novel off-topic phrasings. Best-effort, scrubbed,
     # falls back to "personal" on any failure. Set False for keyword-only.
     scope_router_semantic: bool = True
+    # Action-gate: detect "do something" requests (log mood, cancel appointment,
+    # mark a lesson done, start a screening) and propose confirm-cards in chat.
+    # NOTHING is written until the user taps Confirm (which calls the existing
+    # REST endpoints). Runs only on L2/L3, never on a distress/risk turn.
+    action_gate_enabled: bool = True
 
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise

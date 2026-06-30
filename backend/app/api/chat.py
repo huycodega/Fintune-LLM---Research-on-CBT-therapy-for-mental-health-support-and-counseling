@@ -31,7 +31,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
-    moderation_store, scope_router, self_data, summarizer,
+    moderation_store, scope_router, self_data, summarizer, actions,
 )
 
 
@@ -401,6 +401,45 @@ def chat(body: ChatIn, request: Request,
                          "anything feels urgent while you wait, the resources "
                          "below are here for you any time."),
         }
+
+    # ---- Action gate: "do something" requests (write, with confirm) ----
+    # Detect log-mood / cancel-appointment / mark-lesson-done / start-screening
+    # and return confirm-cards — NOTHING is written here; the actual write only
+    # happens when the user taps Confirm (calls the existing REST endpoints).
+    # Runs BEFORE the info-gate so "cancel my appointment" isn't read as a list.
+    # Guards: L2/L3 only, no distress signal, safety regex clears L0/L1.
+    if settings.action_gate_enabled and level in ("L2", "L3"):
+        akind = actions.detect(text)
+        if (akind and not scope_router._DISTRESS_VETO.search(text.lower())
+                and safety_gate._heuristic(text).get("triage_level")
+                not in ("L0", "L1")):
+            atext, acts = actions.propose(db, u.id, akind, text)
+            if atext:
+                sess = models.Session(
+                    **base, status="answered",
+                    analysis={"action_intent": akind},
+                    final_reply_enc=encrypt_phi(atext),
+                    final_technique=f"action_{akind}"[:60],
+                    completed_at=datetime.now(timezone.utc))
+                db.add(sess); db.flush()
+                moderation_store.record_ai_message(
+                    db, convo, user_message, atext, level, "not_required",
+                    confidence=triage.get("confidence"), model_name="action_gate")
+                audit_mod.audit(db, action=f"action_{akind}", actor=user, ip=ip,
+                                 resource_type="session", resource_id=sess.id,
+                                 detail={"action_intent": akind,
+                                         "n_options": len(acts)})
+                return {
+                    "session_id": str(sess.id),
+                    "conversation_id": str(convo.id),
+                    "outcome": "answered", "triage": triage,
+                    "final": {"technique": f"action_{akind}"[:60],
+                              "response": atext},
+                    "drafts": [{"idx": 0, "technique": f"action_{akind}"[:60],
+                                "response": atext}],
+                    "actions": acts,
+                    "mode": "action_gate",
+                }
 
     # ---- Direct-answer gate: factual self-data / meta / off-topic ----
     # A benign informational question ("who am I", "my appointments", "what

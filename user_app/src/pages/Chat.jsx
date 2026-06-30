@@ -205,7 +205,7 @@ function freeSlotsByDay(avail) {
 
 /* ── Chat bubble ───────────────────────────────────────────────── */
 function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
-                     onLessonCard, onExpertCard }) {
+                     onLessonCard, onExpertCard, onRunAction }) {
   const isAI = msg.role === "ai";
   const { body, recs } = isAI
     ? parseRecs(msg.text, library)
@@ -263,6 +263,13 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
               ))}
             </div>
           ))}
+          {isAI && Array.isArray(msg.actions) && msg.actions.length > 0 && (
+            <div className="ai-recs">
+              {msg.actions.map((a, k) => (
+                <ConfirmAction key={k} action={a} onRun={onRunAction} />
+              ))}
+            </div>
+          )}
           {recs.length > 0 && (
             <div className="ai-recs">
               <div className="ai-recs-label">📚 From your library</div>
@@ -349,6 +356,51 @@ function TypingBubble() {
         <span className="ai-thinking-label">MindCare is thinking</span>
         <span className="ai-typing"><span /><span /><span /></span>
       </div>
+    </div>
+  );
+}
+
+/* A confirm-card for a write action proposed by the assistant (log mood, cancel
+   appointment, mark lesson done, open screening). Two taps for writes — the chip
+   arms, then Confirm runs it — so nothing is written by accident. */
+function ConfirmAction({ action, onRun }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  if (done)
+    return (
+      <div className="ai-rec-chip ai-rec-chip-static">
+        <span className="ai-rec-emoji">✓</span>
+        <span className="ai-rec-title">{action.label}</span>
+      </div>
+    );
+  if (action.kind === "navigate")
+    return (
+      <button className="ai-expert-cta" onClick={() => onRun(action)}>
+        {action.label} →
+      </button>
+    );
+  const emoji = action.kind === "cancel_appt" ? "🗑️"
+    : action.kind === "mark_lesson" ? "✅" : "📝";
+  if (!armed)
+    return (
+      <button className="ai-rec-chip" onClick={() => setArmed(true)}>
+        <span className="ai-rec-emoji">{emoji}</span>
+        <span className="ai-rec-title">{action.label}</span>
+        <span className="ai-rec-arrow">›</span>
+      </button>
+    );
+  return (
+    <div className="ai-action-confirm">
+      <span className="ai-action-q">{action.label}?</span>
+      <button className="ai-expert-cta" disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          const ok = await onRun(action);
+          if (ok) setDone(true); else { setBusy(false); setArmed(false); }
+        }}>{busy ? "…" : "Confirm"}</button>
+      <button className="ai-book-cancel" disabled={busy}
+        onClick={() => setArmed(false)}>Cancel</button>
     </div>
   );
 }
@@ -706,6 +758,37 @@ export default function Chat({ onNav }) {
       if (onNav) onNav("tuvan");   // fall back to the full Counselling page
     }
   }
+  function pushAi(text, error) {
+    setMessages((prev) => [...prev, { role: "ai", time: nowTime(), text, error: !!error }]);
+  }
+
+  // Run a confirmed write action via the existing REST endpoints. Returns true
+  // on success so the confirm-card can mark itself done.
+  async function runAction(action) {
+    try {
+      if (action.kind === "navigate") { if (onNav) onNav(action.section); return true; }
+      if (action.kind === "log_mood") {
+        await api.submitScreening({ mood_score: action.value });
+        pushAi(`Done — I've logged today's mood as ${action.value}/10. 💚`);
+        return true;
+      }
+      if (action.kind === "cancel_appt") {
+        await api.cancelAppointment(action.appointment_id);
+        pushAi("Your appointment has been cancelled.");
+        return true;
+      }
+      if (action.kind === "mark_lesson") {
+        await api.setLessonProgress(action.lesson_id, { progress_pct: 100 });
+        pushAi("Nice work — I've marked that lesson as completed. 🎉");
+        return true;
+      }
+    } catch {
+      pushAi("Sorry, that didn't go through — please try again in a moment.", true);
+      return false;
+    }
+    return false;
+  }
+
   // Tap a lesson card from an info-gate reply → open its detail (the lesson is
   // in the library, loaded from the same published set); otherwise jump to the
   // Lessons page.
@@ -871,7 +954,7 @@ export default function Chat({ onNav }) {
       // so the user always has a real-person lifeline to reach for.
       const resources = r.crisis_resources || null;
       if (r.outcome === "answered") {
-        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards });
+        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards, actions: r.actions });
       } else if (r.outcome === "crisis") {
         show({ role: "ai", time: nowTime(), text: r.message || "I'm really glad you reached out. Your safety matters most right now.", crisis: true, resources });
       } else if (r.outcome === "pending_review") {
@@ -930,7 +1013,8 @@ export default function Chat({ onNav }) {
                   onTalkExpert={startExpertBooking}
                   onManageAppt={onNav ? () => onNav("tuvan") : null}
                   onLessonCard={openLessonCard}
-                  onExpertCard={pickExpert} />
+                  onExpertCard={pickExpert}
+                  onRunAction={runAction} />
               )))
             )}
             {expertBooking && (
