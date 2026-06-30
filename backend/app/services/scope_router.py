@@ -85,6 +85,11 @@ _DATA_PATS = [
         r"\b(my )?(lesson|learning) progress\b|how far (am i|have i got)|"
         r"lessons? i('?ve| have) (done|completed|finished)|completed lessons|"
         r"which lessons have i", re.I)),
+    ("privacy", re.compile(
+        r"\b(delete|erase|remove|wipe) my (data|account|information|info)\b|"
+        r"what (data|information|info) do you (have|hold|keep|store) (on|about) me|"
+        r"how (is|are) my (data|information) (used|stored|kept|protected|handled)|"
+        r"can i delete my (account|data)|is my data (deleted|kept|stored)", re.I)),
     ("recall", re.compile(
         r"what did we (talk|discuss|cover)|what have we (talked|discussed|worked on|covered)|"
         r"our (past |previous )?(session|conversation|talk)s?|"
@@ -170,7 +175,7 @@ _INFO_LOOKS = re.compile(
 
 _INFO_LABELS = {"profile", "appointments", "lessons", "resources",
                 "psychologists", "mood", "screening", "progress", "recall",
-                "meta", "offtopic"}
+                "privacy", "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "
@@ -184,6 +189,7 @@ _INFO_SYS = (
     "screening = asks about their own PHQ-9 / GAD-7 results.\n"
     "progress = asks about their own lesson/learning progress or what they completed.\n"
     "recall = asks what was talked about before / in past sessions.\n"
+    "privacy = asks about their data privacy / deleting their account or data.\n"
     "meta = asks ABOUT MindCare itself (how it works, privacy, is it human).\n"
     "offtopic = an unrelated request (coding, math, trivia, weather, translation).\n"
     "none = anything else — ESPECIALLY any feelings, distress, or request for "

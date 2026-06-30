@@ -127,6 +127,13 @@ def _info_reply(db, u, infos):
                 texts.append(self_data.lesson_progress(db, u.id))
             elif info == "recall":
                 texts.append(self_data.recall(db, u.id))
+            elif info == "privacy":
+                texts.append(
+                    "Your privacy matters here. Your messages are encrypted, "
+                    "and only a clinician reviews sensitive cases — nothing is "
+                    "shared otherwise. You can view or delete your account and "
+                    "data anytime from Settings → Account. If anything specific "
+                    "worries you, tell me and I'll do my best to help.")
             elif info == "appointments":
                 items = self_data.appointments_cards(db, u.id)
                 texts.append(self_data.appointments(db, u.id))

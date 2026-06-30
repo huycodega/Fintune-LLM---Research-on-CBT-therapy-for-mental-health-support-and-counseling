@@ -374,7 +374,7 @@ function ConfirmAction({ action, onRun }) {
         <span className="ai-rec-title">{action.label}</span>
       </div>
     );
-  if (action.kind === "navigate")
+  if (action.kind === "navigate" || action.kind === "reschedule_appt")
     return (
       <button className="ai-expert-cta" onClick={() => onRun(action)}>
         {action.label} →
@@ -685,6 +685,7 @@ export default function Chat({ onNav }) {
   const [library, setLibrary] = useState([]);     // lessons+resources for clickable recs
   const [recDetail, setRecDetail] = useState(null);
   const [expertBooking, setExpertBooking] = useState(null); // in-chat booking flow
+  const [rescheduleId, setRescheduleId] = useState(null);   // appt being rescheduled
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const pollRef = useRef(null);
@@ -738,6 +739,7 @@ export default function Chat({ onNav }) {
     setMessages(WELCOME);
     setActiveId(null);
     setExpertBooking(null);
+    setRescheduleId(null);
     inputRef.current?.focus();
   }
 
@@ -782,6 +784,13 @@ export default function Chat({ onNav }) {
         pushAi("Nice work — I've marked that lesson as completed. 🎉");
         return true;
       }
+      if (action.kind === "reschedule_appt") {
+        // Opens the slot picker for this expert; the actual change happens in
+        // bookSlot once the user picks a new time.
+        setRescheduleId(action.appointment_id);
+        pickExpert({ id: action.psychologist_id, name: action.name });
+        return true;
+      }
     } catch {
       pushAi("Sorry, that didn't go through — please try again in a moment.", true);
       return false;
@@ -811,13 +820,24 @@ export default function Chat({ onNav }) {
     if (!exp) return;
     setExpertBooking((b) => ({ ...b, booking: true, error: "" }));
     try {
-      await api.bookAppointment({ psychologist_id: exp.id, date, slot });
-      setExpertBooking(null);
-      setMessages((prev) => [...prev, {
-        role: "ai", time: nowTime(),
-        text: "I've booked this consultation for you — please check the details below are correct.",
-        appt: { name: exp.name, specialty: exp.specialty, phone: exp.phone, date, slot },
-      }]);
+      if (rescheduleId) {
+        await api.changeAppointment(rescheduleId, { date, slot });
+        setRescheduleId(null);
+        setExpertBooking(null);
+        setMessages((prev) => [...prev, {
+          role: "ai", time: nowTime(),
+          text: "I've rescheduled your appointment — please check the new details below.",
+          appt: { name: exp.name, date, slot },
+        }]);
+      } else {
+        await api.bookAppointment({ psychologist_id: exp.id, date, slot });
+        setExpertBooking(null);
+        setMessages((prev) => [...prev, {
+          role: "ai", time: nowTime(),
+          text: "I've booked this consultation for you — please check the details below are correct.",
+          appt: { name: exp.name, specialty: exp.specialty, phone: exp.phone, date, slot },
+        }]);
+      }
     } catch (err) {
       setExpertBooking((b) => ({ ...b, booking: false, error: err.message }));
     }

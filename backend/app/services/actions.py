@@ -21,6 +21,11 @@ _SCREEN = re.compile(
     r"\b(phq[- ]?9|gad[- ]?7|screening|self[- ]?check|assessment|questionnaire)\b|"
     r"i want to (do|take|start|complete) (a |the )?"
     r"(screening|test|assessment|self[- ]?check|phq|gad)", re.I)
+_RESCHED = re.compile(
+    r"\b(reschedule|re-schedule)\b|"
+    r"\b(move|change|switch|shift)\b.{0,20}\b(appointment|booking|consultation|session|slot)\b|"
+    r"\b(change|move|switch)\b.{0,12}\b(time|date|day)\b.{0,20}\b(appointment|booking)\b|"
+    r"(different|another|new) (time|slot|day) for my (appointment|booking)", re.I)
 _CANCEL = re.compile(
     r"\bcancel\b.{0,20}\b(appointment|booking|consultation|session)\b|"
     r"\b(cancel|delete|remove) my (appointment|booking|consultation)", re.I)
@@ -42,6 +47,8 @@ def detect(text: str):
         return None
     if _SCREEN.search(low):
         return "start_screening"
+    if _RESCHED.search(low):
+        return "reschedule_appt"
     if _CANCEL.search(low):
         return "cancel_appt"
     if _MARK.search(low):
@@ -74,19 +81,27 @@ def propose(db, uid, kind: str, text: str):
                 [{"kind": "log_mood", "value": v,
                   "label": f"Log mood {v}/10"}])
 
-    if kind == "cancel_appt":
+    if kind in ("cancel_appt", "reschedule_appt"):
+        # Both the cancel and change endpoints only allow PENDING appointments.
         rows = (db.query(models.Appointment, models.Psychologist)
                 .join(models.Psychologist,
                       models.Appointment.psychologist_id == models.Psychologist.id)
                 .filter(models.Appointment.user_id == uid,
-                        models.Appointment.status.in_(["pending", "accepted"]))
+                        models.Appointment.status == "pending")
                 .order_by(models.Appointment.date).all())
+        verb = "cancel" if kind == "cancel_appt" else "reschedule"
         if not rows:
-            return ("You have no upcoming appointments to cancel.", [])
-        acts = [{"kind": "cancel_appt", "appointment_id": str(a.id),
-                 "label": f"Cancel {a.date.isoformat()} {a.slot} with {p.name}"}
-                for a, p in rows]
-        return ("Which appointment would you like to cancel?", acts)
+            return (f"You have no pending appointments to {verb}.", [])
+        acts = []
+        for a, p in rows:
+            item = {"kind": kind, "appointment_id": str(a.id),
+                    "label": f"{verb.capitalize()} {a.date.isoformat()} "
+                             f"{a.slot} with {p.name}"}
+            if kind == "reschedule_appt":
+                item["psychologist_id"] = str(a.psychologist_id)
+                item["name"] = p.name
+            acts.append(item)
+        return (f"Which appointment would you like to {verb}?", acts)
 
     if kind == "mark_lesson":
         rows = (db.query(models.UserLessonProgress, models.Lesson)
