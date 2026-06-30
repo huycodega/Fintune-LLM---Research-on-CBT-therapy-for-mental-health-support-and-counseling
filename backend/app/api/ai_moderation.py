@@ -21,7 +21,7 @@ the frontend owns the label/colour mapping (design doc §2.3).
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -31,7 +31,7 @@ import logging
 from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models
-from app.db.session import get_db
+from app.db.session import get_db, db_session
 from app.services import clinician_copilot, soap_export
 
 log = logging.getLogger("cbt")
@@ -187,6 +187,48 @@ def _load(qid: str, db: Session):
     return q, s
 
 
+def _drafts_intake(db: Session, s):
+    """Build the (drafts-as-dicts, intake) the copilot / SOAP helpers expect."""
+    draft_rows = (db.query(models.Draft).filter_by(session_id=s.id)
+                  .order_by(models.Draft.idx).all())
+    drafts = [{
+        "idx": d.idx, "technique": d.technique,
+        "hallucination_score": d.hallucination_score,
+        "preflight_pass": d.preflight_pass, "well_formed": d.well_formed,
+        "response": decrypt_str(d.response_enc) if d.response_enc else "",
+    } for d in draft_rows]
+    intake = (db.query(models.IntakeForm).filter_by(id=s.intake_id).first()
+              if s.intake_id else None)
+    return drafts, intake
+
+
+def _soap_to_dict(row) -> dict:
+    return {
+        "subjective": (decrypt_str(row.subjective_enc)
+                       if row.subjective_enc else ""),
+        "objective": row.objective or "",
+        "assessment": row.assessment or "",
+        "plan": row.plan or "",
+    }
+
+
+def _soap_llm_upgrade(session_id: str):
+    """Background: regenerate the SOAP note with the fine-tuned model and replace
+    the template version. Best-effort — own DB session, swallow all errors, no-op
+    when the model is offline (draft_soap returns None)."""
+    try:
+        with db_session() as db:
+            s = db.query(models.Session).filter_by(id=session_id).first()
+            if not s:
+                return
+            drafts, intake = _drafts_intake(db, s)
+            soap = clinician_copilot.draft_soap(s, drafts, intake)
+            if soap:
+                soap_export.export(db, s, intake, soap=soap)
+    except Exception as e:
+        log.warning("SOAP LLM upgrade skipped: %s", e)
+
+
 def _ensure_claimable(q, actor):
     if q is None:
         raise HTTPException(404, "No review queue entry for this item")
@@ -324,16 +366,7 @@ def copilot(qid: str, body: CopilotIn, request: Request,
     soap / ask. Read-only and advisory — the clinician still approves/edits/
     rejects. Best-effort: a downed orchestrator returns 'copilot unavailable'."""
     q, s = _load(qid, db)
-    draft_rows = (db.query(models.Draft).filter_by(session_id=s.id)
-                  .order_by(models.Draft.idx).all())
-    drafts = [{
-        "idx": d.idx, "technique": d.technique,
-        "hallucination_score": d.hallucination_score,
-        "preflight_pass": d.preflight_pass, "well_formed": d.well_formed,
-        "response": decrypt_str(d.response_enc) if d.response_enc else "",
-    } for d in draft_rows]
-    intake = (db.query(models.IntakeForm).filter_by(id=s.intake_id).first()
-              if s.intake_id else None)
+    drafts, intake = _drafts_intake(db, s)
 
     action = (body.action or "").strip().lower()
     result, soap = None, None
@@ -360,6 +393,36 @@ def copilot(qid: str, body: CopilotIn, request: Request,
     return {"action": action, "result": result, "soap": soap}
 
 
+@router.get("/items/{qid}/soap")
+def get_soap(qid: str, _: dict = Depends(auth.require_admin),
+             db: Session = Depends(get_db)):
+    """Return the saved SOAP note (medical record) for a case, or exists=false."""
+    row = db.query(models.SoapNote).filter_by(session_id=qid).first()
+    if not row:
+        return {"exists": False}
+    return {"exists": True, "soap": _soap_to_dict(row)}
+
+
+@router.post("/items/{qid}/soap/regenerate")
+def regenerate_soap(qid: str, request: Request,
+                    actor: dict = Depends(auth.require_admin),
+                    db: Session = Depends(get_db)):
+    """Regenerate the SOAP note with the FINE-TUNED model (template fallback when
+    the model is offline) and persist it. Returns the new SOAP + whether AI made it."""
+    q, s = _load(qid, db)
+    drafts, intake = _drafts_intake(db, s)
+    soap = clinician_copilot.draft_soap(s, drafts, intake)   # LLM (or None)
+    ai = soap is not None
+    if not ai:
+        soap = soap_export.synthesize(s, intake)             # template fallback
+    row = soap_export.export(db, s, intake, soap=soap)
+    audit_mod.audit(db, action="soap_regenerate", actor=actor,
+                    ip=auth.client_ip(request),
+                    resource_type="session", resource_id=s.id,
+                    detail={"ai": ai})
+    return {"ok": True, "ai": ai, "soap": _soap_to_dict(row)}
+
+
 # ── Actions ──────────────────────────────────────────────────────────────────
 @router.patch("/items/{qid}/claim")
 def claim(qid: str, request: Request, actor: dict = Depends(auth.require_admin),
@@ -376,6 +439,7 @@ def claim(qid: str, request: Request, actor: dict = Depends(auth.require_admin),
 
 @router.patch("/items/{qid}/approve")
 def approve(qid: str, body: DecisionIn, request: Request,
+            background_tasks: BackgroundTasks,
             actor: dict = Depends(auth.require_admin),
             db: Session = Depends(get_db)):
     q, s = _load(qid, db)
@@ -392,11 +456,15 @@ def approve(qid: str, body: DecisionIn, request: Request,
         raise HTTPException(400, "No AI draft to approve — use edit-response")
     _finalize(s, q, "approve", decrypt_str(draft.response_enc),
               draft.technique or "approved", actor, db, request)
+    # Upgrade the template SOAP to a fine-tuned-model one in the background
+    # (doesn't block the approve; best-effort).
+    background_tasks.add_task(_soap_llm_upgrade, str(s.id))
     return {"ok": True, "id": qid, "resolution": "approve"}
 
 
 @router.patch("/items/{qid}/edit-response")
 def edit_response(qid: str, body: EditIn, request: Request,
+                  background_tasks: BackgroundTasks,
                   actor: dict = Depends(auth.require_admin),
                   db: Session = Depends(get_db)):
     q, s = _load(qid, db)
@@ -404,6 +472,7 @@ def edit_response(qid: str, body: EditIn, request: Request,
     if not (body.response or "").strip():
         raise HTTPException(400, "response is required")
     _finalize(s, q, "edit", body.response.strip(), "edited", actor, db, request)
+    background_tasks.add_task(_soap_llm_upgrade, str(s.id))
     return {"ok": True, "id": qid, "resolution": "edit"}
 
 

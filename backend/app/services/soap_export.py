@@ -82,9 +82,16 @@ def render_text(soap: dict) -> str:
 
 
 def export(db, session: models.Session,
-           intake: Optional[models.IntakeForm]) -> models.SoapNote:
-    """Synthesize, store row, upload artifact to MinIO."""
-    soap = synthesize(session, intake)
+           intake: Optional[models.IntakeForm],
+           soap: Optional[dict] = None) -> models.SoapNote:
+    """Store/refresh the SOAP note for a session and archive it to MinIO.
+
+    `soap` lets the caller pass a model-generated SOAP (clinician_copilot.
+    draft_soap); when None we synthesize the template version. Upserts by
+    session so re-approving or upgrading template→AI doesn't duplicate rows.
+    """
+    if soap is None:
+        soap = synthesize(session, intake)
     body = render_text(soap)
     key = f"{session.user_id}/{session.id}.txt"
     # Archiving the SOAP artifact to object storage is best-effort: when MinIO
@@ -98,14 +105,16 @@ def export(db, session: models.Session,
     except Exception as e:
         log.warning("SOAP artifact upload skipped (object store unavailable): %s", e)
 
-    row = models.SoapNote(
-        session_id=session.id,
-        subjective_enc=encrypt_phi(soap["subjective"]),
-        objective=soap["objective"],
-        assessment=soap["assessment"],
-        plan=soap["plan"],
-        exported_to_ehr=False,
-        pdf_s3_key=key if uploaded else "",
-    )
-    db.add(row)
+    row = (db.query(models.SoapNote)
+           .filter_by(session_id=session.id).first())
+    if row is None:
+        row = models.SoapNote(session_id=session.id, exported_to_ehr=False)
+        db.add(row)
+    row.subjective_enc = encrypt_phi(soap["subjective"])
+    row.objective = soap["objective"]
+    row.assessment = soap["assessment"]
+    row.plan = soap["plan"]
+    if uploaded:
+        row.pdf_s3_key = key
+    db.flush()
     return row

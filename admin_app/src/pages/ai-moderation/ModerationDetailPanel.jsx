@@ -31,6 +31,60 @@ function ReasoningCard({ reasoning }) {
   );
 }
 
+/* SOAP note (medical record) — view the saved S/O/A/P, regenerate it with the
+   fine-tuned model, or download it as text. Auto-saved on approve/edit; a
+   background task upgrades the template to a model-written note. */
+function SoapCard({ sessionId }) {
+  const [soap, setSoap] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setSoap(null);
+    aiModerationApi.getSoap(sessionId)
+      .then((r) => { if (alive) setSoap(r.exists ? r.soap : null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [sessionId]);
+  async function regen() {
+    setLoading(true);
+    try { const r = await aiModerationApi.regenerateSoap(sessionId); setSoap(r.soap); }
+    catch { /* noop */ } finally { setLoading(false); }
+  }
+  function download() {
+    if (!soap) return;
+    const text = "SOAP NOTE\n" + "=".repeat(48)
+      + `\n\nS — SUBJECTIVE\n${soap.subjective}`
+      + `\n\nO — OBJECTIVE\n${soap.objective}`
+      + `\n\nA — ASSESSMENT\n${soap.assessment}`
+      + `\n\nP — PLAN\n${soap.plan}\n`;
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `soap-${sessionId}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <section className="am-detail-card">
+      <h3>SOAP note <small style={{ fontWeight: 400, opacity: 0.7 }}>(medical record)</small></h3>
+      {soap ? (
+        <div className="am-note-stack">
+          <p><b>Subjective:</b> {soap.subjective}</p>
+          <p><b>Objective:</b> {soap.objective}</p>
+          <p><b>Assessment:</b> {soap.assessment}</p>
+          <p><b>Plan:</b> {soap.plan}</p>
+        </div>
+      ) : (
+        <p className="am-muted">No SOAP note yet — one is saved when the case is approved/edited.</p>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button type="button" className="am-ghost-btn" disabled={loading} onClick={regen}>
+          {loading ? "Generating…" : "Regenerate with AI"}
+        </button>
+        {soap && <button type="button" className="am-ghost-btn" onClick={download}>Download .txt</button>}
+      </div>
+    </section>
+  );
+}
+
 /* Clinician Copilot — advisory AI assist. It never decides; the clinician still
    approves/edits/rejects below. Best-effort: degrades to a message on failure. */
 function CopilotPanel({ sessionId, onUseAsNote }) {
@@ -368,6 +422,8 @@ export default function ModerationDetailPanel({
       <ReasoningCard reasoning={detail.reasoning} />
 
       <CopilotPanel sessionId={detail.id} onUseAsNote={setNote} />
+
+      <SoapCard sessionId={detail.id} />
 
       {detail.agentTrace && (
         <section className="am-detail-card">

@@ -113,4 +113,7 @@ export const aiModerationApi = {
   // Clinician Copilot — advisory AI assist (summarize | suggest | explain | soap | ask).
   copilot: (id, action, question = "") =>
     request(`/items/${id}/copilot`, { method: "POST", body: { action, question } }),
+  // SOAP note (medical record) — view the saved note, or regenerate with the model.
+  getSoap: (id) => request(`/items/${id}/soap`),
+  regenerateSoap: (id) => request(`/items/${id}/soap/regenerate`, { method: "POST" }),
 };
