@@ -193,6 +193,29 @@ export default function Users({ search, selectedUserId }) {
 }
 
 function UserDetail({ detail, isAdmin, busy, onStatus, onRole }) {
+  // SOAP medical records for the selected user (hooks must run before any return).
+  const [records, setRecords] = useState([]);
+  const [openRec, setOpenRec] = useState(null);
+  useEffect(() => {
+    setRecords([]); setOpenRec(null);
+    if (detail?.id) {
+      api.userSoapRecords(detail.id).then((r) => setRecords(r.records || [])).catch(() => {});
+    }
+  }, [detail?.id]);
+
+  function downloadSoap(r) {
+    const s = r.soap || {};
+    const text = "SOAP NOTE\n" + "=".repeat(48)
+      + `\n\nS — SUBJECTIVE\n${s.subjective}`
+      + `\n\nO — OBJECTIVE\n${s.objective}`
+      + `\n\nA — ASSESSMENT\n${s.assessment}`
+      + `\n\nP — PLAN\n${s.plan}\n`;
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `soap-${r.session_id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!detail) {
     return (
       <div className="panel detail">
@@ -257,6 +280,44 @@ function UserDetail({ detail, isAdmin, busy, onStatus, onRole }) {
               <span className="timeline-date">{fmtDateTime(s.created_at)}</span>
             </div>
             <div className="timeline-text">{s.preview || "—"}</div>
+          </div>
+        ))}
+
+        {/* medical records (SOAP) — one per reviewed turn */}
+        <div className="detail-section-title">
+          Medical records (SOAP)
+          {records.length > 0 && (
+            <span className="pill green" style={{ marginLeft: 8 }}>
+              {records.filter((r) => r.approved).length} approved
+            </span>
+          )}
+        </div>
+        {records.length === 0 ? (
+          <div className="timeline-text">No SOAP records yet.</div>
+        ) : records.map((r) => (
+          <div className="timeline-item" key={r.id}>
+            <div className="timeline-top" style={{ cursor: "pointer" }}
+                 onClick={() => setOpenRec(openRec === r.id ? null : r.id)}>
+              <span className={`pill ${r.risk_level || "gray"}`}>{r.risk_level || "—"}</span>
+              {r.approved
+                ? <span className="pill green">✓ approved</span>
+                : <span className="pill amber">draft</span>}
+              <span className="timeline-date">{fmtDateTime(r.created_at)}</span>
+            </div>
+            <div className="timeline-text">{r.message_preview || "—"}</div>
+            {openRec === r.id && (
+              <div className="timeline-text" style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
+                <b>S:</b> {r.soap.subjective}{"\n"}
+                <b>O:</b> {r.soap.objective}{"\n"}
+                <b>A:</b> {r.soap.assessment}{"\n"}
+                <b>P:</b> {r.soap.plan}
+                <div style={{ marginTop: 6 }}>
+                  <button className="pager-btn" onClick={(e) => { e.stopPropagation(); downloadSoap(r); }}>
+                    Download .txt
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
 

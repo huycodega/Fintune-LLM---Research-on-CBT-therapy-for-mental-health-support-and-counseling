@@ -263,6 +263,45 @@ def screening_history(uid: str, _: dict = Depends(auth.require_admin),
     } for s in rows]}
 
 
+@router.get("/users/{uid}/soap-records")
+def user_soap_records(uid: str, _: dict = Depends(auth.require_admin),
+                      db: Session = Depends(get_db)):
+    """All SOAP notes (medical records) for a user — one per reviewed turn,
+    newest first, with the approved flag. This is the consolidated medical-record
+    view for the account."""
+    rows = (db.query(models.SoapNote, models.Session)
+            .join(models.Session,
+                  models.Session.id == models.SoapNote.session_id)
+            .filter(models.Session.user_id == uid)
+            .order_by(models.SoapNote.created_at.desc()).limit(50).all())
+    out = []
+    for note, s in rows:
+        try:
+            subj = decrypt_str(note.subjective_enc) if note.subjective_enc else ""
+        except Exception:
+            subj = ""
+        try:
+            msg = decrypt_str(s.user_input_enc) if s.user_input_enc else ""
+        except Exception:
+            msg = ""
+        out.append({
+            "id": str(note.id),
+            "session_id": str(s.id),
+            "created_at": note.created_at.isoformat() if note.created_at else None,
+            "approved": bool(note.exported_to_ehr),
+            "risk_level": s.triage_level,
+            "message_preview": (msg or "")[:140],
+            "soap": {
+                "subjective": subj,
+                "objective": note.objective or "",
+                "assessment": note.assessment or "",
+                "plan": note.plan or "",
+            },
+        })
+    return {"records": out,
+            "approved_count": sum(1 for r in out if r["approved"])}
+
+
 class ScreeningNoteIn(BaseModel):
     content: str
 

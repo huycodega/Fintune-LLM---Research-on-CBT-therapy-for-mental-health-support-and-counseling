@@ -87,6 +87,7 @@ export const api = {
   // --- user management ---
   users: (params) => req(`/admin/users${qs(params)}`),
   userDetail: (uid) => req(`/admin/users/${uid}`),
+  userSoapRecords: (uid) => req(`/admin/users/${uid}/soap-records`),
   setUserStatus: (uid, status, reason = "") =>
     req(`/admin/users/${uid}/status`, {
       method: "POST", body: { status, reason },
