@@ -107,14 +107,29 @@ _DISTRESS_VETO = re.compile(
     r"can'?t (sleep|stop|cope|go on|take|handle))\b", re.I)
 
 
+# Personalisation / recommendation cues. These ask for JUDGEMENT tailored to the
+# user ("which resources suit MY mood", "recommend a lesson for me") — that's the
+# AGENT's job (mood + context + memory + semantic ranking), NOT a generic factual
+# list. When present we DON'T short-circuit the info-gate, so the turn flows to
+# the agent/pipeline which can tailor the answer.
+_RECO_VETO = re.compile(
+    r"\b(recommend\w*|suggest\w*|suitable|suits?|best for|right for|ideal for|"
+    r"appropriate for|good for me|for my (mood|situation|case|problem|state|needs?|"
+    r"feelings?)|which .*(should|suit|help|fit|best)|what should i|"
+    r"help me (choose|pick|find|decide)|based on (my|how i))\b", re.I)
+
+
 def info_intents(text: str) -> list:
     """Return ALL factual-info labels to answer directly (a compound question
     like 'my mood / my screening results' yields both), or []. Labels are a
-    subset of: profile, appointments, lessons, psychologists, mood, screening,
-    meta, offtopic. Returns [] when the message carries any distress/risk signal
-    (a real support message must never be intercepted) or matches nothing."""
+    subset of: profile, appointments, lessons, resources, psychologists, mood,
+    screening, meta, offtopic. Returns [] when the message carries any
+    distress/risk signal, asks for a PERSONALISED recommendation (agent's job),
+    or matches nothing."""
     low = (text or "").strip().lower()
     if not low:
+        return []
+    if _RECO_VETO.search(low):     # "suitable for my mood" → let the agent tailor
         return []
     # Explicit self-data intents — all that match, vetoed by any distress signal.
     if not _DISTRESS_VETO.search(low):
@@ -197,7 +212,8 @@ def info_intents_smart(text: str) -> list:
     if kw:
         return kw
     low = (text or "").strip().lower()
-    if not low or _DISTRESS_VETO.search(low) or _PERSONAL_PAT.search(low):
+    if (not low or _DISTRESS_VETO.search(low) or _PERSONAL_PAT.search(low)
+            or _RECO_VETO.search(low)):
         return []
     if not _INFO_LOOKS.search(low):
         return []
