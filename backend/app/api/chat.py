@@ -123,6 +123,10 @@ def _info_reply(db, u, infos):
                 texts.append(self_data.mood(db, u.id))
             elif info == "screening":
                 texts.append(self_data.screening(db, u.id))
+            elif info == "progress":
+                texts.append(self_data.lesson_progress(db, u.id))
+            elif info == "recall":
+                texts.append(self_data.recall(db, u.id))
             elif info == "appointments":
                 items = self_data.appointments_cards(db, u.id)
                 texts.append(self_data.appointments(db, u.id))

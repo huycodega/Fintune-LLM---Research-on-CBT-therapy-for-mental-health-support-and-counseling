@@ -81,6 +81,15 @@ _DATA_PATS = [
         r"\b(what|which|list|available|any) resources?\b|do you have (any )?resources|"
         r"support resources|self[- ]?help (resources|materials)|"
         r"resources? (are there|do you have|available)", re.I)),
+    ("progress", re.compile(
+        r"\b(my )?(lesson|learning) progress\b|how far (am i|have i got)|"
+        r"lessons? i('?ve| have) (done|completed|finished)|completed lessons|"
+        r"which lessons have i", re.I)),
+    ("recall", re.compile(
+        r"what did we (talk|discuss|cover)|what have we (talked|discussed|worked on|covered)|"
+        r"our (past |previous )?(session|conversation|talk)s?|"
+        r"last time we (talk|spoke|discuss)|"
+        r"do you remember (what|our|my)|what did i (say|tell you) (last|before)", re.I)),
     ("mood", re.compile(
         r"\bmy mood\b|mood (score|history|trend|chart)|how (has )?my mood", re.I)),
     ("screening", re.compile(
@@ -160,7 +169,8 @@ _INFO_LOOKS = re.compile(
     r"tell me|remind me)\b|\bmy \w", re.I)
 
 _INFO_LABELS = {"profile", "appointments", "lessons", "resources",
-                "psychologists", "mood", "screening", "meta", "offtopic"}
+                "psychologists", "mood", "screening", "progress", "recall",
+                "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "
@@ -172,6 +182,8 @@ _INFO_SYS = (
     "psychologists = asks which experts/counsellors they can see or book.\n"
     "mood = asks about their own recorded mood history or scores.\n"
     "screening = asks about their own PHQ-9 / GAD-7 results.\n"
+    "progress = asks about their own lesson/learning progress or what they completed.\n"
+    "recall = asks what was talked about before / in past sessions.\n"
     "meta = asks ABOUT MindCare itself (how it works, privacy, is it human).\n"
     "offtopic = an unrelated request (coding, math, trivia, weather, translation).\n"
     "none = anything else — ESPECIALLY any feelings, distress, or request for "

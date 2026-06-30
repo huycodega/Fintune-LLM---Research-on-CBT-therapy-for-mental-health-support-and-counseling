@@ -100,6 +100,36 @@ def psychologists(db) -> str:
             "their times:\n" + "\n".join(rows))
 
 
+def lesson_progress(db, uid) -> str:
+    rows = (db.query(models.UserLessonProgress, models.Lesson)
+            .join(models.Lesson,
+                  models.UserLessonProgress.lesson_id == models.Lesson.id)
+            .filter(models.UserLessonProgress.user_id == uid)
+            .order_by(models.UserLessonProgress.updated_at.desc()).limit(10).all())
+    if not rows:
+        return "You haven't started any lessons yet."
+    done = sum(1 for p, _ in rows if p.status == "completed")
+    lines = [f"- {l.title}: {p.progress_pct}%"
+             + (" ✓ done" if p.status == "completed" else "")
+             for p, l in rows]
+    return f"Your lesson progress ({done} completed):\n" + "\n".join(lines)
+
+
+def recall(db, uid) -> str:
+    from app.services import user_memory
+    mem = user_memory.load_for_prompt(db, uid)
+    if not mem or not mem.get("turn_count"):
+        return ("We haven't talked before yet — this looks like an early "
+                "conversation. What's on your mind today?")
+    themes = ", ".join(mem.get("recurring_themes") or []) or "—"
+    out = (f"So far we've had {mem.get('turn_count')} sessions together. "
+           f"Recurring themes: {themes}.")
+    summary = (mem.get("summary") or "").strip()
+    if summary:
+        out += f"\n{summary}"
+    return out
+
+
 def mood(db, uid) -> str:
     rows = (db.query(models.Screening)
             .filter(models.Screening.user_id == uid,
