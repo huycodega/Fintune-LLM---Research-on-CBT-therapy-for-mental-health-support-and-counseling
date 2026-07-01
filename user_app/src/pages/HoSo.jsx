@@ -252,6 +252,10 @@ export default function HoSo({ user }) {
                 meta={overview?.last_screening_at ? `Last completed: ${fmtDate(overview.last_screening_at)}` : "No screenings yet"} />
               <ProgressCard icon="🔥" value={overview?.streak ?? 0} label="Learning Streak" meta="Days in a row" accent="orange" />
               <ProgressCard icon="💬" value={overview?.ai_sessions ?? 0} label="AI Support Sessions" meta="Support is always available" accent="blue" />
+              <ProgressCard icon="📘" value={overview?.lessons_completed ?? 0} label="CBT Exercises Done"
+                meta={overview?.top_technique ? `Most-used: ${overview.top_technique}` : "Completed lessons"} accent="green" />
+              <ProgressCard icon="🎯" value={overview?.top_technique || "—"} label="Your Focus Area"
+                meta="Technique you work on most" accent="orange" />
               <ProgressCard icon="📁" value={overview?.resources_saved ?? 0} label="Resources Saved" meta="Helpful tools saved" accent="mint" />
             </div>
           </section>

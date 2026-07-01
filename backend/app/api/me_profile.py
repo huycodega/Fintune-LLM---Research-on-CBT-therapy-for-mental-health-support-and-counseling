@@ -16,6 +16,7 @@ preferences / consent / wellness goal use the columns added by migration 0011.
 """
 from __future__ import annotations
 import json
+from collections import Counter
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -289,6 +290,15 @@ def overview(user: dict = Depends(auth.current_user),
                          .filter_by(user_id=uid, status="completed").count())
     resources_saved = db.query(models.SavedResource).filter_by(user_id=uid).count()
 
+    # Most-worked-on CBT theme: the technique that shows up most across this
+    # user's answered sessions (a light "what you tend to focus on" signal).
+    _IGNORE_TECH = {"preference", "(unparsed)", "safety", "greeting", ""}
+    techs = [t for (t,) in db.query(models.Session.final_technique)
+             .filter(models.Session.user_id == uid,
+                     models.Session.final_technique.isnot(None)).all()
+             if t and t.strip().lower() not in _IGNORE_TECH]
+    top_technique = Counter(techs).most_common(1)[0][0] if techs else None
+
     # learning/activity streak — consecutive days (ending today or yesterday)
     days = _activity_dates(db, uid, today - timedelta(days=60))
     streak = 0
@@ -333,6 +343,7 @@ def overview(user: dict = Depends(auth.current_user),
         "ai_sessions": ai_sessions,
         "lessons_completed": lessons_completed,
         "resources_saved": resources_saved,
+        "top_technique": top_technique,
         "streak": streak,
         "week": week,
         "recent_activity": feed[:8],

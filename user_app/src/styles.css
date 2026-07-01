@@ -4342,16 +4342,29 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 .ai-conv-brand-name { font-size: 14px; font-weight: 800; color: var(--ink, #1f2a38); letter-spacing: -0.01em; }
 .ai-conv-brand-sub { font-size: 11px; color: var(--ink-soft, #94a3b8); }
 .ai-conv-item {
-  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-  padding: 9px 10px; border: 0; background: none; border-radius: 10px;
-  cursor: pointer; color: var(--ink, #1f2a38); transition: background .14s;
+  display: flex; align-items: center; width: 100%;
+  border-radius: 10px; color: var(--ink, #1f2a38); transition: background .14s;
 }
 .ai-conv-item:hover { background: var(--surface-2, #f1f5f9); }
 .ai-conv-item.active { background: var(--primary-soft, #d1fae5); color: var(--primary-dark, #047857); font-weight: 600; }
+.ai-conv-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  text-align: left; padding: 9px 10px; border: 0; background: none;
+  border-radius: 10px; cursor: pointer; color: inherit; font: inherit;
+}
 .ai-conv-ico { flex-shrink: 0; color: var(--ink-soft, #94a3b8); }
 .ai-conv-item.active .ai-conv-ico { color: var(--primary-dark, #047857); }
 .ai-conv-title { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-conv-time { font-size: 10.5px; color: var(--ink-faint, #b4bcc9); flex-shrink: 0; }
+.ai-conv-del {
+  flex-shrink: 0; border: 0; background: none; cursor: pointer;
+  color: var(--ink-faint, #b4bcc9); padding: 6px 8px; margin-right: 4px;
+  border-radius: 8px; display: flex; opacity: 0; transition: opacity .14s, color .14s, background .14s;
+}
+.ai-conv-item:hover .ai-conv-del { opacity: 1; }
+.ai-conv-del:hover { color: #dc2626; background: rgba(220,38,38,0.10); }
+/* Touch screens can't hover — always show the delete affordance */
+@media (hover: none) { .ai-conv-del { opacity: 1; } }
 
 /* Header */
 .ai-header {
@@ -4635,6 +4648,20 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 }
 .ai-listen-note:hover { background: rgba(86,194,168,0.18); }
 .ai-listen-note span { flex: 1; }
+/* "What next?" suggestions under the latest AI reply */
+.ai-nextsteps {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 4px 0 2px 46px;
+}
+.ai-nextsteps-label { font-size: 12px; font-weight: 700; color: var(--ink-soft, #94a3b8); }
+.ai-nextstep {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--line, #e6efea); background: var(--surface, #fff);
+  color: var(--primary-dark, #047857); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .14s, border-color .14s, transform .14s;
+}
+.ai-nextstep:hover { background: rgba(86,194,168,0.10); border-color: var(--primary, #56C2A8); transform: translateY(-1px); }
 .ai-input {
   flex: 1;
   border: none;

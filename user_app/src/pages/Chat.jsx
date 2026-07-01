@@ -23,6 +23,7 @@ const ICON_PATHS = {
   journal:  <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 3v18M12 8h4M12 12h4" /></>,
   moon:     <path d="M21 13A8 8 0 1 1 11 3a6 6 0 0 0 10 10z" />,
   headphones: <><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="13.5" width="4.5" height="6.5" rx="1.6" /><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="1.6" /></>,
+  trash:    <><path d="M4 7h16" /><path d="M9 7V5h6v2" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>,
 };
 
 function Icon({ name, size = 18, className = "", stroke = 1.7 }) {
@@ -58,6 +59,14 @@ const QUICK_REPLIES = [
   { icon: "edit",  text: "How can I worry less?" },
   { icon: "check", text: "I'm having trouble focusing 😟" },
   { icon: "swap",  text: "I often compare myself to others" },
+];
+
+// "What next?" suggestions shown under the latest AI reply so a conversation
+// never ends abruptly — each chip sends a natural follow-up message.
+const NEXT_STEPS = [
+  { icon: "wind",    label: "3-min breathing",   text: "Can you guide me through a short 3-minute breathing exercise?" },
+  { icon: "sparkle", label: "Try a CBT exercise", text: "Can you suggest one short CBT exercise I can try right now?" },
+  { icon: "journal", label: "Note how I feel",    text: "I'd like to write down how I'm feeling right now." },
 ];
 
 /* ── Seed conversation (matches mockup) ────────────────────────── */
@@ -576,7 +585,7 @@ function HistoryCard({ conversations, activeId, onOpen, onNew }) {
 }
 
 /* ── Left conversation rail (ChatGPT-style nav) ─────────────────── */
-function ConversationNav({ conversations, activeId, onOpen, onNew }) {
+function ConversationNav({ conversations, activeId, onOpen, onNew, onDelete }) {
   return (
     <aside className="ai-conv">
       <button className="ai-conv-new" onClick={onNew}>
@@ -588,16 +597,21 @@ function ConversationNav({ conversations, activeId, onOpen, onNew }) {
       ) : (
         <div className="ai-conv-list">
           {conversations.map((c) => (
-            <button
-              key={c.id}
-              className={`ai-conv-item ${c.id === activeId ? "active" : ""}`}
-              onClick={() => onOpen(c.id)}
-              title={c.title}
-            >
-              <Icon name="chat" size={15} className="ai-conv-ico" />
-              <span className="ai-conv-title">{c.title || "Conversation"}</span>
-              <span className="ai-conv-time">{fmtDay(c.updated_at)}</span>
-            </button>
+            <div key={c.id} className={`ai-conv-item ${c.id === activeId ? "active" : ""}`}>
+              <button className="ai-conv-main" onClick={() => onOpen(c.id)} title={c.title}>
+                <Icon name="chat" size={15} className="ai-conv-ico" />
+                <span className="ai-conv-title">{c.title || "Conversation"}</span>
+                <span className="ai-conv-time">{fmtDay(c.updated_at)}</span>
+              </button>
+              <button
+                className="ai-conv-del"
+                onClick={(e) => { e.stopPropagation(); onDelete(c); }}
+                title="Delete conversation"
+                aria-label="Delete conversation"
+              >
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -771,6 +785,15 @@ export default function Chat({ onNav }) {
     setExpertBooking(null);
     setRescheduleId(null);
     inputRef.current?.focus();
+  }
+
+  async function deleteConv(c) {
+    if (!window.confirm(`Delete "${c.title || "this conversation"}"? This can't be undone.`)) return;
+    // Optimistic: drop it from the list immediately, then persist.
+    setConversations((prev) => prev.filter((x) => x.id !== c.id));
+    try { await api.deleteConversation(c.id); } catch { /* best-effort */ }
+    if (c.id === activeId) newChat();
+    loadConversations();
   }
 
   // ── In-chat psychologist booking (opened from the crisis "Talk to a
@@ -1071,6 +1094,7 @@ export default function Chat({ onNav }) {
           activeId={activeId}
           onOpen={(id) => { openConversation(id); closeRailOnMobile(); }}
           onNew={() => { newChat(); closeRailOnMobile(); }}
+          onDelete={deleteConv}
         />
 
         {/* ── CENTER: chat ── */}
@@ -1108,6 +1132,25 @@ export default function Chat({ onNav }) {
                 onCancel={() => setExpertBooking(null)}
               />
             )}
+            {(() => {
+              const last = messages[messages.length - 1];
+              const show = last && last.role === "ai" && !last.typing && !last.crisis
+                && !expertBooking && !rescheduleId && messages.some((m) => m.role === "user");
+              if (!show) return null;
+              return (
+                <div className="ai-nextsteps">
+                  <span className="ai-nextsteps-label">What next?</span>
+                  {!listenOnly && NEXT_STEPS.map((s) => (
+                    <button key={s.label} className="ai-nextstep" onClick={() => sendText(s.text)}>
+                      <Icon name={s.icon} size={14} />{s.label}
+                    </button>
+                  ))}
+                  <button className="ai-nextstep" onClick={() => inputRef.current?.focus()}>
+                    <Icon name="chat" size={14} />Keep talking
+                  </button>
+                </div>
+              );
+            })()}
             <div ref={bottomRef} />
           </div>
 
