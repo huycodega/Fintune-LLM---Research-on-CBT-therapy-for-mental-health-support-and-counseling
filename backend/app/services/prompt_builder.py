@@ -337,10 +337,14 @@ _STYLE_LABEL = {
     "direct": "be direct and get to the point — minimal preamble",
     "no_questions": "do NOT end with a question; offer support/statements "
                     "instead (unless safety requires a check)",
-    "just_listen": "the client asked to simply be HEARD this turn — do NOT "
-                   "offer advice, exercises, techniques, or solutions. Warmly "
-                   "reflect and validate what they feel in 1-3 sentences, and "
-                   "do NOT end with a question (unless safety requires a check)",
+    "just_listen": "the client asked to simply be HEARD — shift to a warmer, "
+                   "softer, unhurried tone and keep it SHORT (1-3 sentences). "
+                   "Only reflect and gently validate what they feel, mirroring "
+                   "their own words; do NOT give advice, exercises, techniques, "
+                   "reframes, or analysis, and do NOT end with a question. "
+                   "SAFETY OVERRIDES THIS: if their distress is clearly worsening "
+                   "or any risk, hopelessness, or self-harm appears, break the "
+                   "listen-only stance — gently check in and offer support",
 }
 
 

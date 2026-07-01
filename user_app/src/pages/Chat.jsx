@@ -1121,7 +1121,7 @@ export default function Chat({ onNav }) {
           {listenOnly && (
             <button type="button" className="ai-listen-note" onClick={toggleListen}>
               <Icon name="headphones" size={14} />
-              <span>Listen-only mode — I'll just listen, no advice. Tap to turn off.</span>
+              <span>Listen-only mode — I'll just be here and listen, no advice or exercises. <b>Tap to turn it off</b> so I can suggest tips and exercises again. (If things feel harder or unsafe, I'll still step in.)</span>
             </button>
           )}
 
@@ -1134,7 +1134,7 @@ export default function Chat({ onNav }) {
               onClick={toggleListen}
               aria-pressed={listenOnly}
               title={listenOnly
-                ? "Listen-only is on — I'll hold back advice"
+                ? "Listen-only is on — tap to let me suggest advice & exercises again"
                 : "Listen-only: tap so I just listen, no advice"}
             >
               <Icon name="headphones" size={19} />
