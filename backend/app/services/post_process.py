@@ -42,37 +42,11 @@ def _trim_runaway(resp: str) -> str:
     return resp
 
 
-# Emphasise the key CBT / emotion words so they stand out to the client. The 7B
-# often ignores the "use **bold**" prompt, so we bold deterministically here —
-# the first few salient terms only, and never if the model already added bold.
-_EMPH_TERMS = re.compile(
-    r"\b(worr(?:y|ies|ied)|anxi(?:ous|ety)|fear(?:s|ful)?|afraid|scared|nervous|"
-    r"panic|sad(?:ness)?|hopeless|lonely|overwhelm\w*|stress(?:ed)?|angry|anger|"
-    r"guilt|shame|thoughts?|beliefs?|evidence|feelings?|triggers?|catastroph\w*|"
-    r"balanced|reframe|breathing|grounding|self[- ]compassion|small step|"
-    r"coping|cope|worst case)\b", re.I)
-
-
-def emphasize(text: str, max_bold: int = 3) -> str:
-    if not text or "**" in text:
-        return text
-    n = 0
-
-    def repl(m):
-        nonlocal n
-        if n >= max_bold:
-            return m.group(0)
-        n += 1
-        return f"**{m.group(0)}**"
-
-    return _EMPH_TERMS.sub(repl, text)
-
-
 def parse_draft(raw: str) -> Dict:
     tech = _grab("Technique", raw)
     rat = _grab("Rationale", raw)
     plan = _grab("Plan", raw)
-    resp = emphasize(_trim_runaway(_grab("Response", raw)))
+    resp = _trim_runaway(_grab("Response", raw))
     well = bool(tech and resp)
     if not resp:
         resp = raw.strip()
