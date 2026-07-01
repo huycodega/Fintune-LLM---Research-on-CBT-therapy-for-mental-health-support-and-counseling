@@ -945,6 +945,20 @@ def _self_correct(drafts: List[Dict], state: Dict,
     return ranked
 
 
+def _strip_trailing_question(text: str) -> str:
+    """Listen-only safety net: drop a trailing question so the reply stays a
+    pure validation, but only when real validating content remains before it."""
+    t = (text or "").strip()
+    if not t.endswith("?"):
+        return t
+    parts = re.split(r"(?<=[.!?])\s+", t)
+    if len(parts) >= 2 and parts[-1].strip().endswith("?"):
+        kept = " ".join(parts[:-1]).strip()
+        if len(kept) >= 20:
+            return kept
+    return t
+
+
 def _do_generate(args: Dict, state: Dict,
                  n_responses: int, temperature: float) -> Dict:
     """Terminal: build the prompt and call the fine-tuned responder."""
@@ -988,6 +1002,10 @@ def _do_generate(args: Dict, state: Dict,
     drafts = post_process.parse_all(gen.get("responses", []))
     # Self-critique: revise once if the best draft fails preflight/grounding.
     drafts = _self_correct(drafts, state, messages, temperature)
+    # Listen-only: last-resort guard so no draft ends with a probing question.
+    if "just_listen" in ((state.get("session_ctx") or {}).get("style_prefs") or []):
+        for d in drafts:
+            d["response"] = _strip_trailing_question(d.get("response") or "")
     # Deterministically append the REAL recommended materials so the user always
     # sees the actual library items by name (the responder often omits them).
     footer = _rec_footer(state)
@@ -1145,11 +1163,21 @@ def run_agent(*, user_scrubbed: str,
         "facts": [],   # verbatim self-data blocks (profile/appointments/…)
     }
 
+    # Listen-only mode: the client asked to simply be heard. The orchestrator
+    # must NOT bounce a clarifying question back — it goes straight to a warm
+    # validation. (Genuine risk still escalates via _risk_escalation first.)
+    listen_only = "just_listen" in ((session_ctx or {}).get("style_prefs") or [])
+
     task = (
         f"[TRIAGE] level={triage_level} severity={severity}\n"
         f"[CLIENT MESSAGE]\n{user_scrubbed}\n\n"
         "Decide how to handle this. Gather context with tools, then take one "
         "terminal action.")
+    if listen_only:
+        task += ("\n\n[LISTEN-ONLY MODE] The client asked to simply be HEARD, "
+                 "not questioned. Do NOT call ask_clarification and do NOT ask "
+                 "questions. Go straight to generate_cbt_response with a brief, "
+                 "warm validation that reflects their feeling.")
     messages: List[Dict] = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": task},
@@ -1239,6 +1267,18 @@ def run_agent(*, user_scrubbed: str,
                 esc = _risk_escalation(state, trace, step)
                 if esc is not None:
                     return esc
+                # Listen-only mode never bounces a question back — validate
+                # instead. Safety (above) still escalates genuine risk first.
+                if listen_only:
+                    low = _low_confidence_escalation(step_conf, trace, step)
+                    if low is not None:
+                        return low
+                    _ensure_grounded(state, trace, step)
+                    result = _do_generate({}, state, n_responses, temperature)
+                    trace.append({"step": step, "tool": "ask_clarification→generate",
+                                  "note": "listen-only: validated instead of asking"})
+                    result["trace"] = trace
+                    return result
                 low = _low_confidence_escalation(step_conf, trace, step)
                 if low is not None:
                     return low
