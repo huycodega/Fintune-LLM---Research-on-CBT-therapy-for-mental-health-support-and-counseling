@@ -357,12 +357,12 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
   );
 }
 
-function TypingBubble() {
+function TypingBubble({ label }) {
   return (
     <div className="ai-row ai">
       <div className="ai-avatar"><Mascot variant="chat" size={30} className="mascot-idle" /></div>
       <div className="ai-bubble ai-bubble-ai ai-thinking">
-        <span className="ai-thinking-label">MindCare is thinking</span>
+        <span className="ai-thinking-label">{label || "MindCare is thinking"}</span>
         <span className="ai-typing"><span /><span /><span /></span>
       </div>
     </div>
@@ -920,33 +920,33 @@ export default function Chat({ onNav }) {
     // "couldn't reach server"). Whichever resolves first — the direct /chat
     // response or the poll — wins; the other is ignored.
     let settled = false;
+    let slowTimers = [];
     const show = (obj, after) => {
       if (settled) return;
       settled = true;
       clearTimeout(pollStartTimer);
-      clearTimeout(slowTimer);
+      slowTimers.forEach(clearTimeout);
       clearInterval(pollRef.current);
       setMessages((prev) => { const n = [...prev]; n[aiIdx] = obj; return n; });
       loadConversations();
       if (after) after();
     };
 
-    // Cold-start replies can take a while. Rather than a frozen "thinking"
-    // bubble, after ~40s swap it for a reassuring "still working" line (the poll
-    // keeps running and replaces this when the real answer lands).
-    const slowTimer = setTimeout(() => {
+    // Cold-start replies take a while. Keep the animated "thinking" bubble but
+    // update its LABEL so it doesn't look frozen (the poll still replaces it with
+    // the real answer when it lands — no separate "still working" message).
+    const setPhase = (label) => {
       if (settled) return;
       setMessages((prev) => {
         const n = [...prev];
-        if (n[aiIdx]?.typing) {
-          n[aiIdx] = { role: "ai", time: nowTime(), pending: true,
-            text: "Still working on this — the first reply can take a moment "
-              + "while I think it through. It'll appear here automatically, no "
-              + "need to resend." };
-        }
+        if (n[aiIdx]?.typing) n[aiIdx] = { role: "ai", typing: true, label };
         return n;
       });
-    }, 40000);
+    };
+    slowTimers = [
+      setTimeout(() => setPhase("MindCare is reasoning"), 16000),
+      setTimeout(() => setPhase("Still reasoning — the first reply can take a moment"), 50000),
+    ];
 
     const fromSession = async (sess) => {
       if (sess.status === "auto_sent" || sess.status === "answered") {
@@ -1016,7 +1016,7 @@ export default function Chat({ onNav }) {
       // Gateway cut / request aborted — let the poll recover the saved reply.
       if (!settled) startReplyPoll();
     } finally {
-      clearTimeout(slowTimer);
+      slowTimers.forEach(clearTimeout);
       sendingRef.current = false;
       setBusy(false);
     }
@@ -1057,7 +1057,7 @@ export default function Chat({ onNav }) {
             {!messages.some((m) => m.role === "user") && messages.length <= 1 ? (
               <EmptyState greeting={messages[0]?.text || WELCOME[0].text} />
             ) : (
-              messages.map((m, i) => (m.typing ? <TypingBubble key={i} /> : (
+              messages.map((m, i) => (m.typing ? <TypingBubble key={i} label={m.label} /> : (
                 <ChatBubble key={i} msg={m} library={library}
                   onOpenRec={(r) => setRecDetail(r)}
                   onTalkExpert={startExpertBooking}
