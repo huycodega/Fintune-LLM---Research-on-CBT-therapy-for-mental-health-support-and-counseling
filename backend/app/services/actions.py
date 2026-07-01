@@ -20,7 +20,9 @@ _SCREEN = re.compile(
     r"\b(do|take|start|begin|complete|fill|finish)\b.{0,20}"
     r"\b(phq[- ]?9|gad[- ]?7|screening|self[- ]?check|assessment|questionnaire)\b|"
     r"i want to (do|take|start|complete) (a |the )?"
-    r"(screening|test|assessment|self[- ]?check|phq|gad)", re.I)
+    r"(screening|test|assessment|self[- ]?check|phq|gad)|"
+    r"\b(screen|assess|check|measure)\s+(my|me)\b|"
+    r"can you (screen|assess|check|measure) my", re.I)
 _RESCHED = re.compile(
     r"\b(reschedule|re-schedule)\b.{0,20}\b(appointment|booking|consultation|slot)\b|"
     r"\breschedule my (appointment|booking|consultation)\b|"

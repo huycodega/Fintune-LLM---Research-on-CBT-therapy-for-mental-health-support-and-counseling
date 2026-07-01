@@ -71,11 +71,41 @@ _L2_PAT = re.compile(
     r"overwhelm\w*|out\s+of\s+control|haunting\s+thought|"
     r"can't\s+(function|cope|sleep)|numb\w*)\b", re.I)
 
+# Third-party crisis: someone ELSE (a friend/relative) is at risk. The user
+# isn't in their own crisis, but we still escalate (share resources / involve
+# support) rather than hand out a casual reply. Handles "wants" (third-person).
+_THIRD_PARTY_RISK_PAT = re.compile(
+    r"\b(my\s+(friend|mate|roommate|room-?mate|sister|brother|mom|mother|dad|"
+    r"father|partner|girlfriend|boyfriend|classmate|cousin|colleague)|"
+    r"a\s+friend|someone\s+i\s+know|somebody)\b[^.?!]{0,45}\b"
+    r"(wants?\s+to\s+die|wants?\s+to\s+(kill|hurt|harm)\s+(her|him|them)sel(f|ves)|"
+    r"is\s+suicidal|talking\s+about\s+(suicide|killing\s+(her|him|them)sel)|"
+    r"going\s+to\s+kill\s+(her|him|them)sel|end\s+(her|his|their)\s+life)\b", re.I)
+
+# Violence toward OTHERS. Person-object required so idioms ("kill the exam",
+# "beat the game") don't trip it.
+_VIOLENCE_PAT = re.compile(
+    r"\b(going\s+to|gonna|will|want\s+to|planning\s+to|about\s+to)\b"
+    r"[^.?!]{0,25}\b(hurt|kill|attack|beat|stab|shoot|harm|strangle)\b"
+    r"[^.?!]{0,20}\b(him|her|them|someone|somebody|people|everyone|"
+    r"my\s+(roommate|room-?mate|friend|partner|classmate|sister|brother|mom|"
+    r"dad|family|neighbou?r|ex)|that\s+(guy|girl|person))\b|"
+    r"\bhurt\s+(my\s+(roommate|room-?mate|friend|partner|classmate|sister|"
+    r"brother|family|neighbou?r)|someone\s+else)\b", re.I)
+
 
 def _heuristic(text: str) -> Dict:
     if _L0_PAT.search(text) or _L0_MEANS_PAT.search(text):
         return {"triage_level": "L0", "severity": "critical",
                 "confidence": 0.95, "reason": "Crisis language detected",
+                "source": "heuristic"}
+    if _VIOLENCE_PAT.search(text):
+        return {"triage_level": "L1", "severity": "high",
+                "confidence": 0.80, "reason": "Possible risk of harm to others",
+                "source": "heuristic"}
+    if _THIRD_PARTY_RISK_PAT.search(text):
+        return {"triage_level": "L1", "severity": "high",
+                "confidence": 0.72, "reason": "Third-party crisis disclosed",
                 "source": "heuristic"}
     if _L1_PAT.search(text):
         return {"triage_level": "L1", "severity": "high",
@@ -128,7 +158,9 @@ def has_acute_risk(text: str) -> bool:
     if not text:
         return False
     return bool(_L0_PAT.search(text) or _L0_MEANS_PAT.search(text)
-                or _L1_PAT.search(text) or _PASSIVE_RISK_PAT.search(text))
+                or _L1_PAT.search(text) or _PASSIVE_RISK_PAT.search(text)
+                or _THIRD_PARTY_RISK_PAT.search(text)
+                or _VIOLENCE_PAT.search(text))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

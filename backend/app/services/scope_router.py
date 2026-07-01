@@ -140,12 +140,42 @@ _PRIVACY_PAT = re.compile(
     r"can i delete my (account|data|records?|screenings?|history)|"
     r"is my data (deleted|kept|stored)", re.I)
 
-# Diagnosis requests → a clinical boundary (we don't diagnose). Only when there's
-# no distress signal (a distressed 'am I depressed' should get empathic support).
+# Diagnosis / medication requests → a clinical boundary (we don't diagnose or
+# prescribe). Only when there's no distress (a distressed 'am I depressed' gets
+# empathic support instead).
 _DIAGNOSIS_PAT = re.compile(
     r"\bdiagnos(e|es|is|ing)\b|what('?s| is) wrong with me\b|"
     r"do i have (a |an )?(depression|anxiety|adhd|bipolar|ptsd|ocd|disorder|"
-    r"mental illness|condition)", re.I)
+    r"mental illness|condition)|"
+    r"(mean|means) i have (a |an )?(depression|anxiety|adhd|bipolar|ptsd|ocd|"
+    r"disorder|mental illness)", re.I)
+_MEDICATION_PAT = re.compile(
+    r"\bwhich (antidepressant|medication|med|pill|drug|ssri|benzo)\b|"
+    r"\bwhat (medication|meds|antidepressant|pills?|drugs?) (should|can|do) i\b|"
+    r"should i (take|start|stop|switch) \w*\s*(medication|meds|antidepressant|"
+    r"pills?|prozac|zoloft|xanax|ssri|lexapro)|"
+    r"\b(prescribe|dosage|what dose)\b", re.I)
+
+# "Are you a real therapist / be my therapist" → an explicit role boundary.
+_ROLE_PAT = re.compile(
+    r"\b(be|become)\s+my\s+(therapist|counsell?or|psychologist|doctor|shrink)\b|"
+    r"\bcan you be my (therapist|counsell?or|doctor|psychologist)\b|"
+    r"are you (a )?(licensed|real|qualified|certified|actual|human)\s+"
+    r"(therapist|clinician|psychologist|doctor|counsell?or|professional)", re.I)
+
+# References to an uploaded file/document — the app has no upload feature, so we
+# say so instead of pretending to read one.
+_NOFILE_PAT = re.compile(
+    r"\b(the\s+|my\s+)?(uploaded|attached)\s+(document|file|case\s*note|note|pdf|doc)\b|"
+    r"\b(use|read|open|from|check)\s+(the\s+|my\s+)?(uploaded|attached)\s+"
+    r"(document|file|note|doc)|\bi\s+uploaded\b|\bupload(ed)?\s+(a|my)\b", re.I)
+
+# Asking for ANOTHER person's data — refuse and clarify we only show the user's own.
+_OTHERUSER_PAT = re.compile(
+    r"\b(another|other|someone\s+else'?s?|a\s+different)\s+"
+    r"(user|person|patient|client|student|account|guy|girl)'?s?\b|"
+    r"\bother\s+(users?|people|accounts?|students?)'?\s*"
+    r"(data|screening|record|result|profile|mood|info)?", re.I)
 
 
 def info_intents(text: str) -> list:
@@ -162,9 +192,20 @@ def info_intents(text: str) -> list:
     # over the reco-veto ("delete ... based on ...").
     if _PRIVACY_PAT.search(low):
         return ["privacy"]
-    # Diagnosis requests → clinical boundary, unless the person is distressed
-    # (then let the empathic responder handle it).
-    if _DIAGNOSIS_PAT.search(low) and not _DISTRESS_VETO.search(low):
+    # Asking for someone else's data → refuse + clarify (before data intents).
+    if _OTHERUSER_PAT.search(low):
+        return ["other_user"]
+    # "The uploaded document/file" — no upload feature, say so.
+    if _NOFILE_PAT.search(low):
+        return ["no_file"]
+    # "Be my therapist / are you licensed" → role boundary.
+    if _ROLE_PAT.search(low):
+        return ["role_boundary"]
+    # Diagnosis / medication → clinical boundary. No distress gate: the patterns
+    # match only EXPLICIT requests ("do I have X", "diagnose me", "which med"),
+    # not "am I depressed" (which falls through to empathic support), and the
+    # boundary reply is itself supportive.
+    if _DIAGNOSIS_PAT.search(low) or _MEDICATION_PAT.search(low):
         return ["clinical_boundary"]
     if _RECO_VETO.search(low):     # "suitable for my mood" → let the agent tailor
         return []
@@ -198,7 +239,8 @@ _INFO_LOOKS = re.compile(
 
 _INFO_LABELS = {"profile", "appointments", "lessons", "resources",
                 "psychologists", "mood", "screening", "progress", "recall",
-                "privacy", "clinical_boundary", "meta", "offtopic"}
+                "privacy", "clinical_boundary", "role_boundary", "no_file",
+                "other_user", "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "
@@ -213,7 +255,10 @@ _INFO_SYS = (
     "progress = asks about their own lesson/learning progress or what they completed.\n"
     "recall = asks what was talked about before / in past sessions.\n"
     "privacy = asks about their data privacy / deleting their account or data.\n"
-    "clinical_boundary = asks for a medical diagnosis or 'what's wrong with me'.\n"
+    "clinical_boundary = asks for a medical diagnosis or which medication to take.\n"
+    "role_boundary = asks 'be my therapist' or 'are you a licensed clinician'.\n"
+    "no_file = refers to an uploaded file/document/case note to read.\n"
+    "other_user = asks to see another person's data/records.\n"
     "meta = asks ABOUT MindCare itself (how it works, privacy, is it human).\n"
     "offtopic = an unrelated request (coding, math, trivia, weather, translation).\n"
     "none = anything else — ESPECIALLY any feelings, distress, or request for "

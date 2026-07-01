@@ -23,15 +23,25 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
-async function req(path, { method = "GET", body } = {}) {
+async function req(path, { method = "GET", body, timeoutMs } = {}) {
   const headers = { "Content-Type": "application/json" };
   const t = getToken();
   if (t) headers["Authorization"] = `Bearer ${t}`;
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // Optional hard timeout so a hung connection (cold-start gateway) rejects
+  // instead of leaving the caller pending forever (which would lock the UI).
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const to = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl ? ctrl.signal : undefined,
+    });
+  } finally {
+    if (to) clearTimeout(to);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const detail = data.detail;
@@ -70,7 +80,7 @@ export const api = {
 
   // ---- chat (multi-turn; pass conversation_id to continue a thread) ----
   chat: (message, opts = {}) =>
-    req("/chat", { method: "POST", body: { message, ...opts } }),
+    req("/chat", { method: "POST", body: { message, ...opts }, timeoutMs: 150000 }),
   mySessions: () => req("/my/sessions"),
   mySession: (sid) => req(`/my/session/${sid}`),
 

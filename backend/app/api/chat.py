@@ -136,11 +136,30 @@ def _info_reply(db, u, infos):
                     "Account. If you'd like, I can walk you through it.")
             elif info == "clinical_boundary":
                 texts.append(
-                    "I'm not able to give a medical diagnosis — that really "
-                    "needs a licensed professional who can properly assess you, "
-                    "and a clinician on our team can help with that. What I can "
-                    "do is help you understand and work through what you're "
-                    "feeling. What's been going on for you lately?")
+                    "I'm not able to give a medical diagnosis or recommend "
+                    "medication — those need a licensed professional who can "
+                    "properly assess you, and a clinician on our team can help "
+                    "with that. What I can do is help you understand and work "
+                    "through what you're feeling. What's been going on lately?")
+            elif info == "role_boundary":
+                texts.append(
+                    "I'm not a licensed therapist or clinician — I'm MindCare "
+                    "AI, a CBT-based support companion, so I can't replace "
+                    "professional therapy. But I can listen and help you work "
+                    "through stress, anxiety, and low mood with evidence-based "
+                    "tools, and a real clinician reviews anything sensitive. "
+                    "What's on your mind?")
+            elif info == "no_file":
+                texts.append(
+                    "I can't open or read uploaded files, documents, or case "
+                    "notes — I only see the messages you type here. If there's "
+                    "something in a document you'd like help with, feel free to "
+                    "paste the relevant part and we'll look at it together.")
+            elif info == "other_user":
+                texts.append(
+                    "I can only access your own records — I'm not able to view "
+                    "anyone else's data. If it helps, I can show you your own "
+                    "screening results, appointments, or mood history.")
             elif info == "appointments":
                 items = self_data.appointments_cards(db, u.id)
                 texts.append(self_data.appointments(db, u.id))

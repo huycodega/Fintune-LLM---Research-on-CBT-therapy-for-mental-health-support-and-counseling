@@ -915,11 +915,29 @@ export default function Chat({ onNav }) {
       if (settled) return;
       settled = true;
       clearTimeout(pollStartTimer);
+      clearTimeout(slowTimer);
       clearInterval(pollRef.current);
       setMessages((prev) => { const n = [...prev]; n[aiIdx] = obj; return n; });
       loadConversations();
       if (after) after();
     };
+
+    // Cold-start replies can take a while. Rather than a frozen "thinking"
+    // bubble, after ~40s swap it for a reassuring "still working" line (the poll
+    // keeps running and replaces this when the real answer lands).
+    const slowTimer = setTimeout(() => {
+      if (settled) return;
+      setMessages((prev) => {
+        const n = [...prev];
+        if (n[aiIdx]?.typing) {
+          n[aiIdx] = { role: "ai", time: nowTime(), pending: true,
+            text: "Still working on this — the first reply can take a moment "
+              + "while I think it through. It'll appear here automatically, no "
+              + "need to resend." };
+        }
+        return n;
+      });
+    }, 40000);
 
     const fromSession = async (sess) => {
       if (sess.status === "auto_sent" || sess.status === "answered") {
@@ -984,9 +1002,10 @@ export default function Chat({ onNav }) {
         show({ role: "ai", time: nowTime(), text: r.message || "I'm here with you." });
       }
     } catch {
-      // Gateway cut the long request — let the poll recover the saved reply.
+      // Gateway cut / request aborted — let the poll recover the saved reply.
       if (!settled) startReplyPoll();
     } finally {
+      clearTimeout(slowTimer);
       sendingRef.current = false;
       setBusy(false);
     }
