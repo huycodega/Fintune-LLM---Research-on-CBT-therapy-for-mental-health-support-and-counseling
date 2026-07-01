@@ -16,6 +16,7 @@ import CaiDat from "./pages/CaiDat.jsx";
 import MoodWidget from "./components/MoodWidget.jsx";
 import NotifBell from "./components/NotifBell.jsx";
 import Onboarding from "./Onboarding.jsx";
+import SectionIntro from "./SectionIntro.jsx";
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: "home", label: "Home" },
@@ -251,14 +252,39 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [introSeen, setIntroSeen] = useState([]);
 
-  // Show the onboarding guide once for a new user (first time they reach the app).
+  // Per-account list of section intros already dismissed.
   useEffect(() => {
-    if (stage === "app" && !localStorage.getItem("mc_onboarded")) {
+    if (!user) return;
+    try {
+      setIntroSeen(JSON.parse(
+        localStorage.getItem("mc_intros_" + (user.id || user.username)) || "[]"));
+    } catch { setIntroSeen([]); }
+  }, [user]);
+  function dismissIntro(section) {
+    setIntroSeen((prev) => {
+      if (prev.includes(section)) return prev;
+      const next = [...prev, section];
+      try {
+        localStorage.setItem("mc_intros_" + (user.id || user.username),
+          JSON.stringify(next));
+      } catch { /* noop */ }
+      return next;
+    });
+  }
+
+  // Show the onboarding tour once per ACCOUNT (keyed by user id, not a global
+  // flag) — so a brand-new registration always gets the first-time guide even on
+  // a browser where another account already onboarded.
+  useEffect(() => {
+    if (stage !== "app" || !user) return;
+    const key = "mc_onboarded_" + (user.id || user.username || "u");
+    if (!localStorage.getItem(key)) {
       setGuideOpen(true);
-      localStorage.setItem("mc_onboarded", "1");
+      localStorage.setItem(key, "1");
     }
-  }, [stage]);
+  }, [stage, user]);
   // ≡ : on phones it opens the off-canvas drawer; on desktop it collapses the
   // sidebar so Home/Screening/etc. get more room.
   const toggleNav = () => {
@@ -371,6 +397,7 @@ export default function App() {
                  open={navOpen} onClose={() => setNavOpen(false)} />
 
         <div className={`main-content ${isChatPage ? "chat-mode" : ""}`}>
+          <SectionIntro section={activePage} seen={introSeen} onClose={dismissIntro} />
           {isChatPage ? (
             pages.chat
           ) : (

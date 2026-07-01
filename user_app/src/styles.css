@@ -6908,6 +6908,31 @@ html, body, #root { overflow-x: hidden; }
 .tour-next { padding: 9px 18px; border: none; border-radius: 9px; background: var(--primary, #6c5ce7); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
 .tour-next:hover { filter: brightness(1.05); }
 
+/* ── Per-section first-visit intro banner ── */
+.sx-intro {
+  display: flex; align-items: flex-start; gap: 14px; margin: 0 0 16px;
+  padding: 14px 16px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--surface-2, #f6f5ff), #fff);
+  border: 1px solid var(--line, #e7eaf2); box-shadow: 0 4px 18px rgba(15, 23, 42, .05);
+  animation: obFade .25s ease;
+}
+.chat-mode .sx-intro { margin: 12px 16px 0; }
+.sx-intro-icon {
+  flex: none; width: 40px; height: 40px; border-radius: 11px;
+  background: var(--primary, #6c5ce7); color: #fff; font-size: 21px;
+  display: grid; place-items: center;
+}
+.sx-intro-body { flex: 1; min-width: 0; }
+.sx-intro-title { font-size: 15px; font-weight: 700; color: var(--ink, #1f2a38); }
+.sx-intro-desc { font-size: 13px; color: var(--ink-soft, #64748b); line-height: 1.55; margin-top: 3px; }
+.sx-intro-cta { font-size: 12.5px; font-weight: 600; color: var(--primary, #6c5ce7); margin-top: 6px; }
+.sx-intro-x {
+  flex: none; align-self: center; padding: 7px 12px; border-radius: 9px;
+  border: 1px solid var(--line, #e7eaf2); background: #fff; color: var(--ink-soft, #64748b);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.sx-intro-x:hover { background: var(--surface-2, #f6f5ff); color: var(--ink, #1f2a38); }
+
 /* Appointment confirmation card (sent back after booking) */
 .ai-appt-card {
   margin-top: 10px; padding: 12px 14px; border-radius: 12px;
