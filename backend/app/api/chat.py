@@ -929,6 +929,10 @@ def chat(body: ChatIn, request: Request,
         }
 
     # ---- L3: auto-send the gated-OK draft ----
+    # Emphasis pass: let the model bold the naturally-important part of the reply
+    # it's about to send (one short call, only on the auto-sent turn; best-effort).
+    if getattr(settings, "emphasis_pass_enabled", True):
+        chosen["response"] = post_process.emphasize_llm(chosen["response"])
     sess = models.Session(
         **base, status="auto_sent",
         analysis=analysis, retrieved_ids=retrieved_ids, prompt_hash=p_hash,

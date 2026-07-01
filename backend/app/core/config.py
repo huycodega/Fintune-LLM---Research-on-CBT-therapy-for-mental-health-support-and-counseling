@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     # NOTHING is written until the user taps Confirm (which calls the existing
     # REST endpoints). Runs only on L2/L3, never on a distress/risk turn.
     action_gate_enabled: bool = True
+    # After generating an auto-sent (L3) reply, make ONE short model call to bold
+    # the naturally-important words of that reply (contextual emphasis). Best-
+    # effort: no-op in mock/degraded. Set False to skip the extra call.
+    emphasis_pass_enabled: bool = True
 
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise

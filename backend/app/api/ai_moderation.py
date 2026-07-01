@@ -241,6 +241,14 @@ def _ensure_claimable(q, actor):
 def _finalize(s, q, decision, final_reply, final_tech, actor, db, request):
     s.status = "answered" if decision != "reject" else "rejected"
     if final_reply is not None:
+        # Emphasis pass: bold the naturally-important part of the reply the
+        # clinician is sending (approve/edit). Best-effort; skips the referral.
+        if decision in ("approve", "edit"):
+            try:
+                from app.services import post_process
+                final_reply = post_process.emphasize_llm(final_reply)
+            except Exception:
+                pass
         s.final_reply_enc = encrypt_phi(final_reply)
     s.final_technique = final_tech
     s.reviewed_by = actor["uid"]

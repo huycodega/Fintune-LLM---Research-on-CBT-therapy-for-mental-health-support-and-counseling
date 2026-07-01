@@ -59,6 +59,39 @@ def parse_draft(raw: str) -> Dict:
     }
 
 
+_EMPH_SYS = (
+    "You add emphasis to a message. Return the message EXACTLY as given, but "
+    "wrap the 1-2 words or short phrases that carry the most meaning (the key "
+    "insight or next action) in markdown **bold**. Do NOT change, add, remove, "
+    "or reorder any other words, and never bold whole sentences. Output ONLY the "
+    "message.")
+
+
+def emphasize_llm(text: str) -> str:
+    """Ask the model to bold the naturally-important part of ITS OWN reply — so
+    the emphasis is contextual, not a fixed word list. Best-effort: returns the
+    text unchanged when the model is mock/unavailable, already bolded, or the
+    output looks tampered (length drift / no bold)."""
+    text = (text or "").strip()
+    if not text or "**" in text:
+        return text
+    try:
+        from app.services import llm_client
+        gen = llm_client.generate(
+            [{"role": "system", "content": _EMPH_SYS},
+             {"role": "user", "content": text}],
+            n=1, temperature=0.0)
+        if not gen or gen.get("degraded") or gen.get("mode") == "mock":
+            return text
+        out = (gen.get("responses") or [""])[0].strip()
+        # Guard: must have added bold and stayed the same reply (no rewrite).
+        if "**" in out and 0.7 <= len(out) / max(1, len(text)) <= 1.4:
+            return out
+        return text
+    except Exception:
+        return text
+
+
 def parse_all(raws: List[str]) -> List[Dict]:
     parsed = [parse_draft(r) for r in raws]
     seen, out = set(), []
