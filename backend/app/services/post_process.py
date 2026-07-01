@@ -60,11 +60,14 @@ def parse_draft(raw: str) -> Dict:
 
 
 _EMPH_SYS = (
-    "You add emphasis to a message. Return the message EXACTLY as given, but "
-    "wrap the 1-2 words or short phrases that carry the most meaning (the key "
-    "insight or next action) in markdown **bold**. Do NOT change, add, remove, "
-    "or reorder any other words, and never bold whole sentences. Output ONLY the "
-    "message.")
+    "You add emphasis to a therapy message. Return it EXACTLY as given, but wrap "
+    "the 1-2 words or short phrases that carry the most THERAPEUTIC meaning in "
+    "markdown **bold**: the key idea, the cognitive pattern (a thought, belief, "
+    "assumption, or feeling), the reframe, or the concrete next action. Do NOT "
+    "bold reassurance or connective filler such as 'together', 'we can work on "
+    "this', \"we'll get through it\", 'I'm here', or 'you're not alone'. Do NOT "
+    "change, add, remove, or reorder any other words, and never bold whole "
+    "sentences. Output ONLY the message.")
 
 
 def emphasize_llm(text: str) -> str:
