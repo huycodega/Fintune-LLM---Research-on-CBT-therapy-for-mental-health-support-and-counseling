@@ -1018,12 +1018,16 @@ export default function Chat({ onNav }) {
 
     try {
       const opts = activeId ? { conversation_id: activeId } : {};
-      // Only push the toggle when it CHANGED since we last told the backend, so
-      // an ordinary turn leaves a typed "just listen" preference untouched.
-      if (listenOnly !== syncedListenRef.current) {
-        opts.listen_only = listenOnly;
-        syncedListenRef.current = listenOnly;
+      // While listen-only is ON, assert it on EVERY message so the backend can
+      // never lose it (Redis restart / redeploy / another device). When OFF,
+      // only send the clear ONCE — on the turn the user flips it off — so a
+      // "just listen" the user TYPED isn't wiped by an ordinary turn.
+      if (listenOnly) {
+        opts.listen_only = true;
+      } else if (syncedListenRef.current) {
+        opts.listen_only = false;
       }
+      syncedListenRef.current = listenOnly;
       const r = await api.chat(text, opts);
       if (settled) return;
       if (r.conversation_id && r.conversation_id !== activeId) setActiveId(r.conversation_id);
