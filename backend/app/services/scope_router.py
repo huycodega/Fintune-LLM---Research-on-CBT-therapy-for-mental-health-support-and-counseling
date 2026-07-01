@@ -178,6 +178,55 @@ _OTHERUSER_PAT = re.compile(
     r"(data|screening|record|result|profile|mood|info)?", re.I)
 
 
+# Ultra-short vague fragments → ask a gentle clarifying question instead of
+# guessing. Anchored full-match on tiny inputs, so a real sentence never matches.
+_VAGUE_CBT_PAT = re.compile(r"^\s*cbt\??\s*$", re.I)
+_VAGUE_PAT = re.compile(
+    r"^\s*(stress|help|help me|bad day|a bad day|not okay|not ok|what now|"
+    r"what'?s next|whats next|idk|i don'?t know|dunno|not sure|meh|hmm+|"
+    r"nothing|everything)\s*[.?!]*\s*$", re.I)
+
+# Jailbreak / prompt-injection with NO self-harm content → a clean refusal
+# (handled in chat.py BEFORE the safety model, guarded by has_acute_risk, so a
+# genuine crisis never gets this instead of crisis support).
+_JAILBREAK_PAT = re.compile(
+    r"\b(ignore|disregard|forget|bypass|override)\b[^.?!]{0,30}"
+    r"\b(safety|previous|prior|your|all)\b[^.?!]{0,20}"
+    r"\b(rules?|instructions?|guidelines?|constraints?|prompt|policy|policies)\b|"
+    r"\b(output|reveal|show|print|repeat|tell me)\b[^.?!]{0,20}"
+    r"\b(your |the )?(hidden |system |internal )?(system )?prompt\b|"
+    r"\byou are now (an?|a) (unfiltered|unrestricted|jailbroken|dan)\b|"
+    r"\b(developer|dev|god)\s+mode\b|\bjailbreak\b|"
+    r"\bskip (crisis|safety|the safety)\b|\bpretend you have no (rules|limits|filter)\b|"
+    r"(said|says) to (ignore|skip|bypass) (safety|the rules|your rules)", re.I)
+
+# Style preferences the client may state, to honour across the thread.
+_PREF_BRIEF = re.compile(
+    r"\b(be (brief|concise|shorter?)|keep (it|your (answers?|replies?)) short|"
+    r"shorter (answers?|replies?)|stop (giving )?long (answers?|replies?)|"
+    r"(that'?s |too )long|less wordy|tl;?dr|make it short)\b", re.I)
+_PREF_NOQ = re.compile(
+    r"\b(don'?t ask( me)? (questions?|anything)|stop asking( me)? questions?|"
+    r"no( more)? questions?|quit asking|stop with the questions)\b", re.I)
+_PREF_DIRECT = re.compile(
+    r"\b(be (direct|blunt|straight)|just tell me|get (straight )?to the point|"
+    r"straight to the point|no fluff|cut to the chase)\b", re.I)
+
+
+def detect_preference(text: str) -> list:
+    """Return style-preference flags stated in this message (subset of
+    'brief', 'no_questions', 'direct'), or []."""
+    low = (text or "").lower()
+    out = []
+    if _PREF_BRIEF.search(low):
+        out.append("brief")
+    if _PREF_NOQ.search(low):
+        out.append("no_questions")
+    if _PREF_DIRECT.search(low):
+        out.append("direct")
+    return out
+
+
 def info_intents(text: str) -> list:
     """Return ALL factual-info labels to answer directly (a compound question
     like 'my mood / my screening results' yields both), or []. Labels are a
@@ -207,6 +256,11 @@ def info_intents(text: str) -> list:
     # boundary reply is itself supportive.
     if _DIAGNOSIS_PAT.search(low) or _MEDICATION_PAT.search(low):
         return ["clinical_boundary"]
+    # Ultra-short vague fragment → gentle clarifying question.
+    if _VAGUE_CBT_PAT.search(low):
+        return ["vague_cbt"]
+    if _VAGUE_PAT.search(low):
+        return ["vague"]
     if _RECO_VETO.search(low):     # "suitable for my mood" → let the agent tailor
         return []
     # Explicit self-data intents — all that match, vetoed by any distress signal.
@@ -240,7 +294,7 @@ _INFO_LOOKS = re.compile(
 _INFO_LABELS = {"profile", "appointments", "lessons", "resources",
                 "psychologists", "mood", "screening", "progress", "recall",
                 "privacy", "clinical_boundary", "role_boundary", "no_file",
-                "other_user", "meta", "offtopic"}
+                "other_user", "vague", "vague_cbt", "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "

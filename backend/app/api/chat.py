@@ -160,6 +160,18 @@ def _info_reply(db, u, infos):
                     "I can only access your own records — I'm not able to view "
                     "anyone else's data. If it helps, I can show you your own "
                     "screening results, appointments, or mood history.")
+            elif info == "vague_cbt":
+                texts.append(
+                    "Happy to help with CBT! Would you like a quick explanation "
+                    "of what it is, a practical exercise to try, or help applying "
+                    "it to something specific you're going through?")
+            elif info == "vague":
+                texts.append(
+                    "I'm really glad you reached out. Could you tell me a bit "
+                    "more about what's going on — even one sentence about what "
+                    "feels hardest right now helps me support you. And if "
+                    "anything ever feels urgent or unsafe, you can reach 988 any "
+                    "time.")
             elif info == "appointments":
                 items = self_data.appointments_cards(db, u.id)
                 texts.append(self_data.appointments(db, u.id))
@@ -315,6 +327,44 @@ def chat(body: ChatIn, request: Request,
             "mode": "greeting",
         }
 
+    # ---- Jailbreak / prompt-injection gate (clean refusal, not crisis framing) ----
+    # A clear jailbreak with NO self-harm content gets a direct refusal instead of
+    # being over-triaged into the crisis flow. Guarded by has_acute_risk, so a real
+    # crisis (even one worded as a jailbreak) still takes the safety path below.
+    if (settings.scope_router_enabled
+            and scope_router._JAILBREAK_PAT.search(text)
+            and not safety_gate.has_acute_risk(text)):
+        reply = (
+            "I can't share my internal instructions or set aside my safety "
+            "guidelines — they're here to keep you safe. But I'm genuinely glad "
+            "you're here: tell me what's going on for you and we'll work through "
+            "it together.")
+        user_message = moderation_store.record_user_message(db, convo, u, text, "L3")
+        sess = models.Session(
+            user_id=u.id, intake_id=intake.id, conversation_id=convo.id,
+            user_input_enc=encrypt_phi(text), user_input_hash=text_hash,
+            triage_level="L3", triage_reason="jailbreak_refused", severity="low",
+            confidence=1.0, status="answered",
+            final_reply_enc=encrypt_phi(reply), final_technique="safety_boundary",
+            analysis={"jailbreak": True},
+            completed_at=datetime.now(timezone.utc))
+        db.add(sess); db.flush()
+        moderation_store.record_ai_message(
+            db, convo, user_message, reply, "L3", "not_required",
+            confidence=1.0, model_name="jailbreak_gate")
+        audit_mod.audit(db, action="jailbreak_refused", actor=user, ip=ip,
+                         resource_type="session", resource_id=sess.id, detail={})
+        return {
+            "session_id": str(sess.id), "conversation_id": str(convo.id),
+            "outcome": "answered",
+            "triage": {"triage_level": "L3", "reason": "jailbreak_refused",
+                       "severity": "low", "confidence": 1.0},
+            "final": {"technique": "safety_boundary", "response": reply},
+            "drafts": [{"idx": 0, "technique": "safety_boundary",
+                        "response": reply}],
+            "mode": "jailbreak_gate",
+        }
+
     # Prior CLIENT turns of this thread (decrypted), most recent last. Reading
     # each message in isolation caused L1 over-triage with hallucinated reasons;
     # giving the model context fixes that and (verified) still escalates a
@@ -434,6 +484,42 @@ def chat(body: ChatIn, request: Request,
                          "anything feels urgent while you wait, the resources "
                          "below are here for you any time."),
         }
+
+    # ---- Preference gate: remember "be brief / don't ask / be direct" ----
+    # Store the style preference for this thread and acknowledge; future turns
+    # honour it (session_ctx.style_prefs → responder prompt). L2/L3 only.
+    if level in ("L2", "L3"):
+        prefs_now = scope_router.detect_preference(text)
+        if prefs_now:
+            merged = sorted(set(rc.chat_prefs_get(str(convo.id))) | set(prefs_now))
+            rc.chat_prefs_set(str(convo.id), merged)
+            bits = []
+            if "brief" in prefs_now:
+                bits.append("keep my replies short")
+            if "direct" in prefs_now:
+                bits.append("get straight to the point")
+            if "no_questions" in prefs_now:
+                bits.append("hold back on the questions")
+            ack = ("Got it — I'll " + (", and ".join(bits) or "adjust my style")
+                   + " from now on. What's on your mind?")
+            sess = models.Session(
+                **base, status="answered", analysis={"style_prefs": merged},
+                final_reply_enc=encrypt_phi(ack), final_technique="preference",
+                completed_at=datetime.now(timezone.utc))
+            db.add(sess); db.flush()
+            moderation_store.record_ai_message(
+                db, convo, user_message, ack, level, "not_required",
+                confidence=triage.get("confidence"), model_name="preference_gate")
+            audit_mod.audit(db, action="style_preference", actor=user, ip=ip,
+                             resource_type="session", resource_id=sess.id,
+                             detail={"prefs": merged})
+            return {
+                "session_id": str(sess.id), "conversation_id": str(convo.id),
+                "outcome": "answered", "triage": triage,
+                "final": {"technique": "preference", "response": ack},
+                "drafts": [{"idx": 0, "technique": "preference", "response": ack}],
+                "mode": "preference_gate",
+            }
 
     # ---- Action gate: "do something" requests (write, with confirm) ----
     # Detect log-mood / cancel-appointment / mark-lesson-done / start-screening
@@ -564,6 +650,9 @@ def chat(body: ChatIn, request: Request,
         "summary": rc.thread_summary_get(str(convo.id)) or "(no summary yet)",
         "memory": user_memory.load_for_prompt(db, u.id),
         "history": _thread_history(db, convo.id),
+        # Style preferences the client stated earlier ("be brief", …) — honoured
+        # by the responder prompt.
+        "style_prefs": rc.chat_prefs_get(str(convo.id)),
     }
 
     # intake snapshot for prompt

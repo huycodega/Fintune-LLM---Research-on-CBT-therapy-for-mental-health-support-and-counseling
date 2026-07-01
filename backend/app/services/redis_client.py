@@ -92,6 +92,26 @@ def thread_summary_set(conversation_id: str, summary: str,
 
 
 # ============================================================
+# Per-conversation style preferences ("be brief", "don't ask questions", …)
+# ============================================================
+def chat_prefs_get(conversation_id: str) -> list:
+    try:
+        v = get_redis().get(f"chat:prefs:{conversation_id}")
+        return json.loads(v) if v else []
+    except (redis.RedisError, json.JSONDecodeError):
+        return []
+
+
+def chat_prefs_set(conversation_id: str, prefs: list,
+                   ttl: int = 604800) -> None:
+    try:
+        get_redis().setex(f"chat:prefs:{conversation_id}", ttl,
+                          json.dumps(list(prefs)))
+    except redis.RedisError:
+        pass
+
+
+# ============================================================
 # Session lock (prevent two clinicians grabbing the same case)
 # ============================================================
 def acquire_review_lock(session_id: str, clinician_id: str) -> bool:

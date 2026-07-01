@@ -326,9 +326,27 @@ def _format_session_ctx(ctx: Optional[Dict]) -> str:
         f"- Recent summary: {ctx.get('summary', '—')}"
     )
     parts = [base,
+             _format_style_prefs(ctx.get("style_prefs")),
              _format_memory(ctx.get("memory")),
              _format_history(ctx.get("history"))]
     return "\n\n".join(p for p in parts if p)
+
+
+_STYLE_LABEL = {
+    "brief": "keep the reply SHORT (2-4 sentences, no long lists)",
+    "direct": "be direct and get to the point — minimal preamble",
+    "no_questions": "do NOT end with a question; offer support/statements "
+                    "instead (unless safety requires a check)",
+}
+
+
+def _format_style_prefs(prefs) -> str:
+    """Client-stated style preferences to honour this turn."""
+    items = [_STYLE_LABEL[p] for p in (prefs or []) if p in _STYLE_LABEL]
+    if not items:
+        return ""
+    return ("[CLIENT STYLE PREFERENCE — the client asked you to: "
+            + "; ".join(items) + ". Honour this.]")
 
 
 def build_messages(user_input_scrubbed: str,
