@@ -121,13 +121,12 @@ def recall(db, uid) -> str:
     if not mem or not mem.get("turn_count"):
         return ("We haven't talked before yet — this looks like an early "
                 "conversation. What's on your mind today?")
-    themes = ", ".join(mem.get("recurring_themes") or []) or "—"
-    out = (f"So far we've had {mem.get('turn_count')} sessions together. "
-           f"Recurring themes: {themes}.")
-    summary = (mem.get("summary") or "").strip()
-    if summary:
-        out += f"\n{summary}"
-    return out
+    themes = ", ".join(mem.get("recurring_themes") or []) or "a few different things"
+    # Speak TO the client (first/second person). The stored memory `summary` is a
+    # third-person clinical note for internal use, so we do NOT read it back here.
+    return (f"So far we've talked across {mem.get('turn_count')} sessions, and "
+            f"the themes that keep coming up for you are: {themes}. "
+            "Would you like to pick up on any of those today?")
 
 
 def mood(db, uid) -> str:

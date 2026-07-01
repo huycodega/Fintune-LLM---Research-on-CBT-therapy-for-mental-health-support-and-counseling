@@ -22,12 +22,13 @@ _SCREEN = re.compile(
     r"i want to (do|take|start|complete) (a |the )?"
     r"(screening|test|assessment|self[- ]?check|phq|gad)", re.I)
 _RESCHED = re.compile(
-    r"\b(reschedule|re-schedule)\b|"
-    r"\b(move|change|switch|shift)\b.{0,20}\b(appointment|booking|consultation|session|slot)\b|"
-    r"\b(change|move|switch)\b.{0,12}\b(time|date|day)\b.{0,20}\b(appointment|booking)\b|"
+    r"\b(reschedule|re-schedule)\b.{0,20}\b(appointment|booking|consultation|slot)\b|"
+    r"\breschedule my (appointment|booking|consultation)\b|"
+    r"\b(move|change|shift)\b.{0,20}\b(appointment|booking|consultation)\b|"
+    r"\b(change|move)\b.{0,12}\b(time|date|day)\b.{0,20}\b(appointment|booking)\b|"
     r"(different|another|new) (time|slot|day) for my (appointment|booking)", re.I)
 _CANCEL = re.compile(
-    r"\bcancel\b.{0,20}\b(appointment|booking|consultation|session)\b|"
+    r"\bcancel\b.{0,20}\b(appointment|booking|consultation)\b|"
     r"\b(cancel|delete|remove) my (appointment|booking|consultation)", re.I)
 _MARK = re.compile(
     r"\bmark\b.{0,25}\b(lesson|done|complete|completed|finished)\b|"

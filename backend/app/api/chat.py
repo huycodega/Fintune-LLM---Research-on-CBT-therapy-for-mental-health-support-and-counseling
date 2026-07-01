@@ -132,8 +132,15 @@ def _info_reply(db, u, infos):
                     "Your privacy matters here. Your messages are encrypted, "
                     "and only a clinician reviews sensitive cases — nothing is "
                     "shared otherwise. You can view or delete your account and "
-                    "data anytime from Settings → Account. If anything specific "
-                    "worries you, tell me and I'll do my best to help.")
+                    "your records (including screenings) anytime from Settings → "
+                    "Account. If you'd like, I can walk you through it.")
+            elif info == "clinical_boundary":
+                texts.append(
+                    "I'm not able to give a medical diagnosis — that really "
+                    "needs a licensed professional who can properly assess you, "
+                    "and a clinician on our team can help with that. What I can "
+                    "do is help you understand and work through what you're "
+                    "feeling. What's been going on for you lately?")
             elif info == "appointments":
                 items = self_data.appointments_cards(db, u.id)
                 texts.append(self_data.appointments(db, u.id))

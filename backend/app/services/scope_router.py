@@ -85,11 +85,6 @@ _DATA_PATS = [
         r"\b(my )?(lesson|learning) progress\b|how far (am i|have i got)|"
         r"lessons? i('?ve| have) (done|completed|finished)|completed lessons|"
         r"which lessons have i", re.I)),
-    ("privacy", re.compile(
-        r"\b(delete|erase|remove|wipe) my (data|account|information|info)\b|"
-        r"what (data|information|info) do you (have|hold|keep|store) (on|about) me|"
-        r"how (is|are) my (data|information) (used|stored|kept|protected|handled)|"
-        r"can i delete my (account|data)|is my data (deleted|kept|stored)", re.I)),
     ("recall", re.compile(
         r"what did we (talk|discuss|cover)|what have we (talked|discussed|worked on|covered)|"
         r"our (past |previous )?(session|conversation|talk)s?|"
@@ -133,6 +128,26 @@ _RECO_VETO = re.compile(
     r"help me (choose|pick|find|decide)|based on (my|how i))\b", re.I)
 
 
+# Privacy / data-deletion requests. Checked FIRST and answered alone — a
+# "delete my screening" must NEVER dump the data as if it were a read request.
+_PRIVACY_PAT = re.compile(
+    r"\b(delete|erase|remove|wipe|clear)\b.{0,25}\b(data|account|information|info|"
+    r"screenings?|mood|results?|records?|record|history|scores?|messages?)\b|"
+    r"\bmy (data|account|screenings?|mood|results?|records?|history|scores?|messages?)"
+    r"\b.{0,20}\b(deleted|erased|removed|wiped|gone)\b|"
+    r"what (data|information|info) do you (have|hold|keep|store) (on|about) me|"
+    r"how (is|are) my (data|information) (used|stored|kept|protected|handled)|"
+    r"can i delete my (account|data|records?|screenings?|history)|"
+    r"is my data (deleted|kept|stored)", re.I)
+
+# Diagnosis requests → a clinical boundary (we don't diagnose). Only when there's
+# no distress signal (a distressed 'am I depressed' should get empathic support).
+_DIAGNOSIS_PAT = re.compile(
+    r"\bdiagnos(e|es|is|ing)\b|what('?s| is) wrong with me\b|"
+    r"do i have (a |an )?(depression|anxiety|adhd|bipolar|ptsd|ocd|disorder|"
+    r"mental illness|condition)", re.I)
+
+
 def info_intents(text: str) -> list:
     """Return ALL factual-info labels to answer directly (a compound question
     like 'my mood / my screening results' yields both), or []. Labels are a
@@ -143,6 +158,14 @@ def info_intents(text: str) -> list:
     low = (text or "").strip().lower()
     if not low:
         return []
+    # Privacy / deletion requests take precedence — never dump the data, and win
+    # over the reco-veto ("delete ... based on ...").
+    if _PRIVACY_PAT.search(low):
+        return ["privacy"]
+    # Diagnosis requests → clinical boundary, unless the person is distressed
+    # (then let the empathic responder handle it).
+    if _DIAGNOSIS_PAT.search(low) and not _DISTRESS_VETO.search(low):
+        return ["clinical_boundary"]
     if _RECO_VETO.search(low):     # "suitable for my mood" → let the agent tailor
         return []
     # Explicit self-data intents — all that match, vetoed by any distress signal.
@@ -175,7 +198,7 @@ _INFO_LOOKS = re.compile(
 
 _INFO_LABELS = {"profile", "appointments", "lessons", "resources",
                 "psychologists", "mood", "screening", "progress", "recall",
-                "privacy", "meta", "offtopic"}
+                "privacy", "clinical_boundary", "meta", "offtopic"}
 
 _INFO_SYS = (
     "You route a user message in MindCare, a student mental-health app, to ONE "
@@ -190,6 +213,7 @@ _INFO_SYS = (
     "progress = asks about their own lesson/learning progress or what they completed.\n"
     "recall = asks what was talked about before / in past sessions.\n"
     "privacy = asks about their data privacy / deleting their account or data.\n"
+    "clinical_boundary = asks for a medical diagnosis or 'what's wrong with me'.\n"
     "meta = asks ABOUT MindCare itself (how it works, privacy, is it human).\n"
     "offtopic = an unrelated request (coding, math, trivia, weather, translation).\n"
     "none = anything else — ESPECIALLY any feelings, distress, or request for "
