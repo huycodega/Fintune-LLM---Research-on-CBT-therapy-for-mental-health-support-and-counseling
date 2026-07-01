@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Avatar, fmtDateTime } from "../../ui.jsx";
+import { Avatar, fmtDateTime, IdChip } from "../../ui.jsx";
 import { api } from "../../api.js";
 import { aiModerationApi } from "./aiModeration.service.js";
 import { CHECKLIST_ITEMS } from "./aiModeration.types.js";
@@ -389,7 +389,7 @@ export default function ModerationDetailPanel({
         <div className="am-detail-title">
           <div>
             <span>Session ID</span>
-            <h2>{detail.sessionId}</h2>
+            <div style={{ marginTop: 2 }}><IdChip id={detail.sessionId} /></div>
           </div>
           <RiskLevelBadge level={detail.riskLevel} />
         </div>

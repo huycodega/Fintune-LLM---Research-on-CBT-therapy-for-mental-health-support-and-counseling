@@ -15,6 +15,7 @@ import TuVan from "./pages/TuVan.jsx";
 import CaiDat from "./pages/CaiDat.jsx";
 import MoodWidget from "./components/MoodWidget.jsx";
 import NotifBell from "./components/NotifBell.jsx";
+import Onboarding from "./Onboarding.jsx";
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: "home", label: "Home" },
@@ -126,7 +127,7 @@ function NavSvgIcon({ name }) {
   </svg>
 );
 }
-function Topbar({ activePage, onNav, user, onLogout, onMenu }) {
+function Topbar({ activePage, onNav, user, onLogout, onMenu, onGuide }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initials = user?.username ? user.username.slice(0, 1).toUpperCase() : "U";
   const displayName = user?.username
@@ -181,6 +182,9 @@ function Topbar({ activePage, onNav, user, onLogout, onMenu }) {
             <>
               <div className="topbar-overlay" onClick={() => setMenuOpen(false)} />
               <div className="topbar-user-menu">
+                <button className="user-menu-item" onClick={() => { setMenuOpen(false); onGuide && onGuide(); }}>
+                  🧭 Guide / Getting started
+                </button>
                 <button className="user-menu-item" onClick={() => { setMenuOpen(false); onNav("hoso"); }}>
                   👤 Profile
                 </button>
@@ -245,6 +249,15 @@ export default function App() {
   const [path, setPath] = useState(() => window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  // Show the onboarding guide once for a new user (first time they reach the app).
+  useEffect(() => {
+    if (stage === "app" && !localStorage.getItem("mc_onboarded")) {
+      setGuideOpen(true);
+      localStorage.setItem("mc_onboarded", "1");
+    }
+  }, [stage]);
   // ≡ : on phones it opens the off-canvas drawer; on desktop it collapses the
   // sidebar so Home/Screening/etc. get more room.
   const toggleNav = () => {
@@ -350,7 +363,7 @@ export default function App() {
   return (
     <div className={`app-shell ${navCollapsed ? "nav-collapsed" : ""}`}>
       <Topbar activePage={activePage} onNav={navTo} user={user} onLogout={logout}
-              onMenu={toggleNav} />
+              onMenu={toggleNav} onGuide={() => setGuideOpen(true)} />
 
       <div className="app-body">
         <Sidebar activePage={activePage} onNav={navTo}
@@ -369,6 +382,8 @@ export default function App() {
 
       {/* Floating per-account mood trend — gentle, on every page. */}
       <MoodWidget />
+
+      <Onboarding open={guideOpen} onClose={() => setGuideOpen(false)} onNav={navTo} />
     </div>
   );
 }

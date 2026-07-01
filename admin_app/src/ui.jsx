@@ -1,5 +1,29 @@
 // Shared UI helpers for the admin console.
+import { useState } from "react";
 import Icon from "./admin/Icon.jsx";
+
+/* Compact ID chip: shows a truncated id (899d…2fdf0) to save table width, and
+   copies the FULL id to the clipboard on click. */
+export function IdChip({ id, className = "" }) {
+  const [copied, setCopied] = useState(false);
+  if (!id) return <span className="id-chip id-chip-empty">—</span>;
+  const short = id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-5)}` : id;
+  function copy(e) {
+    e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch { /* noop */ }
+  }
+  return (
+    <button type="button" className={`id-chip ${className}`}
+            title={`${id}\nClick to copy`} onClick={copy}>
+      <span className="id-chip-text">{copied ? "Copied ✓" : short}</span>
+      <span className="id-chip-icon" aria-hidden="true">⧉</span>
+    </button>
+  );
+}
 
 const AVATAR_COLORS = [
   "linear-gradient(135deg,#6366F1,#8B5CF6)",

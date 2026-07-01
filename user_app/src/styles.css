@@ -6879,6 +6879,48 @@ html, body, #root { overflow-x: hidden; }
 .ai-action-confirm .ai-expert-cta { margin-top: 0; }
 .ai-action-confirm .ai-book-cancel { margin-top: 0; }
 
+/* ── Onboarding / getting-started modal ── */
+.ob-overlay {
+  position: fixed; inset: 0; z-index: 200; display: flex;
+  align-items: center; justify-content: center; padding: 18px;
+  background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
+}
+.ob-modal {
+  position: relative; width: 100%; max-width: 460px; max-height: 90vh;
+  overflow-y: auto; background: #fff; border-radius: 18px; padding: 24px 22px 20px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .28);
+}
+.ob-x {
+  position: absolute; top: 12px; right: 12px; border: none; background: none;
+  font-size: 16px; color: var(--ink-soft, #64748b); cursor: pointer; padding: 4px;
+}
+.ob-head { text-align: center; margin-bottom: 16px; }
+.ob-emoji { font-size: 40px; line-height: 1; }
+.ob-head h2 { margin: 8px 0 4px; font-size: 20px; color: var(--ink, #1f2a38); }
+.ob-head p { margin: 0; font-size: 13.5px; color: var(--ink-soft, #64748b); line-height: 1.5; }
+.ob-steps { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; }
+.ob-step {
+  display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
+  padding: 12px 14px; border: 1px solid var(--line, #e7eaf2); border-radius: 12px;
+  background: var(--surface, #fff); cursor: pointer; transition: all .14s;
+}
+.ob-step:hover { border-color: var(--primary, #6c5ce7); background: var(--surface-2, #f6f5ff); transform: translateY(-1px); }
+.ob-step-num {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--primary, #6c5ce7); color: #fff; font-size: 12px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.ob-step-icon { font-size: 20px; }
+.ob-step-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ob-step-title { font-size: 14px; font-weight: 600; color: var(--ink, #1f2a38); }
+.ob-step-desc { font-size: 12px; color: var(--ink-soft, #64748b); line-height: 1.4; }
+.ob-step-arrow { font-size: 20px; color: var(--ink-faint, #94a3b8); }
+.ob-done {
+  width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer;
+  background: var(--primary, #6c5ce7); color: #fff; font-size: 15px; font-weight: 600;
+}
+.ob-done:hover { filter: brightness(1.05); }
+
 /* Appointment confirmation card (sent back after booking) */
 .ai-appt-card {
   margin-top: 10px; padding: 12px 14px; border-radius: 12px;

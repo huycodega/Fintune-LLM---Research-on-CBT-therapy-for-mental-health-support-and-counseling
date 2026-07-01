@@ -1,4 +1,4 @@
-import { Avatar, fmtDateTime } from "../../ui.jsx";
+import { Avatar, fmtDateTime, IdChip } from "../../ui.jsx";
 import RiskLevelBadge from "./RiskLevelBadge.jsx";
 
 export default function ModerationTable({
@@ -48,7 +48,7 @@ export default function ModerationTable({
                     className={selectedId === session.id ? "selected" : ""}
                     onClick={() => onSelect(session.id)}
                   >
-                    <td><strong>{session.sessionId}</strong></td>
+                    <td><IdChip id={session.sessionId} /></td>
                     <td>
                       <div className="am-user-cell">
                         <Avatar name={fullName} size={34} />

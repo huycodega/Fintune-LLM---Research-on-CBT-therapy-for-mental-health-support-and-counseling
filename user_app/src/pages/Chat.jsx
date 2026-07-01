@@ -90,11 +90,20 @@ function mapServerMessages(messages) {
 }
 
 /* Render text with paragraph + line breaks preserved */
-function MsgText({ text }) {
+// Render inline **bold** (markdown) → <strong>. Only used for AI messages so a
+// user typing literal ** isn't reinterpreted.
+function renderInline(line) {
+  return line.split(/(\*\*[^*]+\*\*)/g).map((part, k) => {
+    const m = /^\*\*([^*]+)\*\*$/.exec(part);
+    return m ? <strong key={k}>{m[1]}</strong> : <span key={k}>{part}</span>;
+  });
+}
+
+function MsgText({ text, md }) {
   return text.split("\n\n").map((para, i) => (
     <p key={i} className="ai-p">
       {para.split("\n").map((line, j) => (
-        <span key={j}>{j > 0 && <br />}{line}</span>
+        <span key={j}>{j > 0 && <br />}{md ? renderInline(line) : line}</span>
       ))}
     </p>
   ));
@@ -222,7 +231,7 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
       )}
       <div className="ai-msg">
         <div className={`ai-bubble ${isAI ? "ai-bubble-ai" : "ai-bubble-user"} ${msg.error ? "ai-bubble-error" : ""}`}>
-          <MsgText text={displayBody} />
+          <MsgText text={displayBody} md={isAI} />
           {cards.map((c, ci) => (
             <div className="ai-recs" key={"card" + ci}>
               {c.kind === "lessons" && (c.items || []).map((it) => (
