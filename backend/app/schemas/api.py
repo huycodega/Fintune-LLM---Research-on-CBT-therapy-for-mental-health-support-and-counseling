@@ -56,6 +56,9 @@ class ChatIn(BaseModel):
     conversation_id: Optional[str] = None      # None → start a new thread
     n_responses: Optional[int] = None
     temperature: Optional[float] = None
+    # UI "just listen" toggle: True → hold advice this thread, False → resume
+    # normal support, None → leave as-is (regex/stored preference still applies).
+    listen_only: Optional[bool] = None
 
 
 class ConversationRenameIn(BaseModel):

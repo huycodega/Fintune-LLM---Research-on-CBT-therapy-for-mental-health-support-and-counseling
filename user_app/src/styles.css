@@ -4606,6 +4606,35 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   transition: color 0.15s;
 }
 .ai-attach:hover { color: var(--primary-dark); }
+/* "Just listen" toggle in the composer */
+.ai-listen-btn {
+  background: none; border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex; padding: 6px;
+  border-radius: 10px;
+  transition: color 0.15s, background 0.15s;
+}
+.ai-listen-btn:hover { color: var(--primary-dark); background: rgba(86,194,168,0.10); }
+.ai-listen-btn.on { color: #fff; background: var(--primary); }
+.ai-listen-btn.on:hover { background: var(--primary-dark); }
+/* Active-mode banner above the input */
+.ai-listen-note {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--primary);
+  background: rgba(86,194,168,0.10);
+  color: var(--primary-dark);
+  border-radius: 12px;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ai-listen-note:hover { background: rgba(86,194,168,0.18); }
+.ai-listen-note span { flex: 1; }
 .ai-input {
   flex: 1;
   border: none;

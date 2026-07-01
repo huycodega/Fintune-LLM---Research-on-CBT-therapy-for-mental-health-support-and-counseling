@@ -22,6 +22,7 @@ const ICON_PATHS = {
   swap:     <><path d="M7 7h11l-3-3" /><path d="M17 17H6l3 3" /></>,
   journal:  <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 3v18M12 8h4M12 12h4" /></>,
   moon:     <path d="M21 13A8 8 0 1 1 11 3a6 6 0 0 0 10 10z" />,
+  headphones: <><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="13.5" width="4.5" height="6.5" rx="1.6" /><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="1.6" /></>,
 };
 
 function Icon({ name, size = 18, className = "", stroke = 1.7 }) {
@@ -695,11 +696,31 @@ export default function Chat({ onNav }) {
   const [recDetail, setRecDetail] = useState(null);
   const [expertBooking, setExpertBooking] = useState(null); // in-chat booking flow
   const [rescheduleId, setRescheduleId] = useState(null);   // appt being rescheduled
+  const [listenOnly, setListenOnly] = useState(false);      // "just listen" toggle
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const pollRef = useRef(null);
   const pendingRef = useRef(null);  // { sid, idx } while a clinician review is outstanding
   const sendingRef = useRef(false); // synchronous double-submit guard (state is too slow)
+  // Tracks the listen-only value we last pushed to the backend via the toggle,
+  // so we only send it when the user actually flips the switch — a normal turn
+  // sends nothing and never clobbers a "just listen" the user TYPED.
+  const syncedListenRef = useRef(false);
+
+  const listenKey = (id) => "mc_listen_" + (id || "new");
+  // Restore the toggle when switching threads.
+  useEffect(() => {
+    const on = localStorage.getItem(listenKey(activeId)) === "1";
+    setListenOnly(on);
+    syncedListenRef.current = on;
+  }, [activeId]);
+  const toggleListen = () => {
+    setListenOnly((v) => {
+      const nv = !v;
+      localStorage.setItem(listenKey(activeId), nv ? "1" : "0");
+      return nv;
+    });
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -996,7 +1017,14 @@ export default function Chat({ onNav }) {
     const pollStartTimer = setTimeout(startReplyPoll, 4000);
 
     try {
-      const r = await api.chat(text, activeId ? { conversation_id: activeId } : {});
+      const opts = activeId ? { conversation_id: activeId } : {};
+      // Only push the toggle when it CHANGED since we last told the backend, so
+      // an ordinary turn leaves a typed "just listen" preference untouched.
+      if (listenOnly !== syncedListenRef.current) {
+        opts.listen_only = listenOnly;
+        syncedListenRef.current = listenOnly;
+      }
+      const r = await api.chat(text, opts);
       if (settled) return;
       if (r.conversation_id && r.conversation_id !== activeId) setActiveId(r.conversation_id);
       // crisis_resources is sent for both L0 (crisis) and L1 (pending_review)
@@ -1089,9 +1117,28 @@ export default function Chat({ onNav }) {
             <button className="ai-qr-refresh" aria-label="Refresh suggestions"><Icon name="refresh" size={16} /></button>
           </div>
 
+          {/* "Just listen" mode banner (tap anywhere to turn off) */}
+          {listenOnly && (
+            <button type="button" className="ai-listen-note" onClick={toggleListen}>
+              <Icon name="headphones" size={14} />
+              <span>Listen-only mode — I'll just listen, no advice. Tap to turn off.</span>
+            </button>
+          )}
+
           {/* Input */}
           <div className="ai-inputbar">
             <button className="ai-attach" aria-label="Attach file"><Icon name="paperclip" size={19} /></button>
+            <button
+              type="button"
+              className={"ai-listen-btn" + (listenOnly ? " on" : "")}
+              onClick={toggleListen}
+              aria-pressed={listenOnly}
+              title={listenOnly
+                ? "Listen-only is on — I'll hold back advice"
+                : "Listen-only: tap so I just listen, no advice"}
+            >
+              <Icon name="headphones" size={19} />
+            </button>
             <input
               ref={inputRef}
               className="ai-input"

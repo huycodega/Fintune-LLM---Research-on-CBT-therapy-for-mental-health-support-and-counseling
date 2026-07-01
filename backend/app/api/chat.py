@@ -289,6 +289,17 @@ def chat(body: ChatIn, request: Request,
     # ---- resolve the thread FIRST so the safety gate can see prior turns ----
     convo = _resolve_conversation(db, u.id, body.conversation_id, text)
 
+    # ---- UI "just listen" toggle: silently sync the stored preference so the
+    # responder holds advice for the whole thread. Does NOT consume a turn — the
+    # user's actual message still flows through below. None = leave as-is. ----
+    if body.listen_only is not None:
+        _prefs = set(rc.chat_prefs_get(str(convo.id)))
+        if body.listen_only:
+            _prefs.add("just_listen")
+        else:
+            _prefs.discard("just_listen")
+        rc.chat_prefs_set(str(convo.id), sorted(_prefs))
+
     # ---- Greeting fast-path: instant, memory-aware "hello" ----
     # Skips the safety gate + agent (no Modal call) so a bare "hi" returns
     # immediately. Returning users get a recall-flavoured greeting; new users a
@@ -500,8 +511,14 @@ def chat(body: ChatIn, request: Request,
                 bits.append("get straight to the point")
             if "no_questions" in prefs_now:
                 bits.append("hold back on the questions")
+            if "just_listen" in prefs_now:
+                bits.append("just listen and hold the advice")
+            # A "just listen" request shouldn't be answered with a question.
+            closing = ("I'm here — take your time."
+                       if ("just_listen" in prefs_now or "no_questions" in prefs_now)
+                       else "What's on your mind?")
             ack = ("Got it — I'll " + (", and ".join(bits) or "adjust my style")
-                   + " from now on. What's on your mind?")
+                   + " from now on. " + closing)
             sess = models.Session(
                 **base, status="answered", analysis={"style_prefs": merged},
                 final_reply_enc=encrypt_phi(ack), final_technique="preference",

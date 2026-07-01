@@ -211,11 +211,22 @@ _PREF_NOQ = re.compile(
 _PREF_DIRECT = re.compile(
     r"\b(be (direct|blunt|straight)|just tell me|get (straight )?to the point|"
     r"straight to the point|no fluff|cut to the chase)\b", re.I)
+# "Just listen" mode — the client wants to be heard, not advised. Distinct from
+# no_questions: this also suppresses CBT techniques/suggestions for the turn.
+_PREF_LISTEN = re.compile(
+    r"\b(just (want(ing)? |wanna |need(ing)? )?(to )?(vent|talk|be heard|"
+    r"get (this|it) out|let it out)|just listen|just want to be heard|"
+    r"(don'?t|do not|not) (want|need|looking for) (any |any more )?"
+    r"(advice|solutions?|to be fixed|you to fix|fixing)|no advice|"
+    r"not looking for (advice|solutions?|a solution)|"
+    r"don'?t (try to |need to )?fix( it| this| me)?)\b"
+    r"|chỉ muốn (nói ra|tâm sự|trút)|chưa cần lời khuyên|"
+    r"không cần lời khuyên|chỉ cần (được )?lắng nghe", re.I)
 
 
 def detect_preference(text: str) -> list:
     """Return style-preference flags stated in this message (subset of
-    'brief', 'no_questions', 'direct'), or []."""
+    'brief', 'no_questions', 'direct', 'just_listen'), or []."""
     low = (text or "").lower()
     out = []
     if _PREF_BRIEF.search(low):
@@ -224,6 +235,8 @@ def detect_preference(text: str) -> list:
         out.append("no_questions")
     if _PREF_DIRECT.search(low):
         out.append("direct")
+    if _PREF_LISTEN.search(low):
+        out.append("just_listen")
     return out
 
 
