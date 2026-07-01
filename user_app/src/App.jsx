@@ -213,6 +213,7 @@ function Sidebar({ activePage, onNav, open, onClose }) {
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
+            data-tour={item.id}
             className={`nav-item ${activePage === item.id ? "active" : ""}`}
             onClick={() => onNav(item.id)}
           >
