@@ -977,7 +977,7 @@ export default function Chat({ onNav }) {
       const knownIds = await knownIdsP;
       if (settled) return;
       const t0 = Date.now();
-      pollRef.current = setInterval(async () => {
+      const pollOnce = async () => {
         if (settled) { clearInterval(pollRef.current); return; }
         if (Date.now() - t0 > 30 * 60 * 1000) {
           show({ role: "ai", time: nowTime(), error: true, text: "This is taking longer than usual — please reload in a moment to see the reply." });
@@ -987,11 +987,13 @@ export default function Chat({ onNav }) {
           const r = await api.mySessions();
           const fresh = (r.sessions || []).find((x) => !knownIds.has(x.id));
           if (fresh) await fromSession(fresh);
-        } catch {}
-      }, 3000);
+        } catch { /* keep polling */ }
+      };
+      pollOnce();                                  // check right away, not after 3s
+      pollRef.current = setInterval(pollOnce, 3000);
     };
-    // Give the direct request a head start; only poll if it's slow.
-    const pollStartTimer = setTimeout(startReplyPoll, 12000);
+    // Start the recovery poll early so a slow/dropped reply still lands live.
+    const pollStartTimer = setTimeout(startReplyPoll, 4000);
 
     try {
       const r = await api.chat(text, activeId ? { conversation_id: activeId } : {});
