@@ -1,9 +1,11 @@
-// First-run onboarding — a spotlight TOUR on the real UI (not a popup form). It
-// highlights actual sidebar / menu elements one at a time with a tooltip beside
-// them. Shown once (localStorage) and re-openable from the Guide menu.
+// Spotlight tour engine (reusable). `steps` is an array of { sel, title, desc,
+// emoji? }; each step highlights the real element matched by `sel` (or shows a
+// centred card when sel is null / off-screen). Used for the global first-run
+// tour AND the per-section first-visit tours.
 import { useState, useEffect, useLayoutEffect } from "react";
 
-const STEPS = [
+// Global first-run tour: walk the sidebar + user menu.
+export const GLOBAL_STEPS = [
   { sel: null, emoji: "💚", title: "Welcome to MindCare AI",
     desc: "A private, CBT-based companion for your wellbeing. Let me show you around." },
   { sel: '[data-tour="sangloc"]', title: "Screening",
@@ -20,7 +22,37 @@ const STEPS = [
     desc: "That's the tour. What's on your mind today?" },
 ];
 
-export default function Onboarding({ open, onClose }) {
+// Per-section first-visit tours: spotlight the section's nav item (always in the
+// DOM, so no async timing issues) + a "how it works" step.
+export const SECTION_TOURS = {
+  sangloc: [
+    { sel: '[data-tour="sangloc"]', title: "Screening", desc: "Your private mood check-in lives here." },
+    { sel: null, emoji: "📋", title: "How it works",
+      desc: "Answer the PHQ-9 / GAD-7 questions on this page — honestly, there are no wrong answers. It takes about 2 minutes and sets a baseline. Start below ↓" },
+  ],
+  chat: [
+    { sel: '[data-tour="chat"]', title: "AI Support", desc: "Your private CBT companion." },
+    { sel: null, emoji: "💬", title: "How it works",
+      desc: "Type anything below to begin — vent, ask \"what lessons are there\", or just say hi. A real clinician reviews anything sensitive." },
+  ],
+  baihoc: [
+    { sel: '[data-tour="baihoc"]', title: "Lessons", desc: "Short CBT lessons to practise." },
+    { sel: null, emoji: "📘", title: "How it works",
+      desc: "Tap any lesson below to open it — your progress saves automatically. Great to do between chats." },
+  ],
+  tainguyen: [
+    { sel: '[data-tour="tainguyen"]', title: "Resources", desc: "Helpful materials." },
+    { sel: null, emoji: "📗", title: "How it works",
+      desc: "Browse the articles, audio, and tools below — open anything that looks useful for you." },
+  ],
+  tuvan: [
+    { sel: '[data-tour="tuvan"]', title: "Counselling", desc: "Meet a real psychologist." },
+    { sel: null, emoji: "🧑‍⚕️", title: "How it works",
+      desc: "Pick an expert below, choose a time, and book — it's your choice, any time. You can reschedule or cancel later too." },
+  ],
+};
+
+export default function Onboarding({ open, onClose, steps = GLOBAL_STEPS }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState(null);
 
@@ -29,10 +61,9 @@ export default function Onboarding({ open, onClose }) {
   useLayoutEffect(() => {
     if (!open) return;
     function measure() {
-      const sel = STEPS[i].sel;
+      const sel = steps[i] && steps[i].sel;
       const el = sel ? document.querySelector(sel) : null;
       const r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
-      // Off-screen (e.g. sidebar drawer on mobile) → fall back to a centred card.
       if (r && r.width > 0 && r.left >= 0 && r.top >= 0) {
         el.scrollIntoView({ block: "nearest", inline: "nearest" });
         setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
@@ -47,12 +78,12 @@ export default function Onboarding({ open, onClose }) {
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [open, i]);
+  }, [open, i, steps]);
 
   if (!open) return null;
-  const step = STEPS[i];
+  const step = steps[i];
   const isFirst = i === 0;
-  const isLast = i === STEPS.length - 1;
+  const isLast = i === steps.length - 1;
   function finish() { setI(0); onClose(); }
 
   const PAD = 6;
@@ -81,7 +112,7 @@ export default function Onboarding({ open, onClose }) {
         <h3>{step.title}</h3>
         <p>{step.desc}</p>
         <div className="tour-progress">
-          {STEPS.map((_, k) => (
+          {steps.map((_, k) => (
             <span key={k} className={`tour-dot ${k === i ? "on" : ""} ${k < i ? "done" : ""}`} />
           ))}
         </div>
@@ -89,7 +120,7 @@ export default function Onboarding({ open, onClose }) {
           {isFirst
             ? <button className="tour-skip" onClick={finish}>Skip</button>
             : <button className="tour-skip" onClick={() => setI(i - 1)}>← Back</button>}
-          <span className="tour-count">{i + 1}/{STEPS.length}</span>
+          <span className="tour-count">{i + 1}/{steps.length}</span>
           <button className="tour-next" onClick={() => (isLast ? finish() : setI(i + 1))}>
             {isLast ? "Done 🎉" : "Next →"}
           </button>

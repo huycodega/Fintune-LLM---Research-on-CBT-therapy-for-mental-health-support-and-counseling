@@ -15,8 +15,7 @@ import TuVan from "./pages/TuVan.jsx";
 import CaiDat from "./pages/CaiDat.jsx";
 import MoodWidget from "./components/MoodWidget.jsx";
 import NotifBell from "./components/NotifBell.jsx";
-import Onboarding from "./Onboarding.jsx";
-import SectionIntro from "./SectionIntro.jsx";
+import Onboarding, { GLOBAL_STEPS, SECTION_TOURS } from "./Onboarding.jsx";
 
 const NAV_ITEMS = [
   { id: "dashboard", icon: "home", label: "Home" },
@@ -251,40 +250,32 @@ export default function App() {
   const [path, setPath] = useState(() => window.location.pathname);
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [introSeen, setIntroSeen] = useState([]);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourSteps, setTourSteps] = useState(GLOBAL_STEPS);
 
-  // Per-account list of section intros already dismissed.
-  useEffect(() => {
-    if (!user) return;
-    try {
-      setIntroSeen(JSON.parse(
-        localStorage.getItem("mc_intros_" + (user.id || user.username)) || "[]"));
-    } catch { setIntroSeen([]); }
-  }, [user]);
-  function dismissIntro(section) {
-    setIntroSeen((prev) => {
-      if (prev.includes(section)) return prev;
-      const next = [...prev, section];
-      try {
-        localStorage.setItem("mc_intros_" + (user.id || user.username),
-          JSON.stringify(next));
-      } catch { /* noop */ }
-      return next;
-    });
+  const acctKey = user ? (user.id || user.username) : null;
+
+  // Read/write which tours this account has seen — straight from localStorage so
+  // there's no state-load race (a returning user must never re-see a tour).
+  function hasSeen(id) {
+    try { return JSON.parse(localStorage.getItem("mc_tours_" + acctKey) || "[]").includes(id); }
+    catch { return false; }
   }
+  function markSeen(id) {
+    try {
+      const s = JSON.parse(localStorage.getItem("mc_tours_" + acctKey) || "[]");
+      if (!s.includes(id)) localStorage.setItem("mc_tours_" + acctKey, JSON.stringify([...s, id]));
+    } catch { /* noop */ }
+  }
+  function runGlobalTour() { setTourSteps(GLOBAL_STEPS); setTourOpen(true); }
 
-  // Show the onboarding tour once per ACCOUNT (keyed by user id, not a global
-  // flag) — so a brand-new registration always gets the first-time guide even on
-  // a browser where another account already onboarded.
+  // First-run GLOBAL tour, once per account (a brand-new registration always
+  // gets it, even on a browser where another account already onboarded).
   useEffect(() => {
-    if (stage !== "app" || !user) return;
-    const key = "mc_onboarded_" + (user.id || user.username || "u");
-    if (!localStorage.getItem(key)) {
-      setGuideOpen(true);
-      localStorage.setItem(key, "1");
-    }
-  }, [stage, user]);
+    if (stage !== "app" || !acctKey || tourOpen) return;
+    if (!hasSeen("global")) { runGlobalTour(); markSeen("global"); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, acctKey]);
   // ≡ : on phones it opens the off-canvas drawer; on desktop it collapses the
   // sidebar so Home/Screening/etc. get more room.
   const toggleNav = () => {
@@ -300,6 +291,17 @@ export default function App() {
   }
   const activePage = PATH_PAGES[path] || "dashboard";
   const navTo = (id) => { setNavOpen(false); go(PAGE_PATHS[id] || "/dashboard"); };
+
+  // First-VISIT per-section tour (step-by-step on that section's own UI).
+  useEffect(() => {
+    if (stage !== "app" || !acctKey || tourOpen) return;
+    if (SECTION_TOURS[activePage] && !hasSeen("sec_" + activePage)) {
+      setTourSteps(SECTION_TOURS[activePage]);
+      setTourOpen(true);
+      markSeen("sec_" + activePage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePage, stage, acctKey]);
 
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
@@ -390,14 +392,13 @@ export default function App() {
   return (
     <div className={`app-shell ${navCollapsed ? "nav-collapsed" : ""}`}>
       <Topbar activePage={activePage} onNav={navTo} user={user} onLogout={logout}
-              onMenu={toggleNav} onGuide={() => setGuideOpen(true)} />
+              onMenu={toggleNav} onGuide={runGlobalTour} />
 
       <div className="app-body">
         <Sidebar activePage={activePage} onNav={navTo}
                  open={navOpen} onClose={() => setNavOpen(false)} />
 
         <div className={`main-content ${isChatPage ? "chat-mode" : ""}`}>
-          <SectionIntro section={activePage} seen={introSeen} onClose={dismissIntro} />
           {isChatPage ? (
             pages.chat
           ) : (
@@ -411,7 +412,7 @@ export default function App() {
       {/* Floating per-account mood trend — gentle, on every page. */}
       <MoodWidget />
 
-      <Onboarding open={guideOpen} onClose={() => setGuideOpen(false)} onNav={navTo} />
+      <Onboarding open={tourOpen} steps={tourSteps} onClose={() => setTourOpen(false)} />
     </div>
   );
 }
