@@ -103,7 +103,7 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export default function CaiDat({ user }) {
+export default function CaiDat({ user, onLogout }) {
   const [data, setData] = useState(null);
   const [prefs, setPrefs] = useState(null);
   const [emergency, setEmergency] = useState({ name: "", relationship: "", phone: "" });
@@ -146,6 +146,36 @@ export default function CaiDat({ user }) {
       setPw({ current_password: "", new_password: "", confirm: "" });
     } catch (e) {
       setPwMsg({ err: true, text: e.message || "Could not update password" });
+    }
+  }
+
+  async function downloadData() {
+    try {
+      const bundle = await api.exportMyData();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mindcare-data-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { window.alert("Could not export your data — please try again."); }
+  }
+
+  async function deleteAccount() {
+    const uname = user?.username || "";
+    const typed = window.prompt(
+      "This permanently deletes your account and ALL your data — conversations, " +
+      "screenings, journal, appointments. It cannot be undone.\n\n" +
+      `To confirm, type your username (${uname}):`);
+    if (typed === null) return;
+    if (typed.trim() !== uname) { window.alert("Username didn't match — nothing was deleted."); return; }
+    try {
+      await api.deleteMyAccount(uname);
+      window.alert("Your account and data have been deleted. Take care of yourself. 💚");
+      if (onLogout) onLogout();
+    } catch (e) {
+      window.alert(e.message || "Could not delete the account — please try again.");
     }
   }
 
@@ -266,18 +296,20 @@ export default function CaiDat({ user }) {
                   <div className="st-other-desc">View and manage devices logged into your account.</div>
                 </div>
               </div>
-              <div className="st-other-row st-disabled">
+              <div className="st-other-row" style={{ cursor: "pointer" }} onClick={downloadData}
+                   role="button" tabIndex={0}>
                 <span className="st-other-icon"><Icon name="download" size={18} /></span>
                 <div className="st-other-text">
-                  <div className="st-other-title">Download Your Data <Soon /></div>
-                  <div className="st-other-desc">Download a copy of your personal data from MindCare AI.</div>
+                  <div className="st-other-title">Download Your Data</div>
+                  <div className="st-other-desc">One JSON file with your conversations, screenings, journal, and intake.</div>
                 </div>
               </div>
-              <div className="st-other-row st-disabled danger">
+              <div className="st-other-row danger" style={{ cursor: "pointer" }} onClick={deleteAccount}
+                   role="button" tabIndex={0}>
                 <span className="st-other-icon"><Icon name="trash" size={18} /></span>
                 <div className="st-other-text">
-                  <div className="st-other-title">Delete Account <Soon /></div>
-                  <div className="st-other-desc">Permanently delete your account and all your data.</div>
+                  <div className="st-other-title">Delete Account</div>
+                  <div className="st-other-desc">Permanently delete your account and all your data. This cannot be undone.</div>
                 </div>
               </div>
             </div>

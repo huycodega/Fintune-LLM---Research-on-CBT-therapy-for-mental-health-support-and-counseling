@@ -792,7 +792,10 @@ export default function Chat({ onNav }) {
   }
 
   async function deleteConv(c) {
-    if (!window.confirm(`Delete "${c.title || "this conversation"}"? This can't be undone.`)) return;
+    if (!window.confirm(
+      `Remove "${c.title || "this conversation"}" from your history?\n\n` +
+      "It disappears from your app. For your safety, records a clinician has " +
+      "already reviewed are retained — deleting your account removes everything.")) return;
     // Optimistic: drop it from the list immediately, then persist.
     setConversations((prev) => prev.filter((x) => x.id !== c.id));
     try { await api.deleteConversation(c.id); } catch { /* best-effort */ }
@@ -1058,6 +1061,13 @@ export default function Chat({ onNav }) {
       const r = await api.chat(text, opts);
       if (settled) return;
       if (r.conversation_id && r.conversation_id !== activeId) setActiveId(r.conversation_id);
+      // Mirror the TRUE backend listen state (regex/orchestrator can flip it on,
+      // wants_guidance can lift it) so the 🎧 button + banner never lie.
+      if (typeof r.listen_active === "boolean") {
+        setListenOnly(r.listen_active);
+        syncedListenRef.current = r.listen_active;
+        localStorage.setItem(listenKey(r.conversation_id || activeId), r.listen_active ? "1" : "0");
+      }
       // crisis_resources is sent for both L0 (crisis) and L1 (pending_review)
       // so the user always has a real-person lifeline to reach for.
       const resources = r.crisis_resources || null;

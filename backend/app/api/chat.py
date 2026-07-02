@@ -138,9 +138,11 @@ def _info_reply(db, u, infos):
                 texts.append(
                     "Your privacy matters here. Your messages are encrypted, "
                     "and only a clinician reviews sensitive cases — nothing is "
-                    "shared otherwise. You can view or delete your account and "
-                    "your records (including screenings) anytime from Settings → "
-                    "Account. If you'd like, I can walk you through it.")
+                    "shared otherwise. You can hide conversations from your "
+                    "history, download a copy of your data, or permanently "
+                    "delete your whole account anytime from Settings. One "
+                    "honest note: records a clinician has already reviewed are "
+                    "kept for safety unless you delete your account.")
             elif info == "clinical_boundary":
                 texts.append(
                     "I'm not able to give a medical diagnosis or recommend "
@@ -559,6 +561,7 @@ def chat(body: ChatIn, request: Request,
                 "final": {"technique": "preference", "response": ack},
                 "drafts": [{"idx": 0, "technique": "preference", "response": ack}],
                 "mode": "preference_gate",
+                "listen_active": "just_listen" in merged,
             }
 
     # ---- Action gate: "do something" requests (write, with confirm) ----
@@ -762,6 +765,7 @@ def chat(body: ChatIn, request: Request,
             "drafts": [{"idx": 0, "technique": "clarification",
                         "response": question}],
             "mode": "agent",
+            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
         }
 
     # ---- Agent terminal: escalate to a clinician (force review even on L3) ----
@@ -898,8 +902,11 @@ def chat(body: ChatIn, request: Request,
             "outcome": "pending_review",
             "triage": triage,
             "message": ("Thank you for sharing. A clinician is reviewing "
-                         "the response for appropriateness. You will be "
-                         "notified once approved."),
+                         "the response for appropriateness — usually within "
+                         "the hour, and you'll see it here the moment it's "
+                         "approved. If you need support right now, 988 (US) "
+                         "or findahelpline.com are available 24/7."),
+            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
         }
 
     # ---- L3: pick the best draft, then gate before auto-sending ----
@@ -974,8 +981,10 @@ def chat(body: ChatIn, request: Request,
             "outcome": "pending_review",
             "triage": triage,
             "message": ("Thank you for sharing. A clinician is reviewing the "
-                         "response before it's sent, to make sure it fits you. "
-                         "You'll be notified once approved."),
+                         "response before it's sent, to make sure it fits you — "
+                         "usually within the hour; it will appear here as soon "
+                         "as it's approved."),
+            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
         }
 
     # ---- L3: auto-send the gated-OK draft ----
@@ -1032,6 +1041,9 @@ def chat(body: ChatIn, request: Request,
                   "response": chosen["response"]},
         "retrieved_count": len(retrieved),
         "mode": gen_mode,
+        # True listen-mode state after this turn — the UI mirrors it so the
+        # toggle/banner always reflect reality (even when auto-detected).
+        "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
     }
 
 

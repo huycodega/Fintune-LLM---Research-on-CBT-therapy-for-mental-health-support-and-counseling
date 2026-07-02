@@ -471,3 +471,98 @@ def delete_journal(jid: str, request: Request,
                      ip=auth.client_ip(request),
                      resource_type="journal_entry", resource_id=jid)
     return {"ok": True}
+
+
+# ── Data autonomy: export everything / delete the account ────────────────────
+@router.get("/export")
+def export_my_data(user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    """The user's own data as one JSON bundle (their PHI, decrypted for them)."""
+    uid = user["uid"]
+    u = db.query(models.User).filter_by(id=uid).first()
+
+    convos = (db.query(models.Conversation).filter_by(user_id=uid)
+              .order_by(models.Conversation.created_at.asc()).all())
+    sessions = (db.query(models.Session).filter_by(user_id=uid)
+                .order_by(models.Session.created_at.asc()).all())
+    by_convo = {}
+    for s in sessions:
+        by_convo.setdefault(str(s.conversation_id), []).append({
+            "at": s.created_at.isoformat() if s.created_at else None,
+            "you": decrypt_str(s.user_input_enc) or "",
+            "reply": decrypt_str(s.final_reply_enc) if s.final_reply_enc else "",
+            "triage_level": s.triage_level,
+        })
+    intake = (db.query(models.IntakeForm).filter_by(user_id=uid)
+              .order_by(models.IntakeForm.created_at.desc()).first())
+    screenings = (db.query(models.Screening).filter_by(user_id=uid)
+                  .order_by(models.Screening.created_at.asc()).all())
+    journal = (db.query(models.JournalEntry).filter_by(user_id=uid)
+               .order_by(models.JournalEntry.created_at.asc()).all())
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "account": {"username": u.username, "email": u.email,
+                    "joined": u.created_at.isoformat() if u.created_at else None},
+        "intake": (decrypt_str(intake.raw_text_enc) if intake else None),
+        "conversations": [{
+            "title": c.title,
+            "started": c.created_at.isoformat() if c.created_at else None,
+            "archived": bool(getattr(c, "archived", False)),
+            "messages": by_convo.get(str(c.id), []),
+        } for c in convos],
+        "screenings": [{
+            "at": s.created_at.isoformat() if s.created_at else None,
+            "phq9": s.phq9_score, "gad7": s.gad7_score,
+            "phq9_level": s.phq9_level, "gad7_level": s.gad7_level,
+            "mood": s.mood_score,
+        } for s in screenings],
+        "journal": [{
+            "at": e.created_at.isoformat() if e.created_at else None,
+            "content": decrypt_str(e.content_enc) or "",
+            "mood": e.mood,
+            "shared_with_clinician": e.shared_with_clinician,
+        } for e in journal],
+    }
+
+
+class DeleteAccountIn(BaseModel):
+    confirm_username: str
+
+
+@router.delete("/account")
+def delete_my_account(body: DeleteAccountIn, request: Request,
+                      user: dict = Depends(auth.current_user),
+                      db: Session = Depends(get_db)):
+    """Hard-delete the account and its personal data. Confirmation = typing the
+    exact username. Deletes run in FK-safe order; the audit trail keeps only a
+    non-identifying tombstone (actor id, no content)."""
+    uid = user["uid"]
+    u = db.query(models.User).filter_by(id=uid).first()
+    if not u or u.role != "user":
+        raise HTTPException(403, "Only user accounts can self-delete")
+    if (body.confirm_username or "").strip() != u.username:
+        raise HTTPException(422, "Username confirmation does not match")
+
+    audit_mod.audit(db, action="account_deleted", actor=user,
+                     ip=auth.client_ip(request),
+                     resource_type="user", resource_id=uid, detail={})
+
+    from sqlalchemy import text as _sql
+    # 1) session children without ON DELETE CASCADE
+    db.execute(_sql("DELETE FROM soap_notes WHERE session_id IN "
+                    "(SELECT id FROM sessions WHERE user_id = :u)"), {"u": uid})
+    db.execute(_sql("DELETE FROM feedback WHERE user_id = :u OR session_id IN "
+                    "(SELECT id FROM sessions WHERE user_id = :u)"), {"u": uid})
+    db.execute(_sql("DELETE FROM review_queue WHERE user_id = :u"), {"u": uid})
+    # 2) conversations cascade the moderation stack + their sessions + drafts
+    db.execute(_sql("DELETE FROM conversations WHERE user_id = :u"), {"u": uid})
+    # 3) legacy sessions without a conversation
+    db.execute(_sql("DELETE FROM sessions WHERE user_id = :u"), {"u": uid})
+    db.execute(_sql("DELETE FROM specialist_assignments WHERE user_id = :u"),
+               {"u": uid})
+    # 4) the user row — cascades memory/intake/screenings/progress/appointments/
+    #    saved resources/journal/profile
+    db.execute(_sql("DELETE FROM users WHERE id = :u"), {"u": uid})
+    db.flush()
+    return {"ok": True, "deleted": True}

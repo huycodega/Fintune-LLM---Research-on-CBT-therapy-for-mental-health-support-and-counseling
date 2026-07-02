@@ -223,9 +223,7 @@ _PREF_LISTEN = re.compile(
     r"not looking for (advice|solutions?|a solution)|"
     r"without telling me what (to do|i should do|i need to do)|"
     r"without (any )?(advice|being told what)|"
-    r"don'?t (try to |need to )?fix( it| this| me)?)\b"
-    r"|chỉ muốn (nói ra|tâm sự|trút)|chưa cần lời khuyên|"
-    r"không cần lời khuyên|chỉ cần (ai đó |người |được )?lắng nghe", re.I)
+    r"don'?t (try to |need to )?fix( it| this| me)?)\b", re.I)
 
 
 # Explicit "I DO want help now" — turns a soft listen-only (set by regex or the
@@ -236,9 +234,7 @@ _PREF_UNLISTEN = re.compile(
     r"tell me what to do|help me (fix|solve|deal|cope|manage)|"
     r"i (want|need) (your )?(advice|suggestions?|a plan|some tips?|guidance)|"
     r"can you (suggest|recommend|help me (with|fix))|"
-    r"what do you think i should do)\b"
-    r"|cho tôi lời khuyên|tôi nên làm gì|gợi ý (giúp|cho tôi)|giúp tôi giải quyết",
-    re.I)
+    r"what do you think i should do)\b", re.I)
 
 
 def wants_guidance(text: str) -> bool:

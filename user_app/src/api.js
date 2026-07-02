@@ -151,6 +151,11 @@ export const api = {
     req("/me/password", { method: "POST", body: { current_password, new_password } }),
   myOverview: () => req("/me/overview"),
 
+  // ---- data autonomy ----
+  exportMyData: () => req("/me/export", { timeoutMs: 60000 }),
+  deleteMyAccount: (confirm_username) =>
+    req("/me/account", { method: "DELETE", body: { confirm_username } }),
+
   // ---- journal (private by default; per-entry opt-in share) ----
   listJournal: () => req("/me/journal"),
   createJournal: (body) => req("/me/journal", { method: "POST", body }),
