@@ -776,6 +776,13 @@ export default function Chat({ onNav }) {
       const mapped = mapServerMessages(r.messages);
       setMessages(mapped.length ? mapped : WELCOME);
       setActiveId(cid);
+      // Restore the 🎧 toggle from the SERVER (durable per-thread state) —
+      // localStorage alone went stale whenever the backend changed the mode.
+      if (typeof r.listen_active === "boolean") {
+        setListenOnly(r.listen_active);
+        syncedListenRef.current = r.listen_active;
+        localStorage.setItem(listenKey(cid), r.listen_active ? "1" : "0");
+      }
     } catch { /* ignore */ }
   }
 

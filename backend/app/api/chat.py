@@ -300,24 +300,17 @@ def chat(body: ChatIn, request: Request,
     # ---- resolve the thread FIRST so the safety gate can see prior turns ----
     convo = _resolve_conversation(db, u.id, body.conversation_id, text)
 
-    # ---- UI "just listen" toggle: silently sync the stored preference so the
-    # responder holds advice for the whole thread. Does NOT consume a turn — the
-    # user's actual message still flows through below. None = leave as-is. ----
+    # ---- UI "just listen" toggle: sync the DURABLE per-thread state so the
+    # responder holds advice for the whole thread. Lives on the Conversation
+    # row (Postgres) — a Redis flag died on every redeploy and silently
+    # reverted the mode. Does NOT consume a turn. None = leave as-is. ----
     if body.listen_only is not None:
-        _prefs = set(rc.chat_prefs_get(str(convo.id)))
-        if body.listen_only:
-            _prefs.add("just_listen")
-        else:
-            _prefs.discard("just_listen")
-        rc.chat_prefs_set(str(convo.id), sorted(_prefs))
-    elif scope_router.wants_guidance(text):
+        convo.listen_mode = bool(body.listen_only)
+    elif convo.listen_mode and scope_router.wants_guidance(text):
         # No toggle change this turn, but the client explicitly asked for help →
-        # lift a soft listen-only so they actually get guidance. (A physical UI
-        # toggle re-asserts itself on the next message, so it stays authoritative.)
-        _prefs = set(rc.chat_prefs_get(str(convo.id)))
-        if "just_listen" in _prefs:
-            _prefs.discard("just_listen")
-            rc.chat_prefs_set(str(convo.id), sorted(_prefs))
+        # lift listen-only so they actually get guidance. (A physical UI toggle
+        # re-asserts itself on the next message, so it stays authoritative.)
+        convo.listen_mode = False
 
     # ---- Greeting fast-path: instant, memory-aware "hello" ----
     # Skips the safety gate + agent (no Modal call) so a bare "hi" returns
@@ -526,8 +519,13 @@ def chat(body: ChatIn, request: Request,
         # through so the responder actually replies — honouring it — instead of
         # sending a bare "Got it" over a heartfelt paragraph.
         if prefs_now:
-            merged = sorted(set(rc.chat_prefs_get(str(convo.id))) | set(prefs_now))
+            if "just_listen" in prefs_now:
+                convo.listen_mode = True     # durable per-thread state (DB)
+            merged = sorted((set(rc.chat_prefs_get(str(convo.id)))
+                             | set(prefs_now)) - {"just_listen"})
             rc.chat_prefs_set(str(convo.id), merged)
+            if convo.listen_mode:
+                merged = sorted(set(merged) | {"just_listen"})
         if prefs_now and len(text.split()) <= 12:
             bits = []
             if "brief" in prefs_now:
@@ -694,8 +692,10 @@ def chat(body: ChatIn, request: Request,
         "memory": user_memory.load_for_prompt(db, u.id),
         "history": _thread_history(db, convo.id),
         # Style preferences the client stated earlier ("be brief", …) — honoured
-        # by the responder prompt.
-        "style_prefs": rc.chat_prefs_get(str(convo.id)),
+        # by the responder prompt. just_listen comes from the DURABLE per-thread
+        # flag on the Conversation row, not Redis.
+        "style_prefs": sorted(set(rc.chat_prefs_get(str(convo.id)))
+                              | ({"just_listen"} if convo.listen_mode else set())),
     }
 
     # intake snapshot for prompt — None when the user skipped intake; the
@@ -765,7 +765,7 @@ def chat(body: ChatIn, request: Request,
             "drafts": [{"idx": 0, "technique": "clarification",
                         "response": question}],
             "mode": "agent",
-            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
+            "listen_active": bool(convo.listen_mode),
         }
 
     # ---- Agent terminal: escalate to a clinician (force review even on L3) ----
@@ -795,8 +795,7 @@ def chat(body: ChatIn, request: Request,
         # regex missed) → make it sticky for the thread. Auto-ON only; the user's
         # toggle / an explicit "give me advice" is what turns it back off.
         if agent_result.get("listen_detected"):
-            _p = set(rc.chat_prefs_get(str(convo.id))); _p.add("just_listen")
-            rc.chat_prefs_set(str(convo.id), sorted(_p))
+            convo.listen_mode = True
         drafts = agent_result["drafts"]
         retrieved = agent_result.get("retrieved") or []
         analysis = agent_result.get("analysis") or analysis
@@ -942,7 +941,7 @@ def chat(body: ChatIn, request: Request,
                          "the hour, and you'll see it here the moment it's "
                          "approved. If you need support right now, 988 (US) "
                          "or findahelpline.com are available 24/7."),
-            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
+            "listen_active": bool(convo.listen_mode),
         }
 
     # ---- L3: pick the best draft, then gate before auto-sending ----
@@ -1020,7 +1019,7 @@ def chat(body: ChatIn, request: Request,
                          "response before it's sent, to make sure it fits you — "
                          "usually within the hour; it will appear here as soon "
                          "as it's approved."),
-            "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
+            "listen_active": bool(convo.listen_mode),
         }
 
     # ---- L3: auto-send the gated-OK draft ----
@@ -1079,7 +1078,7 @@ def chat(body: ChatIn, request: Request,
         "mode": gen_mode,
         # True listen-mode state after this turn — the UI mirrors it so the
         # toggle/banner always reflect reality (even when auto-detected).
-        "listen_active": "just_listen" in rc.chat_prefs_get(str(convo.id)),
+        "listen_active": bool(convo.listen_mode),
     }
 
 

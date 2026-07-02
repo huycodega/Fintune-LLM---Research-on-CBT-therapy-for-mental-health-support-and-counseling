@@ -96,6 +96,9 @@ def get_conversation(cid: str, user: dict = Depends(auth.current_user),
     return {"id": str(c.id), "title": c.title,
             "created_at": c.created_at.isoformat(),
             "updated_at": c.updated_at.isoformat(),
+            # durable per-thread "just listen" state — the UI restores the 🎧
+            # toggle from here, so it survives reloads and backend redeploys
+            "listen_active": bool(c.listen_mode),
             "messages": messages}
 
 

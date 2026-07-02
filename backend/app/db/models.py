@@ -84,6 +84,11 @@ class Conversation(Base):
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now())
+    # "Just listen" mode for this thread. Lives in Postgres, NOT Redis — a mode
+    # that changes how the responder behaves must survive redeploys/cache loss.
+    listen_mode: Mapped[bool] = mapped_column(Boolean, nullable=False,
+                                              default=False,
+                                              server_default="false")
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False,
                                            default=False)
     highest_risk_level: Mapped[Optional[str]] = mapped_column(String(2))
