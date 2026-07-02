@@ -106,12 +106,13 @@ class Settings(BaseSettings):
     # the naturally-important words of that reply (contextual emphasis). Best-
     # effort: no-op in mock/degraded. Set False to skip the extra call.
     emphasis_pass_enabled: bool = True
-    # Deliver model-only L2 (regex heuristic saw no markers, no acute-risk
-    # language) directly after the preflight+grounding gate, instead of holding
-    # every mild-distress turn for pre-approval. The turn stays visible in
-    # Moderation sessions (labelled L2) for retrospective review. L0/L1 and
-    # marker-based L2 are unaffected.
-    l2_fastpath_enabled: bool = True
+    # L2 vent-release valve. Default is clinician pre-approval for every L2;
+    # a turn is released directly ONLY when all checks agree it is ordinary
+    # venting: no regex markers, no acute-risk language anywhere in the thread,
+    # thread never triaged L0/L1, and a dedicated VENT-vs-CONCERN model screen
+    # answers VENT (fail-closed). Released turns stay visible in Moderation
+    # sessions (labelled L2) for retrospective review.
+    l2_vent_release_enabled: bool = True
 
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise

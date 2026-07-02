@@ -857,26 +857,36 @@ def chat(body: ChatIn, request: Request,
             metrics.inc("cbt_hallucination_flag_total",
                          severity=triage["severity"])
 
-    # ---- L2 fast-path: model-only L2 with zero deterministic risk markers ----
-    # The triage model reads ordinary sadness/stress ("exam stress, can't wind
-    # down") as L2, which used to hold EVERY such turn for pre-approval. When
-    # the regex heuristic saw NOTHING (heuristic says L3) and there is no
-    # acute-risk language, deliver directly instead: the draft still has to
-    # pass the same preflight + grounding gate as any L3 auto-send (fails →
-    # held for review anyway), and the turn still appears in Moderation
-    # sessions labelled L2 for retrospective clinician review. L0/L1 and
-    # marker-based L2 keep pre-approval unchanged; safety only ever goes UP.
-    l2_fastpath = (
-        level == "L2"
-        and getattr(settings, "l2_fastpath_enabled", True)
-        and triage.get("heuristic_level", "L3") == "L3"
-        and not safety_gate.has_acute_risk(text)
-    )
-    if l2_fastpath:
-        analysis["l2_fastpath"] = True
+    # ---- L2 vent-release valve (default: clinician pre-approval) ----
+    # Every L2 waits for a clinician UNLESS a stack of checks unanimously rules
+    # the turn ordinary venting. Any doubt anywhere → review, like before:
+    #   1) regex heuristic saw no markers (heuristic L3);
+    #   2) no acute-risk language in this message or ANY earlier turn;
+    #   3) this thread has never triaged L0/L1 (sticky caution — a client who
+    #      showed risk before never gets auto-released again in this thread);
+    #   4) a dedicated VENT-vs-CONCERN model screen (context-aware) must answer
+    #      VENT — fail-closed on mock/degraded/ambiguity;
+    #   5) downstream, the draft must still pass the preflight+grounding gate.
+    # Released turns stay labelled L2 in Moderation sessions for retrospective
+    # review. L0/L1 and marker-based L2 are untouched; safety only goes UP.
+    l2_release = False
+    if (level == "L2"
+            and getattr(settings, "l2_vent_release_enabled", True)
+            and triage.get("heuristic_level", "L3") == "L3"
+            and not safety_gate.has_acute_risk(text)
+            and not any(safety_gate.has_acute_risk(h)
+                        for h in (history or []))):
+        prior_risk = (db.query(models.Session)
+                      .filter(models.Session.conversation_id == convo.id,
+                              models.Session.triage_level.in_(["L0", "L1"]))
+                      .first())
+        if prior_risk is None:
+            l2_release = safety_gate.vent_check(text, safety_history)
+    if l2_release:
+        analysis["l2_vent_release"] = True
 
     # ---- L2: drafts BUT clinician review required ----
-    if level == "L2" and not l2_fastpath:
+    if level == "L2" and not l2_release:
         sess = models.Session(
             **base, status="pending_review", analysis=analysis,
             retrieved_ids=retrieved_ids, prompt_hash=p_hash)

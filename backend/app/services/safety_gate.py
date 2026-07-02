@@ -164,6 +164,52 @@ def has_acute_risk(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Second-pass VENT-vs-CONCERN screen (L2 release valve)
+# ─────────────────────────────────────────────────────────────────────────────
+# The triage model reads much ordinary venting as L2, which pre-holds every
+# such turn for a clinician. This dedicated binary check lets a turn through
+# ONLY when the model affirmatively rules it everyday venting; any hint of
+# masked crisis, any parse failure, mock mode, or timeout → CONCERN → the turn
+# waits for review exactly like before. Strictly fail-closed.
+_VENT_SYSTEM = (
+    "You screen messages in a mental-health support chat that a first-pass "
+    "triage rated MODERATE. Choose exactly one label:\n"
+    "VENT — ordinary everyday venting (exam or work stress, tiredness, family "
+    "friction, self-doubt, relationship annoyances) with no sign of danger; a "
+    "warm supportive reply can safely be sent right away.\n"
+    "CONCERN — ANY hint, however small or indirect, of hopelessness, self-harm, "
+    "suicide, harm to others, abuse, psychosis, a farewell or 'at peace' tone, "
+    "giving things away, or distress that feels much heavier than the words "
+    "used — including signals from the earlier conversation.\n"
+    "If you are unsure in any way, answer CONCERN.\n"
+    "Reply with ONE word only: VENT or CONCERN.")
+
+
+def vent_check(text: str, history: Optional[list] = None) -> bool:
+    """True ONLY on an unambiguous VENT verdict from the model. Every failure
+    mode (mock, degraded, exception, ambiguous output) returns False so the
+    caller falls back to clinician pre-approval."""
+    try:
+        from app.services import llm_client
+        if history:
+            convo = "\n".join(f"Client (earlier): {h}" for h in history)
+            user = (f"[CONVERSATION SO FAR]\n{convo}\n\n"
+                    f"[CURRENT CLIENT MESSAGE]\n{text}")
+        else:
+            user = text
+        gen = llm_client.generate(
+            [{"role": "system", "content": _VENT_SYSTEM},
+             {"role": "user", "content": user}],
+            n=1, temperature=0.0)
+        if not gen or gen.get("degraded") or gen.get("mode") == "mock":
+            return False
+        out = (gen.get("responses") or [""])[0].strip().upper()
+        return "VENT" in out and "CONCERN" not in out
+    except Exception:
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Modal-hosted QWen safety model
 # ─────────────────────────────────────────────────────────────────────────────
 _SAFETY_SYSTEM_PROMPT = (
