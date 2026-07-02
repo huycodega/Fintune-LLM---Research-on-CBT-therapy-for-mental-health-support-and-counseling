@@ -223,12 +223,13 @@ class Settings(BaseSettings):
     # The effect is always safe — it only routes MORE to humans, never less.
     autosend_require_preflight: bool = True
     autosend_grounding_floor: float = 0.0   # 0 = off (grounding-vs-KB is noisy)
-    # Hard guarantee: when durable USER MEMORY is injected into the prompt, the
-    # model can narrate it as a fabricated shared history ("our talks about…").
-    # No automated check reliably catches that, so when memory is present an L3
-    # reply is NOT auto-sent — it's held for a clinician. Trades more review for
-    # certainty. New users (no memory yet) still get instant L3 replies.
-    autosend_block_with_memory: bool = True
+    # (Legacy hard gate.) Early on, memory in the prompt risked the model
+    # narrating a fabricated shared history, so ANY user with memory had every
+    # L3 reply held for review — i.e. from turn ~2 onward nothing auto-sent.
+    # The responder now has four dedicated anti-fabrication layers (prompt
+    # rules, canonical technique, runaway trim, preflight gate), so this
+    # blanket hold is off by default; set True to restore the old behaviour.
+    autosend_block_with_memory: bool = False
     # Require the draft's Technique to be a recognized CBT technique; a made-up
     # name (e.g. "Eight-step-reality-recheck") fails preflight → held for review.
     enforce_canonical_technique: bool = True
