@@ -16,6 +16,7 @@ Model: Huysun29/cbt-qwen2.5-7b-v2 (Qwen2.5-7B full-merged CBT model)
 Safety gate: Huysun29/cbt-qwen2.5-7b-v2 (run prior to this builder)
 """
 import hashlib
+import re
 from typing import Dict, List, Optional
 
 from app.services.preflight import CANONICAL_TECHNIQUES, canonical_technique
@@ -366,6 +367,33 @@ def _format_style_prefs(prefs) -> str:
             + "; ".join(items) + ". Honour this.]")
 
 
+# Thoughts the client stated verbatim (they quote them: "I'm never enough").
+# Deterministically extracted and pinned into the prompt so the responder can
+# never claim it doesn't know them — the 7B otherwise keeps re-asking "what
+# thoughts come up?" even after the client answered.
+_QUOTED_THOUGHT = re.compile(r'["“]([^"”]{3,80})["”]')
+
+
+def _format_named_thoughts(session_ctx, user_input: str) -> str:
+    texts = []
+    for h in (session_ctx or {}).get("history") or []:
+        texts.append(h.get("user") or "")
+    texts.append(user_input or "")
+    seen, found = set(), []
+    for t in texts:
+        for m in _QUOTED_THOUGHT.findall(t):
+            k = m.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                found.append(m.strip())
+    if not found:
+        return ""
+    return ("[CLIENT'S OWN NAMED THOUGHTS — they already told you these. "
+            "NEVER ask what their thoughts are; pick ONE and work on it "
+            "directly (evidence, reframe, or a small step).]\n"
+            + "\n".join(f'- "{t}"' for t in found[-4:]))
+
+
 def build_messages(user_input_scrubbed: str,
                     intake: Optional[Dict] = None,
                     analysis: Optional[Dict] = None,
@@ -376,6 +404,7 @@ def build_messages(user_input_scrubbed: str,
         _format_session_ctx(session_ctx),
         _format_analysis(analysis),
         _format_retrieved(retrieved or []),
+        _format_named_thoughts(session_ctx, user_input_scrubbed),
         "[CURRENT CLIENT MESSAGE]\n" + user_input_scrubbed,
         "[CLINICAL TASK]\n"
         "As the CBT clinician:\n"
