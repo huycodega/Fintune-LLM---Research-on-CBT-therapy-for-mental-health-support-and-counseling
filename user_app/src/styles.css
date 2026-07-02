@@ -4621,6 +4621,7 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 .ai-attach:hover { color: var(--primary-dark); }
 /* "Just listen" toggle in the composer */
 .ai-listen-btn {
+  position: relative;
   background: none; border: none;
   color: var(--ink-soft);
   cursor: pointer;
@@ -4631,6 +4632,43 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
 .ai-listen-btn:hover { color: var(--primary-dark); background: rgba(86,194,168,0.10); }
 .ai-listen-btn.on { color: #fff; background: var(--primary); }
 .ai-listen-btn.on:hover { background: var(--primary-dark); }
+/* Small note that pops up above the icon, text changes with state */
+.ai-listen-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--ink, #1f2a38);
+  color: #fff;
+  font-size: 11.5px; font-weight: 600; line-height: 1.2;
+  padding: 6px 10px; border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  box-shadow: 0 6px 18px rgba(2,32,24,0.18);
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 30;
+}
+/* little arrow under the note */
+.ai-listen-btn::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  border: 5px solid transparent;
+  border-top-color: var(--ink, #1f2a38);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 30;
+}
+.ai-listen-btn:hover::after, .ai-listen-btn:focus-visible::after,
+.ai-listen-btn:hover::before, .ai-listen-btn:focus-visible::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.ai-listen-btn.on::after { background: var(--primary-dark, #047857); }
+.ai-listen-btn.on::before { border-top-color: var(--primary-dark, #047857); }
 /* Active-mode banner above the input */
 .ai-listen-note {
   display: flex; align-items: center; gap: 7px;

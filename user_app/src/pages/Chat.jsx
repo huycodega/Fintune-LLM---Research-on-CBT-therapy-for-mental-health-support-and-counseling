@@ -1180,9 +1180,10 @@ export default function Chat({ onNav }) {
               className={"ai-listen-btn" + (listenOnly ? " on" : "")}
               onClick={toggleListen}
               aria-pressed={listenOnly}
-              title={listenOnly
-                ? "Listen-only is on — tap to let me suggest advice & exercises again"
-                : "Listen-only: tap so I just listen, no advice"}
+              aria-label={listenOnly ? "Turn off listen-only mode" : "Turn on listen-only mode"}
+              data-tip={listenOnly
+                ? "Turn off to get advice & lessons"
+                : "Turn on listen-only mode"}
             >
               <Icon name="headphones" size={19} />
             </button>
