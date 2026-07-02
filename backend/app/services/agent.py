@@ -306,6 +306,12 @@ TOOL_SCHEMAS: List[Dict] = [
                     "focus": {"type": "string",
                               "description": "Optional one-line clinical focus "
                               "to steer the responder (e.g. distortion to target)."},
+                    "listen_only": {"type": "boolean",
+                              "description": "Set TRUE only when the client clearly "
+                              "wants to be HEARD, not advised this turn (venting, "
+                              "'I just need to get this out', 'don't tell me what to "
+                              "do', 'I don't need it fixed'). Then the responder only "
+                              "validates — no advice, exercises, or questions."},
                 },
                 "required": [],
             },
@@ -398,7 +404,12 @@ _SYSTEM_PROMPT = (
     "  4. Finish with exactly ONE terminal action:\n"
     "       • generate_cbt_response — the normal path, AFTER retrieving.\n"
     "       • ask_clarification — ONLY if the message is too vague to help.\n"
-    "       • escalate_to_clinician — if you sense risk beyond the triage.\n\n"
+    "       • escalate_to_clinician — if you sense risk beyond the triage.\n"
+    "     LISTEN-ONLY: if the client clearly wants to be HEARD, not advised "
+    "(venting, 'I just need to get this out', 'don't tell me what to do', 'I "
+    "don't need it fixed', 'just listen'), do NOT ask_clarification and do NOT "
+    "recommend lessons/resources — go straight to generate_cbt_response with "
+    "listen_only=true.\n\n"
     "Examples (each step is one tool call):\n"
     "  A) \"I always fail and everyone judges me\": analyze_cognition → "
     "retrieve_cbt_knowledge(query=\"all-or-nothing thinking, fear of judgement\") "
@@ -965,7 +976,11 @@ def _do_generate(args: Dict, state: Dict,
     # Listen-only: the client wants to be heard, not directed — so we suppress
     # lesson/resource enrichment, the "From your library" footer, and screening
     # CTAs. Real self-data (facts) still surfaces; risk still escalated upstream.
-    listen_only = "just_listen" in ((state.get("session_ctx") or {}).get("style_prefs") or [])
+    # Triggered by the sticky flag (toggle/regex) OR the orchestrator sensing it
+    # this turn (args.listen_only) — the model catches paraphrases regex misses.
+    _flag_listen = "just_listen" in ((state.get("session_ctx") or {}).get("style_prefs") or [])
+    _agent_listen = bool((args or {}).get("listen_only"))
+    listen_only = _flag_listen or _agent_listen
     if not listen_only:
         _ensure_enriched(state)   # deterministic lesson/resource for practice-seeking
     focus = (args or {}).get("focus", "")
@@ -996,11 +1011,17 @@ def _do_generate(args: Dict, state: Dict,
         analysis["session_plan"] = (
             f"{plan['technique']} — work step {cur + 1}/{len(steps)} NOW: "
             f"{steps[cur]}. (Full plan: " + " → ".join(steps) + ")")
+    # When the orchestrator sensed listen-only this turn (not the sticky flag),
+    # inject the preference so the responder prompt validates instead of advising.
+    sctx = state.get("session_ctx")
+    if listen_only and not _flag_listen:
+        sctx = dict(sctx or {})
+        sctx["style_prefs"] = sorted(set(sctx.get("style_prefs") or []) | {"just_listen"})
     messages = prompt_builder.build_messages(
         user_input_scrubbed=state["user_scrubbed"],
         intake=state.get("intake"),
         analysis=analysis,
-        session_ctx=state.get("session_ctx"),
+        session_ctx=sctx,
         retrieved=state["retrieved"],
     )
     gen = llm_client.generate(messages, n=n_responses, temperature=temperature)
@@ -1051,6 +1072,9 @@ def _do_generate(args: Dict, state: Dict,
     return {
         "outcome": "drafts",
         "drafts": drafts,
+        # Orchestrator sensed a "just be heard" intent this turn → chat.py makes
+        # it sticky for the thread (auto-ON only; user toggle stays authoritative).
+        "listen_detected": _agent_listen,
         "retrieved": state["retrieved"],
         "analysis": state.get("analysis") or {},
         "gen_mode": gen.get("mode", "modal"),

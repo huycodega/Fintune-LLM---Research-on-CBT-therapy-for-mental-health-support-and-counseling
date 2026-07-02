@@ -299,6 +299,14 @@ def chat(body: ChatIn, request: Request,
         else:
             _prefs.discard("just_listen")
         rc.chat_prefs_set(str(convo.id), sorted(_prefs))
+    elif scope_router.wants_guidance(text):
+        # No toggle change this turn, but the client explicitly asked for help →
+        # lift a soft listen-only so they actually get guidance. (A physical UI
+        # toggle re-asserts itself on the next message, so it stays authoritative.)
+        _prefs = set(rc.chat_prefs_get(str(convo.id)))
+        if "just_listen" in _prefs:
+            _prefs.discard("just_listen")
+            rc.chat_prefs_set(str(convo.id), sorted(_prefs))
 
     # ---- Greeting fast-path: instant, memory-aware "hello" ----
     # Skips the safety gate + agent (no Modal call) so a bare "hi" returns
@@ -766,6 +774,12 @@ def chat(body: ChatIn, request: Request,
 
     # ---- Drafts: from the agent, OR from the deterministic pipeline ----
     if agent_result and agent_result.get("outcome") == "drafts":
+        # The orchestrator sensed a "just be heard" intent this turn (a paraphrase
+        # regex missed) → make it sticky for the thread. Auto-ON only; the user's
+        # toggle / an explicit "give me advice" is what turns it back off.
+        if agent_result.get("listen_detected"):
+            _p = set(rc.chat_prefs_get(str(convo.id))); _p.add("just_listen")
+            rc.chat_prefs_set(str(convo.id), sorted(_p))
         drafts = agent_result["drafts"]
         retrieved = agent_result.get("retrieved") or []
         analysis = agent_result.get("analysis") or analysis

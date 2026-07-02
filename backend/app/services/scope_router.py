@@ -228,6 +228,25 @@ _PREF_LISTEN = re.compile(
     r"không cần lời khuyên|chỉ cần (ai đó |người |được )?lắng nghe", re.I)
 
 
+# Explicit "I DO want help now" — turns a soft listen-only (set by regex or the
+# orchestrator) back off so the client actually gets guidance. Kept conservative
+# so it only fires on a clear ask, never on ordinary distress wording.
+_PREF_UNLISTEN = re.compile(
+    r"\b(what should i do|what can i do about|give me (some )?advice|any advice\b|"
+    r"tell me what to do|help me (fix|solve|deal|cope|manage)|"
+    r"i (want|need) (your )?(advice|suggestions?|a plan|some tips?|guidance)|"
+    r"can you (suggest|recommend|help me (with|fix))|"
+    r"what do you think i should do)\b"
+    r"|cho tôi lời khuyên|tôi nên làm gì|gợi ý (giúp|cho tôi)|giúp tôi giải quyết",
+    re.I)
+
+
+def wants_guidance(text: str) -> bool:
+    """True when the client explicitly asks for advice/help — used to lift a
+    soft listen-only preference (a physical UI toggle stays authoritative)."""
+    return bool(_PREF_UNLISTEN.search((text or "").lower()))
+
+
 def detect_preference(text: str) -> list:
     """Return style-preference flags stated in this message (subset of
     'brief', 'no_questions', 'direct', 'just_listen'), or []."""
