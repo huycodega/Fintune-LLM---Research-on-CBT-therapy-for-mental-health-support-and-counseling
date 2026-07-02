@@ -956,18 +956,17 @@ def _self_correct(drafts: List[Dict], state: Dict,
     return ranked
 
 
-def _strip_trailing_question(text: str) -> str:
-    """Listen-only safety net: drop a trailing question so the reply stays a
-    pure validation, but only when real validating content remains before it."""
+def _strip_questions(text: str) -> str:
+    """Listen-only safety net: drop EVERY interrogative sentence (not just a
+    trailing one) so the reply stays pure validation, keeping the declarative
+    parts. Falls back to the original when too little would remain, so we never
+    return an empty or butchered reply."""
     t = (text or "").strip()
-    if not t.endswith("?"):
+    if "?" not in t:
         return t
     parts = re.split(r"(?<=[.!?])\s+", t)
-    if len(parts) >= 2 and parts[-1].strip().endswith("?"):
-        kept = " ".join(parts[:-1]).strip()
-        if len(kept) >= 20:
-            return kept
-    return t
+    kept = " ".join(p for p in parts if not p.strip().endswith("?")).strip()
+    return kept if len(kept) >= 20 else t
 
 
 def _do_generate(args: Dict, state: Dict,
@@ -1028,10 +1027,10 @@ def _do_generate(args: Dict, state: Dict,
     drafts = post_process.parse_all(gen.get("responses", []))
     # Self-critique: revise once if the best draft fails preflight/grounding.
     drafts = _self_correct(drafts, state, messages, temperature)
-    # Listen-only: last-resort guard so no draft ends with a probing question.
+    # Listen-only: last-resort guard so no draft carries a probing question.
     if listen_only:
         for d in drafts:
-            d["response"] = _strip_trailing_question(d.get("response") or "")
+            d["response"] = _strip_questions(d.get("response") or "")
     # Deterministically append the REAL recommended materials so the user always
     # sees the actual library items by name (the responder often omits them).
     # Suppressed in listen-only mode — recommending exercises is "telling them
