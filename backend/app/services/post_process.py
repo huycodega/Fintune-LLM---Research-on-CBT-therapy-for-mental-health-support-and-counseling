@@ -95,6 +95,30 @@ def emphasize_llm(text: str) -> str:
         return text
 
 
+# Vocative like ", Ryan." / ", Ryan," — the responder sometimes borrows a
+# client name from RAG reference transcripts. Never-scrub words that look like
+# vocatives but aren't names.
+_VOCATIVE = re.compile(r",\s+([A-Z][a-z]{1,20})(?=[.!?,;:])")
+_NOT_NAMES = {
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+    "sunday", "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december", "ok", "okay",
+    "god", "ai",
+}
+
+
+def scrub_unknown_names(text: str, allowed: set) -> str:
+    """Drop a vocative name the client never gave us (", Ryan.") — names leak
+    in from reference counselling transcripts. `allowed` is a lowercase set of
+    names the client actually provided (intake, profile, or typed in chat)."""
+    def _repl(m):
+        name = m.group(1).lower()
+        if name in allowed or name in _NOT_NAMES:
+            return m.group(0)
+        return ""
+    return _VOCATIVE.sub(_repl, text or "")
+
+
 def strip_questions(text: str) -> str:
     """Listen-only safety net: drop EVERY interrogative sentence so the reply
     stays pure validation, keeping the declarative parts. Falls back to the

@@ -842,6 +842,19 @@ def chat(body: ChatIn, request: Request,
         drafts = post_process.parse_all(gen.get("responses", []))
         gen_mode = gen.get("mode", "modal")
 
+    # Anti-fabrication: drop a vocative name the client never gave us — the
+    # responder sometimes borrows one from RAG reference transcripts ("Thank
+    # you for sharing, Ryan"). Allowed = intake name, username, and any name
+    # the client actually typed in this thread.
+    _allowed_names = {w.lower() for t in ([text] + (history or []))
+                      for w in re.findall(r"\b[A-Z][a-z]{1,20}\b", t or "")}
+    _allowed_names.add((u.username or "").lower())
+    _in_name = ((intake_dict or {}).get("demographics") or {}).get("name") or ""
+    _allowed_names.update(w.lower() for w in str(_in_name).split())
+    for d in drafts:
+        d["response"] = post_process.scrub_unknown_names(
+            d.get("response") or "", _allowed_names)
+
     # Listen-only: guarantee no draft carries a probing question, REGARDLESS of
     # which path produced it. The agent already strips its own drafts, but the
     # deterministic fallback only asked via the prompt — and the 7B sometimes

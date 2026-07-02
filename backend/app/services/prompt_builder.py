@@ -218,6 +218,9 @@ SYSTEM_PROMPT = (
 
     "Clinical guidelines:\n"
     "  • Use retrieved CBT knowledge as background — ALWAYS respond to what the client actually said in [CURRENT CLIENT MESSAGE], never to retrieved examples\n"
+    "  • Address the client by name ONLY if that name appears in [CLIENT "
+    "INTAKE] or they told you themselves. NEVER borrow a name from reference "
+    "material — if you don't know their name, just don't use one\n"
     "  • Match technique to the client's distortion type and severity level\n"
     "  • For L2 severity (moderate): prioritise validation before challenging\n"
     "  • If any crisis signals appear: set Technique to CRISIS_REFERRAL and "
