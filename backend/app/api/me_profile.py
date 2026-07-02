@@ -389,3 +389,85 @@ def unsave_resource(rid: str, user: dict = Depends(auth.current_user),
     (db.query(models.SavedResource)
      .filter_by(user_id=user["uid"], resource_id=rid).delete())
     return {"ok": True, "saved": False}
+
+
+# ── Journal (private by default; opt-in share with clinician) ────────────────
+class JournalIn(BaseModel):
+    content: str
+    mood: Optional[int] = None                 # 1-10
+    shared_with_clinician: bool = False
+
+
+class JournalShareIn(BaseModel):
+    shared_with_clinician: bool
+
+
+def _journal_out(e) -> dict:
+    return {
+        "id": str(e.id),
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "content": decrypt_str(e.content_enc) or "",
+        "mood": e.mood,
+        "shared_with_clinician": e.shared_with_clinician,
+    }
+
+
+@router.get("/journal")
+def list_journal(user: dict = Depends(auth.current_user),
+                 db: Session = Depends(get_db)):
+    rows = (db.query(models.JournalEntry)
+            .filter_by(user_id=user["uid"])
+            .order_by(models.JournalEntry.created_at.desc())
+            .limit(100).all())
+    return {"entries": [_journal_out(e) for e in rows]}
+
+
+@router.post("/journal")
+def create_journal(body: JournalIn, request: Request,
+                   user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(422, "Journal entry is empty")
+    mood = body.mood if body.mood and 1 <= body.mood <= 10 else None
+    e = models.JournalEntry(
+        user_id=user["uid"], content_enc=encrypt_phi(content[:8000]),
+        mood=mood, shared_with_clinician=bool(body.shared_with_clinician))
+    db.add(e); db.flush()
+    audit_mod.audit(db, action="journal_created", actor=user,
+                     ip=auth.client_ip(request),
+                     resource_type="journal_entry", resource_id=e.id,
+                     detail={"shared": e.shared_with_clinician})
+    return _journal_out(e)
+
+
+@router.patch("/journal/{jid}")
+def share_journal(jid: str, body: JournalShareIn, request: Request,
+                  user: dict = Depends(auth.current_user),
+                  db: Session = Depends(get_db)):
+    e = (db.query(models.JournalEntry)
+         .filter_by(id=jid, user_id=user["uid"]).first())
+    if not e:
+        raise HTTPException(404, "Entry not found")
+    e.shared_with_clinician = bool(body.shared_with_clinician)
+    db.flush()
+    audit_mod.audit(db, action="journal_share_toggled", actor=user,
+                     ip=auth.client_ip(request),
+                     resource_type="journal_entry", resource_id=e.id,
+                     detail={"shared": e.shared_with_clinician})
+    return _journal_out(e)
+
+
+@router.delete("/journal/{jid}")
+def delete_journal(jid: str, request: Request,
+                   user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    e = (db.query(models.JournalEntry)
+         .filter_by(id=jid, user_id=user["uid"]).first())
+    if not e:
+        raise HTTPException(404, "Entry not found")
+    db.delete(e)
+    audit_mod.audit(db, action="journal_deleted", actor=user,
+                     ip=auth.client_ip(request),
+                     resource_type="journal_entry", resource_id=jid)
+    return {"ok": True}

@@ -66,7 +66,7 @@ const QUICK_REPLIES = [
 const NEXT_STEPS = [
   { icon: "wind",    label: "3-min breathing",   text: "Can you guide me through a short 3-minute breathing exercise?" },
   { icon: "sparkle", label: "Try a CBT exercise", text: "Can you suggest one short CBT exercise I can try right now?" },
-  { icon: "journal", label: "Note how I feel",    text: "I'd like to write down how I'm feeling right now." },
+  { icon: "journal", label: "Note how I feel",    nav: "nhatky" },
 ];
 
 /* ── Seed conversation (matches mockup) ────────────────────────── */
@@ -1144,8 +1144,9 @@ export default function Chat({ onNav }) {
               return (
                 <div className="ai-nextsteps">
                   <span className="ai-nextsteps-label">What next?</span>
-                  {!listenOnly && NEXT_STEPS.map((s) => (
-                    <button key={s.label} className="ai-nextstep" onClick={() => sendText(s.text)}>
+                  {NEXT_STEPS.filter((s) => s.nav || !listenOnly).map((s) => (
+                    <button key={s.label} className="ai-nextstep"
+                      onClick={() => (s.nav ? (onNav && onNav(s.nav)) : sendText(s.text))}>
                       <Icon name={s.icon} size={14} />{s.label}
                     </button>
                   ))}

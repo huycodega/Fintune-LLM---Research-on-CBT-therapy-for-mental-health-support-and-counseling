@@ -199,13 +199,15 @@ const DETAIL_TABS = [
 function UserDetail({ detail, isAdmin, busy, onStatus, onRole }) {
   // Hooks must run before the early return below.
   const [records, setRecords] = useState([]);
+  const [journal, setJournal] = useState([]);
   const [openRec, setOpenRec] = useState(null);
   const [tab, setTab] = useState("overview");
 
   useEffect(() => {
-    setRecords([]); setOpenRec(null); setTab("overview");
+    setRecords([]); setJournal([]); setOpenRec(null); setTab("overview");
     if (detail?.id) {
       api.userSoapRecords(detail.id).then((r) => setRecords(r.records || [])).catch(() => {});
+      api.userJournal(detail.id).then((r) => setJournal(r.entries || [])).catch(() => {});
     }
   }, [detail?.id]);
 
@@ -366,6 +368,24 @@ function UserDetail({ detail, isAdmin, busy, onStatus, onRole }) {
                     </div>
                   </div>
                 )}
+              </div>
+            ))}
+
+            <div className="detail-section-title">
+              Journal (shared by user{journal.length ? ` · ${journal.length}` : ""})
+            </div>
+            {journal.length === 0 ? (
+              <div className="timeline-text">
+                No shared journal entries — the journal is private by default;
+                users choose per-entry whether to share.
+              </div>
+            ) : journal.map((j) => (
+              <div className="timeline-item" key={j.id}>
+                <div className="timeline-top">
+                  {j.mood != null && <span className="pill gray">mood {j.mood}/10</span>}
+                  <span className="timeline-date">{fmtDateTime(j.created_at)}</span>
+                </div>
+                <div className="timeline-text" style={{ whiteSpace: "pre-wrap" }}>{j.content}</div>
               </div>
             ))}
           </>

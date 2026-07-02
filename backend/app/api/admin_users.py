@@ -270,6 +270,23 @@ def screening_history(uid: str, _: dict = Depends(auth.require_admin),
     } for s in rows]}
 
 
+@router.get("/users/{uid}/journal")
+def user_journal(uid: str, _: dict = Depends(auth.require_admin),
+                 db: Session = Depends(get_db)):
+    """ONLY journal entries the user explicitly chose to share with their
+    clinician — the journal is private by default and stays that way."""
+    rows = (db.query(models.JournalEntry)
+            .filter_by(user_id=uid, shared_with_clinician=True)
+            .order_by(models.JournalEntry.created_at.desc())
+            .limit(50).all())
+    return {"entries": [{
+        "id": str(e.id),
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "content": decrypt_str(e.content_enc) or "",
+        "mood": e.mood,
+    } for e in rows]}
+
+
 @router.get("/users/{uid}/soap-records")
 def user_soap_records(uid: str, _: dict = Depends(auth.require_admin),
                       db: Session = Depends(get_db)):

@@ -5253,6 +5253,57 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
+/* ── Journal page ─────────────────────────────────────────────── */
+.journal-page { max-width: 720px; margin: 0 auto; padding: 26px 18px 60px; }
+.journal-page-title { font-size: 26px; font-weight: 800; color: var(--ink, #1f2a38); margin: 0 0 4px; }
+.journal-page-sub { color: var(--ink-soft, #94a3b8); font-size: 14px; margin: 0 0 12px; }
+.journal-privacy {
+  font-size: 13px; color: var(--primary-dark, #047857);
+  background: rgba(86,194,168,0.10); border: 1px solid rgba(86,194,168,0.4);
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 20px;
+}
+.journal-composer {
+  background: var(--surface, #fff); border: 1px solid var(--line, #e6efea);
+  border-radius: 16px; padding: 14px; box-shadow: var(--shadow-sm); margin-bottom: 24px;
+}
+.journal-composer textarea {
+  width: 100%; border: none; outline: none; resize: vertical;
+  font-family: var(--font); font-size: 14.5px; color: var(--ink, #1f2a38);
+}
+.journal-composer-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 10px; flex-wrap: wrap; }
+.journal-moods { display: flex; align-items: center; gap: 4px; }
+.journal-moods-label { font-size: 12.5px; color: var(--ink-soft, #94a3b8); margin-right: 4px; }
+.journal-mood {
+  border: 1px solid transparent; background: none; font-size: 19px;
+  padding: 4px 6px; border-radius: 10px; cursor: pointer; transition: transform .12s, background .12s;
+}
+.journal-mood:hover { transform: scale(1.15); }
+.journal-mood.on { background: rgba(86,194,168,0.16); border-color: var(--primary, #56C2A8); }
+.journal-save {
+  background: var(--primary, #56C2A8); color: #fff; border: none;
+  padding: 9px 18px; border-radius: 999px; font-weight: 700; font-size: 13.5px;
+  cursor: pointer; transition: background .14s;
+}
+.journal-save:hover { background: var(--primary-dark, #047857); }
+.journal-save:disabled { opacity: .5; cursor: not-allowed; }
+.journal-empty { color: var(--ink-soft, #94a3b8); font-size: 14px; text-align: center; padding: 26px 0; }
+.journal-entries { display: flex; flex-direction: column; gap: 12px; }
+.journal-entry {
+  background: var(--surface, #fff); border: 1px solid var(--line, #e6efea);
+  border-radius: 14px; padding: 13px 16px;
+}
+.journal-entry-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.journal-entry-date { font-size: 12px; color: var(--ink-soft, #94a3b8); font-weight: 600; }
+.journal-entry-actions { display: flex; align-items: center; gap: 10px; }
+.journal-share { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-soft, #94a3b8); cursor: pointer; }
+.journal-share input { accent-color: var(--primary, #56C2A8); }
+.journal-del {
+  border: none; background: none; color: var(--ink-faint, #b4bcc9);
+  cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 7px;
+}
+.journal-del:hover { color: #dc2626; background: rgba(220,38,38,0.08); }
+.journal-entry-text { margin: 0; font-size: 14px; color: var(--ink, #1f2a38); white-space: pre-wrap; }
+
 /* "Your Journey" — exercises done, themes, stress trend */
 .journey-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 860px) { .journey-grid { grid-template-columns: 1fr; } }

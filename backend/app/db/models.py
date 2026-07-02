@@ -564,3 +564,25 @@ class SavedResource(Base):
         UUID(as_uuid=True), ForeignKey("resources.id", ondelete="CASCADE"),
         primary_key=True)
     created_at: Mapped[datetime] = _now()
+
+
+# ============================================================
+# journal_entries  (private notes — PHI encrypted, opt-in share)
+# ============================================================
+class JournalEntry(Base):
+    """A user's private journal note. PRIVATE BY DEFAULT — a clinician can
+    only read an entry the user explicitly chose to share."""
+    __tablename__ = "journal_entries"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False)
+    created_at: Mapped[datetime] = _now()
+    # AES-256-GCM encrypted note body
+    content_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mood: Mapped[Optional[int]] = mapped_column(SmallInteger)  # 1-10, optional
+    shared_with_clinician: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
+
+
+Index("idx_journal_user", JournalEntry.user_id, JournalEntry.created_at.desc())

@@ -150,6 +150,13 @@ export const api = {
   changePassword: (current_password, new_password) =>
     req("/me/password", { method: "POST", body: { current_password, new_password } }),
   myOverview: () => req("/me/overview"),
+
+  // ---- journal (private by default; per-entry opt-in share) ----
+  listJournal: () => req("/me/journal"),
+  createJournal: (body) => req("/me/journal", { method: "POST", body }),
+  shareJournal: (jid, shared) =>
+    req(`/me/journal/${jid}`, { method: "PATCH", body: { shared_with_clinician: shared } }),
+  deleteJournal: (jid) => req(`/me/journal/${jid}`, { method: "DELETE" }),
   savedResources: () => req("/me/saved-resources"),
   saveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "POST" }),
   unsaveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "DELETE" }),
