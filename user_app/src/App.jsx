@@ -41,7 +41,7 @@ const TOPBAR_TABS = [
 const PAGE_PATHS = {
   dashboard: "/dashboard", sangloc: "/screening", chat: "/chat",
   baihoc: "/lessons", tainguyen: "/resources", tuvan: "/counselling",
-  hoso: "/profile", caidat: "/settings",
+  nhatky: "/journal", hoso: "/profile", caidat: "/settings",
 };
 const PATH_PAGES = Object.fromEntries(
   Object.entries(PAGE_PATHS).map(([id, p]) => [p, id]));
