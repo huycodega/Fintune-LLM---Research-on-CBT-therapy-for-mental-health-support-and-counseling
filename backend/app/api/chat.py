@@ -843,6 +843,14 @@ def chat(body: ChatIn, request: Request,
         drafts = post_process.parse_all(gen.get("responses", []))
         gen_mode = gen.get("mode", "modal")
 
+    # Listen-only: guarantee no draft carries a probing question, REGARDLESS of
+    # which path produced it. The agent already strips its own drafts, but the
+    # deterministic fallback only asked via the prompt — and the 7B sometimes
+    # ignores that. This is the single choke-point both paths flow through.
+    if "just_listen" in (session_ctx.get("style_prefs") or []):
+        for d in drafts:
+            d["response"] = post_process.strip_questions(d.get("response") or "")
+
     # pre-flight + grounding per-draft
     pf = preflight.check_all(drafts, triage["severity"])
     for d, (ok, reasons), idx in zip(drafts, pf, range(len(drafts))):

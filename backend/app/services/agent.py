@@ -957,16 +957,9 @@ def _self_correct(drafts: List[Dict], state: Dict,
 
 
 def _strip_questions(text: str) -> str:
-    """Listen-only safety net: drop EVERY interrogative sentence (not just a
-    trailing one) so the reply stays pure validation, keeping the declarative
-    parts. Falls back to the original when too little would remain, so we never
-    return an empty or butchered reply."""
-    t = (text or "").strip()
-    if "?" not in t:
-        return t
-    parts = re.split(r"(?<=[.!?])\s+", t)
-    kept = " ".join(p for p in parts if not p.strip().endswith("?")).strip()
-    return kept if len(kept) >= 20 else t
+    """Listen-only safety net — shared implementation in post_process so the
+    deterministic fallback path applies the exact same rule."""
+    return post_process.strip_questions(text)
 
 
 def _do_generate(args: Dict, state: Dict,

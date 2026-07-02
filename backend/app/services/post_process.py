@@ -95,6 +95,19 @@ def emphasize_llm(text: str) -> str:
         return text
 
 
+def strip_questions(text: str) -> str:
+    """Listen-only safety net: drop EVERY interrogative sentence so the reply
+    stays pure validation, keeping the declarative parts. Falls back to the
+    original when too little would remain, so we never return an empty or
+    butchered reply."""
+    t = (text or "").strip()
+    if "?" not in t:
+        return t
+    parts = re.split(r"(?<=[.!?])\s+", t)
+    kept = " ".join(p for p in parts if not p.strip().endswith("?")).strip()
+    return kept if len(kept) >= 20 else t
+
+
 def parse_all(raws: List[str]) -> List[Dict]:
     parsed = [parse_draft(r) for r in raws]
     seen, out = set(), []
