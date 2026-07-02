@@ -216,12 +216,16 @@ _PREF_DIRECT = re.compile(
 _PREF_LISTEN = re.compile(
     r"\b(just (want(ing)? |wanna |need(ing)? )?(to )?(vent|talk|be heard|"
     r"get (this|it) out|let it out)|just listen|just want to be heard|"
+    r"(want|need)\w*\s+(someone|somebody|anyone|you)\s+to\s+(just\s+)?(hear|listen)|"
+    r"hear me (out|without)|someone to (just )?(hear|listen)|"
     r"(don'?t|do not|not) (want|need|looking for) (any |any more )?"
     r"(advice|solutions?|to be fixed|you to fix|fixing)|no advice|"
     r"not looking for (advice|solutions?|a solution)|"
+    r"without telling me what (to do|i should do|i need to do)|"
+    r"without (any )?(advice|being told what)|"
     r"don'?t (try to |need to )?fix( it| this| me)?)\b"
     r"|chỉ muốn (nói ra|tâm sự|trút)|chưa cần lời khuyên|"
-    r"không cần lời khuyên|chỉ cần (được )?lắng nghe", re.I)
+    r"không cần lời khuyên|chỉ cần (ai đó |người |được )?lắng nghe", re.I)
 
 
 def detect_preference(text: str) -> list:

@@ -962,7 +962,12 @@ def _strip_trailing_question(text: str) -> str:
 def _do_generate(args: Dict, state: Dict,
                  n_responses: int, temperature: float) -> Dict:
     """Terminal: build the prompt and call the fine-tuned responder."""
-    _ensure_enriched(state)   # deterministic lesson/resource for practice-seeking
+    # Listen-only: the client wants to be heard, not directed — so we suppress
+    # lesson/resource enrichment, the "From your library" footer, and screening
+    # CTAs. Real self-data (facts) still surfaces; risk still escalated upstream.
+    listen_only = "just_listen" in ((state.get("session_ctx") or {}).get("style_prefs") or [])
+    if not listen_only:
+        _ensure_enriched(state)   # deterministic lesson/resource for practice-seeking
     focus = (args or {}).get("focus", "")
     analysis = dict(state.get("analysis") or {})
     if focus:
@@ -1003,12 +1008,14 @@ def _do_generate(args: Dict, state: Dict,
     # Self-critique: revise once if the best draft fails preflight/grounding.
     drafts = _self_correct(drafts, state, messages, temperature)
     # Listen-only: last-resort guard so no draft ends with a probing question.
-    if "just_listen" in ((state.get("session_ctx") or {}).get("style_prefs") or []):
+    if listen_only:
         for d in drafts:
             d["response"] = _strip_trailing_question(d.get("response") or "")
     # Deterministically append the REAL recommended materials so the user always
     # sees the actual library items by name (the responder often omits them).
-    footer = _rec_footer(state)
+    # Suppressed in listen-only mode — recommending exercises is "telling them
+    # what to do", which is exactly what the client asked us not to do.
+    footer = "" if listen_only else _rec_footer(state)
     if footer:
         recs = state.get("recommendations") or {}
         titles = ([x.get("title", "") for x in (recs.get("lessons") or [])]
@@ -1034,7 +1041,7 @@ def _do_generate(args: Dict, state: Dict,
             if resp and first_line not in resp:
                 d["response"] = resp.rstrip() + facts_block
     # Append the optional screening check-in CTA (if the agent suggested one).
-    screen_cta = _screening_footer(state)
+    screen_cta = "" if listen_only else _screening_footer(state)
     if screen_cta:
         for d in drafts:
             resp = d.get("response") or ""

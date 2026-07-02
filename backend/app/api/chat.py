@@ -501,9 +501,15 @@ def chat(body: ChatIn, request: Request,
     # honour it (session_ctx.style_prefs → responder prompt). L2/L3 only.
     if level in ("L2", "L3"):
         prefs_now = scope_router.detect_preference(text)
+        # Only acknowledge-and-stop when the message is essentially JUST the
+        # instruction ("be brief", "just listen"). When the same message also
+        # carries a real disclosure, we still store the preference but fall
+        # through so the responder actually replies — honouring it — instead of
+        # sending a bare "Got it" over a heartfelt paragraph.
         if prefs_now:
             merged = sorted(set(rc.chat_prefs_get(str(convo.id))) | set(prefs_now))
             rc.chat_prefs_set(str(convo.id), merged)
+        if prefs_now and len(text.split()) <= 12:
             bits = []
             if "brief" in prefs_now:
                 bits.append("keep my replies short")
