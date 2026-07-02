@@ -51,6 +51,24 @@ class IntakeIn(BaseModel):
     raw_text: str = Field(min_length=20)
 
 
+class IntakeStructuredIn(BaseModel):
+    """Structured intake — EVERY field optional so the user can skip any (or
+    all) of it and start chatting right away. Mirrors the 6 classic sections."""
+    # §1 demographics
+    name: Optional[str] = Field(None, max_length=120)
+    age: Optional[int] = Field(None, ge=10, le=120)
+    gender: Optional[str] = Field(None, max_length=40)
+    occupation: Optional[str] = Field(None, max_length=120)
+    # §2–§6
+    presenting: Optional[str] = Field(None, max_length=2000)
+    reason: Optional[str] = Field(None, max_length=2000)
+    past_history: Optional[str] = Field(None, max_length=2000)
+    functioning_study: Optional[str] = Field(None, max_length=1000)
+    functioning_relationships: Optional[str] = Field(None, max_length=1000)
+    functioning_daily: Optional[str] = Field(None, max_length=1000)
+    social_support: Optional[str] = Field(None, max_length=2000)
+
+
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: Optional[str] = None      # None → start a new thread

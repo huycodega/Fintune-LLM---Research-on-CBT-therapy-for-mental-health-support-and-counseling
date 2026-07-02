@@ -757,6 +757,10 @@ export default function Chat({ onNav }) {
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
+  // Wake the Modal GPU containers the moment the Chat page opens, so the
+  // cold start happens while the user is still typing — not after they send.
+  useEffect(() => { api.warmup().catch(() => {}); }, []);
+
   async function loadConversations() {
     try {
       const r = await api.listConversations();

@@ -75,12 +75,16 @@ export const api = {
   consent: () => req("/consent", { method: "POST", body: { accepted: true } }),
   submitIntake: (raw_text) =>
     req("/intake", { method: "POST", body: { raw_text } }),
+  submitIntakeStructured: (fields) =>
+    req("/intake/structured", { method: "POST", body: fields }),
   getIntake: () => req("/my/intake"),
   health: () => req("/health"),
 
   // ---- chat (multi-turn; pass conversation_id to continue a thread) ----
   chat: (message, opts = {}) =>
     req("/chat", { method: "POST", body: { message, ...opts }, timeoutMs: 150000 }),
+  // Wake the Modal GPU containers while the user is still typing (best-effort).
+  warmup: () => req("/warmup", { method: "POST", timeoutMs: 15000 }),
   mySessions: () => req("/my/sessions"),
   mySession: (sid) => req(`/my/session/${sid}`),
 

@@ -31,7 +31,7 @@ from app.services import (
     safety_gate, analyzer, retrieval, prompt_builder, llm_client,
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
-    moderation_store, scope_router, self_data, summarizer, actions,
+    moderation_store, scope_router, self_data, summarizer, actions, warmup,
 )
 
 
@@ -39,6 +39,13 @@ router = APIRouter(prefix="/api")
 
 # how many prior turns of THIS thread to feed back as multi-turn context
 _HISTORY_TURNS = 6
+
+
+@router.post("/warmup")
+def warmup_modal(user: dict = Depends(auth.current_user)):
+    """Fired when the Chat page opens: wake the Modal GPU containers while the
+    user is still typing their first message. Best-effort, cluster-deduped."""
+    return {"started": warmup.fire()}
 
 
 def _resolve_conversation(db, user_id, conversation_id, first_message):
@@ -273,12 +280,14 @@ def chat(body: ChatIn, request: Request,
     u = db.query(models.User).filter_by(id=user["uid"]).first()
     if u.consent_at is None:
         raise HTTPException(403, "Consent required (call /api/consent first)")
+    # Intake is OPTIONAL: a user who skipped it can chat right away — context
+    # then builds up from conversation memory instead (user_memory + summary).
+    # Session.intake_id is nullable, so no placeholder row is needed.
     intake = (db.query(models.IntakeForm)
                 .filter_by(user_id=u.id)
                 .order_by(models.IntakeForm.created_at.desc())
                 .first())
-    if intake is None:
-        raise HTTPException(403, "Intake form required (call /api/intake first)")
+    intake_id = intake.id if intake else None
 
     ip = auth.client_ip(request)
     rc.rate_limit_check(str(u.id), ip)
@@ -319,7 +328,7 @@ def chat(body: ChatIn, request: Request,
         user_message = moderation_store.record_user_message(
             db, convo, u, text, "L3")
         sess = models.Session(
-            user_id=u.id, intake_id=intake.id, conversation_id=convo.id,
+            user_id=u.id, intake_id=intake_id, conversation_id=convo.id,
             user_input_enc=encrypt_phi(text), user_input_hash=text_hash,
             triage_level="L3", triage_reason="greeting", severity="low",
             confidence=1.0, status="auto_sent",
@@ -360,7 +369,7 @@ def chat(body: ChatIn, request: Request,
             "it together.")
         user_message = moderation_store.record_user_message(db, convo, u, text, "L3")
         sess = models.Session(
-            user_id=u.id, intake_id=intake.id, conversation_id=convo.id,
+            user_id=u.id, intake_id=intake_id, conversation_id=convo.id,
             user_input_enc=encrypt_phi(text), user_input_hash=text_hash,
             triage_level="L3", triage_reason="jailbreak_refused", severity="low",
             confidence=1.0, status="answered",
@@ -445,7 +454,7 @@ def chat(body: ChatIn, request: Request,
     )
 
     base = dict(
-        user_id=u.id, intake_id=intake.id, conversation_id=convo.id,
+        user_id=u.id, intake_id=intake_id, conversation_id=convo.id,
         user_input_enc=encrypt_phi(text),
         user_input_hash=text_hash,
         triage_level=level,
@@ -686,20 +695,24 @@ def chat(body: ChatIn, request: Request,
         "style_prefs": rc.chat_prefs_get(str(convo.id)),
     }
 
-    # intake snapshot for prompt
-    intake_dict = {
-        "demographics": intake.demographics,
-        "presenting": decrypt_str(intake.presenting) if intake.presenting else "",
-        "reason": intake.reason,
-        "past_history": intake.past_history,
-        "functioning": intake.functioning,
-        "social_support": intake.social_support,
-    }
+    # intake snapshot for prompt — None when the user skipped intake; the
+    # prompt builder omits the block and memory fills the gap over time.
+    intake_dict = None
+    if intake is not None:
+        intake_dict = {
+            "demographics": intake.demographics,
+            "presenting": decrypt_str(intake.presenting) if intake.presenting else "",
+            "reason": intake.reason,
+            "past_history": intake.past_history,
+            "functioning": intake.functioning,
+            "social_support": intake.social_support,
+        }
 
     # PII scrub before any LLM / agent call
     scrubbed_text = pii_scrubber.scrub(text)
-    scrubbed_intake = pii_scrubber.scrub_dict(
+    scrubbed_intake = (pii_scrubber.scrub_dict(
         intake_dict, ["presenting", "reason", "social_support"])
+        if intake_dict else None)
 
     # Map deterministic triage level → retriever risk_level:
     #   L3 routine → "normal", L2 moderate → "moderate". (L0/L1 never reach here.)

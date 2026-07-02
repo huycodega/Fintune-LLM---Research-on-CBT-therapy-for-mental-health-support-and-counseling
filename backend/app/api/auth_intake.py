@@ -17,7 +17,7 @@ from app.core.crypto import encrypt_phi
 from app.db import models
 from app.db.session import get_db, db_session
 from app.schemas.api import (
-    LoginIn, LoginOut, ConsentIn, IntakeIn,
+    LoginIn, LoginOut, ConsentIn, IntakeIn, IntakeStructuredIn,
     RegisterIn, VerifyOtpIn, ResendOtpIn, GoogleAuthIn,
 )
 from app.services import intake_parser, email_sender, redis_client as rc
@@ -402,6 +402,73 @@ def submit_intake(body: IntakeIn, request: Request,
                          "functioning", "social_support")
             if parsed.get(k)),
     }
+
+
+@router.post("/intake/structured")
+def submit_intake_structured(body: IntakeStructuredIn, request: Request,
+                             user: dict = Depends(auth.current_user),
+                             db: Session = Depends(get_db)):
+    """Structured intake — every field optional. An entirely empty submit is a
+    'Skip for now': it records an empty intake row so onboarding moves on, and
+    the AI builds context from conversation instead."""
+    u = db.query(models.User).filter_by(id=user["uid"]).first()
+    if u.consent_at is None:
+        raise HTTPException(403, "Consent required before intake")
+
+    demographics = {k: v for k, v in {
+        "name": body.name, "age": body.age, "gender": body.gender,
+        "occupation": body.occupation}.items() if v not in (None, "")}
+    functioning = {k: v for k, v in {
+        "occupational": body.functioning_study,
+        "interpersonal": body.functioning_relationships,
+        "daily": body.functioning_daily}.items() if v}
+    past_history = {"raw": body.past_history} if body.past_history else None
+
+    # Compose the classic 6-section text so admin views / re-parsers keep
+    # working; sections the user skipped are simply absent.
+    lines = []
+    if demographics:
+        lines.append("1. Demographics: " + "  ".join(
+            f"{k.capitalize()}: {v}" for k, v in demographics.items()))
+    if body.presenting:
+        lines.append("2. Presenting Problem: " + body.presenting)
+    if body.reason:
+        lines.append("3. Reason for seeking support: " + body.reason)
+    if body.past_history:
+        lines.append("4. Past History: " + body.past_history)
+    if functioning:
+        lines.append("5. Functioning: " + "  ".join(
+            f"{k.capitalize()}: {v}" for k, v in functioning.items()))
+    if body.social_support:
+        lines.append("6. Social Support: " + body.social_support)
+    raw_text = "\n".join(lines) or "(intake skipped — no details provided)"
+
+    filled = sum(1 for x in (body.presenting, body.reason, body.past_history,
+                             body.social_support) if x) \
+        + (1 if demographics else 0) + (1 if functioning else 0)
+
+    row = models.IntakeForm(
+        user_id=u.id,
+        raw_text_enc=encrypt_phi(raw_text),
+        demographics=demographics or None,
+        presenting=encrypt_phi(body.presenting) if body.presenting else None,
+        reason=body.reason,
+        past_history=past_history,
+        functioning=functioning or None,
+        social_support=body.social_support,
+        parser_version="structured-v1",
+        parse_confidence=1.0,
+    )
+    db.add(row)
+    db.flush()
+
+    audit_mod.audit(db, action="intake_submitted", actor=user,
+                     ip=auth.client_ip(request),
+                     resource_type="intake_form", resource_id=row.id,
+                     detail={"mode": "structured", "sections_filled": filled})
+
+    return {"intake_id": str(row.id), "sections_filled": filled,
+            "skipped": filled == 0}
 
 
 @router.get("/my/intake")

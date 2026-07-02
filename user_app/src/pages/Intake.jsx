@@ -1,133 +1,133 @@
 import { useState } from "react";
 import { api } from "../api.js";
 
-const BROOKE_SAMPLE = `Name: Brooke Davis Age: 41 Gender: female Occupation: Veterinary Assistant Education: Certified Veterinary Technician Marital Status: Single Family Details: Lives alone with multiple pets
+/* Structured intake — every field is optional. New users can skip the whole
+   thing and start chatting; the AI builds context from conversation instead,
+   and they can fill this in later from Profile. */
 
-2. Presenting Problem
-I feel anxious and avoid going back to the animal shelter because I believe the animals there will hate me for not remembering me. This leads to feelings of guilt and self-blame. These feelings started a few months ago after a visit to the shelter where some animals did not greet me as warmly as before.
+const EMPTY = {
+  name: "", age: "", gender: "", occupation: "",
+  presenting: "", reason: "", past_history: "",
+  functioning_study: "", functioning_relationships: "", functioning_daily: "",
+  social_support: "",
+};
 
-3. Reason for Seeking Counseling
-I decided to seek counseling because this issue has started affecting my daily life and my passion for working with animals.
+const BROOKE = {
+  name: "Brooke Davis", age: "41", gender: "female",
+  occupation: "Veterinary Assistant",
+  presenting: "I feel anxious and avoid going back to the animal shelter because I believe the animals there will hate me for not remembering me. This leads to feelings of guilt and self-blame. These feelings started a few months ago after a visit where some animals did not greet me as warmly as before.",
+  reason: "This issue has started affecting my daily life and my passion for working with animals.",
+  past_history: "I have not experienced similar problems before. No prior counseling and no significant physical illnesses.",
+  functioning_study: "My job performance has not been affected yet, but my passion for working with animals has dwindled.",
+  functioning_relationships: "My relationships with other shelter volunteers have been strained as I have distanced myself.",
+  functioning_daily: "My anxiety about going to the shelter has disrupted my sleep patterns and overall well-being.",
+  social_support: "A few close friends are supportive, but they do not fully understand the extent of my anxiety.",
+};
 
-4. Past History (including medical history)
-I have not experienced similar problems before. I have not received treatment or counseling for psychological problems in the past. I do not have any significant physical illnesses.
-
-5. Academic/occupational functioning level:
-My job performance as a veterinary assistant has not been affected yet, but my passion for working with animals has dwindled. Interpersonal relationships: My relationships with other animal shelter volunteers have been strained as I have distanced myself because of this issue. Daily life: My anxiety about going to the shelter has disrupted my sleep patterns and overall well-being.
-
-6. Social Support System
-I have a few close friends who are supportive, but they do not fully understand the extent of my anxiety related to the animal shelter.`;
-
-const SECTIONS_TEMPLATE = `Name: 
-Age: 
-Gender: 
-Occupation: 
-Education: 
-Marital Status: 
-Family Details: 
-
-2. Presenting Problem
-[Describe what's been on your mind and the situations where it shows up]
-
-3. Reason for Seeking Counseling
-[What made you decide to reach out now?]
-
-4. Past History (including medical history)
-[Have you experienced similar issues before? Any prior counseling or relevant medical history?]
-
-5. Academic/occupational functioning level:
-[How is your work or school affected?]
-Interpersonal relationships:
-[How is this affecting relationships with others?]
-Daily life:
-[How does this affect sleep, energy, daily routine?]
-
-6. Social Support System
-[Who in your life knows about this? How supportive are they?]`;
+function Field({ label, hint, value, onChange, rows = 3, type }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", marginBottom: 4 }}>
+        {label} <span style={{ color: "var(--ink-soft,#94a3b8)", fontWeight: 400, fontSize: 12.5 }}>· optional</span>
+      </label>
+      {rows === 1 ? (
+        <input type={type || "text"} value={value} placeholder={hint}
+          onChange={(e) => onChange(e.target.value)} style={{ width: "100%" }} />
+      ) : (
+        <textarea rows={rows} value={value} placeholder={hint}
+          onChange={(e) => onChange(e.target.value)} style={{ width: "100%" }} />
+      )}
+    </div>
+  );
+}
 
 export default function Intake({ onDone }) {
-  const [text, setText] = useState(SECTIONS_TEMPLATE);
+  const [f, setF] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [result, setResult] = useState(null);
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
-  async function submit() {
-    if (text.trim().length < 40) {
-      setErr("Please complete more of the form before submitting.");
-      return;
-    }
+  async function submit(fields) {
     setBusy(true);
     setErr("");
     try {
-      const r = await api.submitIntake(text);
-      setResult(r);
+      const body = {};
+      for (const [k, v] of Object.entries(fields)) {
+        const t = String(v || "").trim();
+        if (!t) continue;
+        body[k] = k === "age" ? parseInt(t, 10) || undefined : t;
+      }
+      await api.submitIntakeStructured(body);
+      onDone();
     } catch (e) {
-      setErr(e.message);
-    } finally {
+      setErr(e.message || "Could not save — please try again.");
       setBusy(false);
     }
   }
 
   return (
     <div className="shell" style={{ paddingTop: 30, paddingBottom: 60 }}>
-      <div className="eyebrow">Intake form · required before first session</div>
+      <div className="eyebrow">Getting to know you · everything is optional</div>
       <h1 className="title">Tell us about yourself</h1>
       <p className="sub">
-        This 6-section intake helps us understand your situation. Your
-        clinician will see this. The AI uses it (with personal details
-        removed) to choose techniques that fit you. Submit once — you
-        can edit later.
+        Share as much or as little as you like — every field is optional, and
+        you can <b>skip this entirely</b> and start chatting right away. The
+        more you share, the more personal the support; anything you skip, the
+        AI will gently learn through conversation instead.
       </p>
 
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between",
-                       alignItems: "center", marginBottom: 10 }}>
-          <label style={{ marginBottom: 0 }}>Your intake (free text)</label>
-          <button
-            className="btn ghost sm"
-            type="button"
-            onClick={() => setText(BROOKE_SAMPLE)}
-          >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <b>1 · About you</b>
+          <button className="btn ghost sm" type="button" onClick={() => setF(BROOKE)}>
             Load sample (Brooke Davis)
           </button>
         </div>
-        <textarea
-          rows={22}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          style={{ fontFamily: "var(--font-mono)", fontSize: 13.5 }}
-        />
-        {err && (
-          <div className="banner crisis" style={{ marginTop: 12 }}>
-            {err}
-          </div>
-        )}
-        {result && (
-          <div className="banner ok" style={{ marginTop: 12 }}>
-            <b>Intake received.</b> Parse confidence:{" "}
-            {Math.round((result.parse_confidence || 0) * 100)}% ·
-            sections recognized: {result.sections_recognized || 0}/6.
-            <br />
-            <button
-              className="btn accent"
-              onClick={onDone}
-              style={{ marginTop: 12 }}
-            >
-              Continue to chat →
-            </button>
-          </div>
-        )}
-        {!result && (
-          <button
-            className="btn accent"
-            onClick={submit}
-            disabled={busy}
-            style={{ marginTop: 14 }}
-          >
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0 12px" }}>
+          <Field label="Name" hint="What should we call you?" rows={1} value={f.name} onChange={set("name")} />
+          <Field label="Age" hint="e.g. 21" rows={1} type="number" value={f.age} onChange={set("age")} />
+          <Field label="Gender" hint="However you identify" rows={1} value={f.gender} onChange={set("gender")} />
+          <Field label="Occupation" hint="e.g. student" rows={1} value={f.occupation} onChange={set("occupation")} />
+        </div>
+
+        <b style={{ display: "block", margin: "10px 0 12px" }}>2 · What's been on your mind?</b>
+        <Field label="Presenting concern" value={f.presenting} onChange={set("presenting")}
+          hint="What's been troubling you, and in which situations does it show up?" />
+
+        <b style={{ display: "block", margin: "10px 0 12px" }}>3 · Why now?</b>
+        <Field label="Reason for reaching out" rows={2} value={f.reason} onChange={set("reason")}
+          hint="What made you decide to seek support now?" />
+
+        <b style={{ display: "block", margin: "10px 0 12px" }}>4 · Past history</b>
+        <Field label="Anything similar before?" rows={2} value={f.past_history} onChange={set("past_history")}
+          hint="Prior counseling, similar issues, or relevant medical history" />
+
+        <b style={{ display: "block", margin: "10px 0 12px" }}>5 · How it's affecting you</b>
+        <Field label="Study / work" rows={2} value={f.functioning_study} onChange={set("functioning_study")}
+          hint="Any impact on school or your job?" />
+        <Field label="Relationships" rows={2} value={f.functioning_relationships} onChange={set("functioning_relationships")}
+          hint="Any impact on friends, family, colleagues?" />
+        <Field label="Daily life" rows={2} value={f.functioning_daily} onChange={set("functioning_daily")}
+          hint="Sleep, energy, appetite, daily routine…" />
+
+        <b style={{ display: "block", margin: "10px 0 12px" }}>6 · Support around you</b>
+        <Field label="Social support" rows={2} value={f.social_support} onChange={set("social_support")}
+          hint="Who knows what you're going through? How supportive are they?" />
+
+        {err && <div className="banner crisis" style={{ marginTop: 4 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
+          <button className="btn accent" onClick={() => submit(f)} disabled={busy}>
             {busy ? <span className="spinner" /> : null}
-            <span>Submit intake</span>
+            <span>Save &amp; continue →</span>
           </button>
-        )}
+          <button className="btn ghost" onClick={() => submit(EMPTY)} disabled={busy}>
+            Skip for now →
+          </button>
+          <span style={{ fontSize: 12.5, color: "var(--ink-soft,#94a3b8)" }}>
+            You can add or edit this anytime later.
+          </span>
+        </div>
       </div>
     </div>
   );
