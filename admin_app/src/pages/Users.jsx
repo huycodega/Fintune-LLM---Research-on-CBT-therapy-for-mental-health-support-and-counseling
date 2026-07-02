@@ -273,6 +273,32 @@ function UserDetail({ detail, isAdmin, busy, onStatus, onRole }) {
                 <div className="timeline-text">{d.memory.summary}</div>
               </>
             )}
+            {(d.progress?.common_themes?.length ?? 0) > 0 && (
+              <>
+                <div className="detail-section-title">Common themes (chats)</div>
+                <div className="timeline-text">
+                  {d.progress.common_themes.map((t) => `${t.theme} ×${t.count}`).join(" · ")}
+                </div>
+              </>
+            )}
+            {d.progress?.stress_trend?.direction && (
+              <div className="detail-row"><span className="k">Stress trend</span>
+                <span className="v">
+                  {d.progress.stress_trend.direction === "improving" ? "▼ improving"
+                    : d.progress.stress_trend.direction === "worsening" ? "▲ worsening" : "− stable"}
+                </span></div>
+            )}
+            {(d.progress?.lessons_done?.length ?? 0) > 0 && (
+              <>
+                <div className="detail-section-title">CBT exercises completed</div>
+                {d.progress.lessons_done.slice(0, 6).map((l, i) => (
+                  <div className="detail-row" key={i}>
+                    <span className="k">{fmtDate(l.completed_at)}</span>
+                    <span className="v">{l.title}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </>
         )}
 

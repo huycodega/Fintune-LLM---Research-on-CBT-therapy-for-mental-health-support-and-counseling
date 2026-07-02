@@ -28,6 +28,7 @@ from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models, models_admin
 from app.db.session import get_db
+from app.services import progress_stats
 
 router = APIRouter(prefix="/api/me")
 
@@ -344,6 +345,9 @@ def overview(user: dict = Depends(auth.current_user),
         "lessons_completed": lessons_completed,
         "resources_saved": resources_saved,
         "top_technique": top_technique,
+        "lessons_done": progress_stats.lessons_done(db, uid),
+        "common_themes": progress_stats.common_themes(db, uid),
+        "stress_trend": progress_stats.stress_trend(db, uid),
         "streak": streak,
         "week": week,
         "recent_activity": feed[:8],

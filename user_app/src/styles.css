@@ -5253,6 +5253,31 @@ h1.title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bo
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
+/* "Your Journey" — exercises done, themes, stress trend */
+.journey-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 860px) { .journey-grid { grid-template-columns: 1fr; } }
+.journey-title { font-size: 13.5px; font-weight: 700; color: var(--ink, #1f2a38); margin-bottom: 8px; }
+.journey-empty { font-size: 13px; color: var(--ink-soft, #94a3b8); margin: 0; }
+.journey-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.journey-list li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border: 1px solid var(--line, #e6efea);
+  border-radius: 10px; background: var(--surface, #fff);
+}
+.journey-item-title { font-size: 13px; font-weight: 600; color: var(--ink, #1f2a38); }
+.journey-item-date { font-size: 12px; color: var(--ink-soft, #94a3b8); flex-shrink: 0; }
+.journey-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.journey-chip {
+  padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: rgba(86,194,168,0.12); color: var(--primary-dark, #047857);
+  text-transform: capitalize;
+}
+.journey-trend { font-size: 13px; font-weight: 700; }
+.journey-trend.improving { color: #047857; }
+.journey-trend.worsening { color: #dc2626; }
+.journey-trend.stable { color: #64748b; }
+.journey-scores { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; }
+.journey-score { font-size: 12px; color: var(--ink-soft, #94a3b8); }
 .progress-snapshot-card {
   display: flex;
   align-items: center;

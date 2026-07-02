@@ -259,6 +259,64 @@ export default function HoSo({ user }) {
               <ProgressCard icon="📁" value={overview?.resources_saved ?? 0} label="Resources Saved" meta="Helpful tools saved" accent="mint" />
             </div>
           </section>
+
+          {/* Your journey — real records: exercises done, themes, stress trend */}
+          <section className="profile-card">
+            <div className="profile-section-heading compact">
+              <div>
+                <h3>Your Journey</h3>
+                <p>What you've worked on and how your stress is moving.</p>
+              </div>
+            </div>
+            <div className="journey-grid">
+              <div className="journey-block">
+                <div className="journey-title">📘 CBT exercises completed</div>
+                {(overview?.lessons_done?.length ?? 0) === 0 ? (
+                  <p className="journey-empty">None yet — try one from Lessons and it'll show up here.</p>
+                ) : (
+                  <ul className="journey-list">
+                    {overview.lessons_done.map((l, i) => (
+                      <li key={i}>
+                        <span className="journey-item-title">{l.title}</span>
+                        <span className="journey-item-date">{fmtDate(l.completed_at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="journey-block">
+                <div className="journey-title">🧠 Common themes in your chats</div>
+                {(overview?.common_themes?.length ?? 0) === 0 ? (
+                  <p className="journey-empty">Chat a little more and your recurring themes will appear here.</p>
+                ) : (
+                  <div className="journey-chips">
+                    {overview.common_themes.map((t) => (
+                      <span className="journey-chip" key={t.theme}>{t.theme} × {t.count}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="journey-title" style={{ marginTop: 14 }}>📉 Stress trend</div>
+                {!overview?.stress_trend?.direction ? (
+                  <p className="journey-empty">Take at least two screenings to see your trend.</p>
+                ) : (
+                  <div>
+                    <span className={`journey-trend ${overview.stress_trend.direction}`}>
+                      {overview.stress_trend.direction === "improving" ? "▼ Improving — scores are coming down"
+                        : overview.stress_trend.direction === "worsening" ? "▲ Rising — consider a check-in or a chat"
+                        : "− Stable"}
+                    </span>
+                    <div className="journey-scores">
+                      {overview.stress_trend.points.slice(-4).map((p, i) => (
+                        <span key={i} className="journey-score">
+                          {fmtDate(p.date)}: PHQ-9 {p.phq9 ?? "–"} · GAD-7 {p.gad7 ?? "–"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         </main>
 
         <aside className="profile-sidebar-column">

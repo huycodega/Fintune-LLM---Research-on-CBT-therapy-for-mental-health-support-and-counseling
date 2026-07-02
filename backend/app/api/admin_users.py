@@ -27,7 +27,7 @@ from app.core.crypto import decrypt_str
 from app.db import models, models_admin
 from app.db.session import get_db
 from app.schemas.api import UserStatusIn, UserRoleIn
-from app.services import admin_principals
+from app.services import admin_principals, progress_stats
 
 
 router = APIRouter(prefix="/api/admin")
@@ -235,6 +235,13 @@ def user_detail(uid: str, _: dict = Depends(auth.require_admin),
             "gad7_score": sc.gad7_score, "gad7_level": sc.gad7_level,
             "mood_score": sc.mood_score,
         } for sc in screenings],
+        # Same progress stats the user sees on their Profile (single source
+        # of truth: progress_stats) — for the clinician's Records view.
+        "progress": {
+            "lessons_done": progress_stats.lessons_done(db, u.id),
+            "common_themes": progress_stats.common_themes(db, u.id),
+            "stress_trend": progress_stats.stress_trend(db, u.id),
+        },
     }
 
 
