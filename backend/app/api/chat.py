@@ -857,8 +857,26 @@ def chat(body: ChatIn, request: Request,
             metrics.inc("cbt_hallucination_flag_total",
                          severity=triage["severity"])
 
+    # ---- L2 fast-path: model-only L2 with zero deterministic risk markers ----
+    # The triage model reads ordinary sadness/stress ("exam stress, can't wind
+    # down") as L2, which used to hold EVERY such turn for pre-approval. When
+    # the regex heuristic saw NOTHING (heuristic says L3) and there is no
+    # acute-risk language, deliver directly instead: the draft still has to
+    # pass the same preflight + grounding gate as any L3 auto-send (fails →
+    # held for review anyway), and the turn still appears in Moderation
+    # sessions labelled L2 for retrospective clinician review. L0/L1 and
+    # marker-based L2 keep pre-approval unchanged; safety only ever goes UP.
+    l2_fastpath = (
+        level == "L2"
+        and getattr(settings, "l2_fastpath_enabled", True)
+        and triage.get("heuristic_level", "L3") == "L3"
+        and not safety_gate.has_acute_risk(text)
+    )
+    if l2_fastpath:
+        analysis["l2_fastpath"] = True
+
     # ---- L2: drafts BUT clinician review required ----
-    if level == "L2":
+    if level == "L2" and not l2_fastpath:
         sess = models.Session(
             **base, status="pending_review", analysis=analysis,
             retrieved_ids=retrieved_ids, prompt_hash=p_hash)

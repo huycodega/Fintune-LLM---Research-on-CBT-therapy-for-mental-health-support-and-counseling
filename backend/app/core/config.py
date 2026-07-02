@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     # the naturally-important words of that reply (contextual emphasis). Best-
     # effort: no-op in mock/degraded. Set False to skip the extra call.
     emphasis_pass_enabled: bool = True
+    # Deliver model-only L2 (regex heuristic saw no markers, no acute-risk
+    # language) directly after the preflight+grounding gate, instead of holding
+    # every mild-distress turn for pre-approval. The turn stays visible in
+    # Moderation sessions (labelled L2) for retrospective review. L0/L1 and
+    # marker-based L2 are unaffected.
+    l2_fastpath_enabled: bool = True
 
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise
