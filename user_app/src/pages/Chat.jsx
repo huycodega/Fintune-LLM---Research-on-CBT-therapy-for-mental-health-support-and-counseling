@@ -520,7 +520,9 @@ function ExpertBookingCard({ state, onPickExpert, onPickSlot, onBack, onCancel }
    first user message, instead of a bare welcome bubble. */
 function EmptyState({ greeting }) {
   return (
-    <div className="ai-empty" data-reveal>
+    {/* NB: no data-reveal here — only the Landing page's observer adds
+        .reveal-in, so inside the app the attribute left this at opacity 0. */}
+    <div className="ai-empty">
       <div className="ai-empty-mascot">
         <span className="ai-empty-halo" aria-hidden="true" />
         <Mascot variant="wave" size={104} className="mascot-idle" />
