@@ -93,6 +93,21 @@ def _sla_for(level: str) -> datetime:
     return base + timedelta(minutes=15 if level == "L1" else 60)
 
 
+# Re-ask questions ("what thoughts come up?", "tell me more") AFTER the client
+# already named their thoughts read as not-listening. The 7B produces them
+# stochastically, so across n drafts we rank the ones that ADVANCE the work
+# above the ones that ask again — deterministic, no extra model call.
+_REASK_PAT = re.compile(
+    r"what (specific )?(thoughts?|feelings?|emotions?)\b[^.?!]*\?|"
+    r"\btell me more\b|\bshare more\b|"
+    r"can you (tell|describe|share|identify|pick out|give me an example)|"
+    r"when (do|does|did) (it|they|these|those)\b[^.?!]*\?", re.I)
+
+
+def _reask_count(resp: str) -> int:
+    return len(_REASK_PAT.findall(resp or ""))
+
+
 # ── Greeting fast-path ───────────────────────────────────────────────────────
 # A standalone greeting carries no risk content, so we answer it instantly with
 # a warm opener instead of spinning up the safety gate + agent. The whole
@@ -877,6 +892,18 @@ def chat(body: ChatIn, request: Request,
             metrics.inc("cbt_hallucination_flag_total",
                          severity=triage["severity"])
 
+    # When the client has already NAMED their thoughts (quoted somewhere in
+    # this thread), rank drafts that re-ask for them below drafts that advance
+    # the work — the L2 admin list and the L3 auto-pick both use this order.
+    # When nothing was named yet, exploration questions are legitimate and the
+    # order is untouched.
+    named_given = bool(prompt_builder._format_named_thoughts(
+        session_ctx, scrubbed_text))
+    if drafts and named_given:
+        drafts.sort(key=lambda d: (0 if d.get("preflight_pass") else 1,
+                                   _reask_count(d.get("response") or ""),
+                                   -(d.get("grounding_score") or 0.0)))
+
     # ---- L2 vent-release valve (default: clinician pre-approval) ----
     # Every L2 waits for a clinician UNLESS a stack of checks unanimously rules
     # the turn ordinary venting. Any doubt anywhere → review, like before:
@@ -958,10 +985,13 @@ def chat(body: ChatIn, request: Request,
         }
 
     # ---- L3: pick the best draft, then gate before auto-sending ----
-    # Prefer a preflight-passing, better-grounded draft over plain drafts[0].
+    # Prefer a preflight-passing draft that does NOT re-ask for material the
+    # client already gave, then the better-grounded one.
     chosen = max(
         drafts,
         key=lambda d: (1 if d.get("preflight_pass") else 0,
+                       -_reask_count(d.get("response") or "")
+                       if named_given else 0,
                        d.get("grounding_score", 0.0)),
     ) if drafts else None
 
