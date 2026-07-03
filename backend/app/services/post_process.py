@@ -100,28 +100,50 @@ def emphasize_llm(text: str) -> str:
         return text
 
 
-# Vocative like ", Ryan." / ", Ryan," — the responder sometimes borrows a
-# client name from RAG reference transcripts. Never-scrub words that look like
-# vocatives but aren't names.
+# Vocatives like ", Ryan." (trailing) AND "Ryan, thank you…" (sentence-
+# initial) — the responder borrows a client name from RAG reference
+# transcripts, and once it slips into history it self-reinforces. Never-scrub
+# words that look like vocatives but aren't names (discourse markers, days…).
 _VOCATIVE = re.compile(r",\s+([A-Z][a-z]{1,20})(?=[.!?,;:])")
+_VOCATIVE_LEAD = re.compile(r"(^|(?<=[.!?])\s)([A-Z][a-z]{1,20}),\s+(\w)")
 _NOT_NAMES = {
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
     "sunday", "january", "february", "march", "april", "may", "june", "july",
     "august", "september", "october", "november", "december", "ok", "okay",
     "god", "ai",
+    # sentence-initial discourse markers that match the leading pattern
+    "however", "also", "first", "second", "third", "meanwhile", "remember",
+    "overall", "instead", "together", "sometimes", "often", "now", "next",
+    "again", "finally", "additionally", "moreover", "furthermore", "still",
+    "well", "yes", "no", "alright", "actually", "honestly", "importantly",
+    "lastly", "otherwise", "thankfully", "unfortunately", "naturally",
+    "clearly", "ideally", "similarly", "likewise", "besides", "anyway",
+    "plus", "so", "then", "there", "here", "that", "this", "these", "those",
+    "when", "whenever", "while", "once", "perhaps", "maybe", "today",
+    "tonight", "tomorrow", "yesterday", "please", "granted", "look",
+    "listen", "breathe", "notice", "start", "meantime", "great", "good",
 }
 
 
 def scrub_unknown_names(text: str, allowed: set) -> str:
-    """Drop a vocative name the client never gave us (", Ryan.") — names leak
-    in from reference counselling transcripts. `allowed` is a lowercase set of
-    names the client actually provided (intake, profile, or typed in chat)."""
-    def _repl(m):
+    """Drop a vocative name the client never gave us ("Ryan, …" / ", Ryan.")
+    — names leak in from reference counselling transcripts. `allowed` is a
+    lowercase set of names the client actually provided (intake, profile, or
+    typed in chat)."""
+    def _tail(m):
         name = m.group(1).lower()
         if name in allowed or name in _NOT_NAMES:
             return m.group(0)
         return ""
-    return _VOCATIVE.sub(_repl, text or "")
+    out = _VOCATIVE.sub(_tail, text or "")
+
+    def _lead(m):
+        name = m.group(2).lower()
+        if name in allowed or name in _NOT_NAMES:
+            return m.group(0)
+        # drop the name, keep the sentence boundary, re-capitalise what follows
+        return m.group(1) + m.group(3).upper()
+    return _VOCATIVE_LEAD.sub(_lead, out)
 
 
 def strip_questions(text: str) -> str:
