@@ -774,7 +774,8 @@ export default function Chat({ onNav }) {
     try {
       const r = await api.getConversation(cid);
       const mapped = mapServerMessages(r.messages);
-      setMessages(mapped.length ? mapped : WELCOME);
+      // The welcome greeting always leads the thread — reopened ones too.
+      setMessages(mapped.length ? [...WELCOME, ...mapped] : WELCOME);
       setActiveId(cid);
       // Restore the 🎧 toggle from the SERVER (durable per-thread state) —
       // localStorage alone went stale whenever the backend changed the mode.
@@ -1176,15 +1177,17 @@ export default function Chat({ onNav }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Quick replies */}
-          <div className="ai-quickreplies">
-            {QUICK_REPLIES.map((q) => (
-              <button key={q.text} className="ai-qr" onClick={() => sendText(q.text)}>
-                <Icon name={q.icon} size={15} className="ai-qr-icon" />{q.text}
-              </button>
-            ))}
-            <button className="ai-qr-refresh" aria-label="Refresh suggestions"><Icon name="refresh" size={16} /></button>
-          </div>
+          {/* Quick replies — starters only: gone once the conversation begins */}
+          {!messages.some((m) => m.role === "user") && (
+            <div className="ai-quickreplies">
+              {QUICK_REPLIES.map((q) => (
+                <button key={q.text} className="ai-qr" onClick={() => sendText(q.text)}>
+                  <Icon name={q.icon} size={15} className="ai-qr-icon" />{q.text}
+                </button>
+              ))}
+              <button className="ai-qr-refresh" aria-label="Refresh suggestions"><Icon name="refresh" size={16} /></button>
+            </div>
+          )}
 
           {/* "Just listen" mode banner (tap anywhere to turn off) */}
           {listenOnly && (
