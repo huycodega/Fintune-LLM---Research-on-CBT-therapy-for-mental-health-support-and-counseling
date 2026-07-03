@@ -156,12 +156,13 @@ _GREETING_PAT = re.compile(
 def _info_reply(db, u, infos):
     """Build the direct answer for one or more factual info intents.
 
-    Returns (text, cards): `text` is the combined reply (real DB records only,
-    stored for history); `cards` is a list of {kind, items} the chat UI renders
-    as tappable items (lessons → open, psychologists → book, appointments).
-    Returns ("", []) on total failure.
+    Returns (text, cards, actions): `text` is the combined reply (real DB
+    records only, stored for history); `cards` is a list of {kind, items} the
+    chat UI renders as tappable items (lessons → open, psychologists → book);
+    `actions` are one-tap buttons (e.g. navigate to Screening).
+    Returns ("", [], []) on total failure.
     """
-    texts, cards = [], []
+    texts, cards, actions = [], [], []
     seen = set()
     for info in infos:
         if info in seen:
@@ -176,6 +177,15 @@ def _info_reply(db, u, infos):
                 texts.append(self_data.mood(db, u.id))
             elif info == "screening":
                 texts.append(self_data.screening(db, u.id))
+                # No results yet → don't leave a dead end: invite them with a
+                # one-tap button straight to the Screening page.
+                if not (db.query(models.Screening)
+                        .filter_by(user_id=u.id).first()):
+                    texts.append(
+                        "A quick check-in takes about 3 minutes and gives us "
+                        "a baseline we can track together.")
+                    actions.append({"kind": "navigate", "section": "sangloc",
+                                    "label": "Take a screening"})
             elif info == "progress":
                 texts.append(self_data.lesson_progress(db, u.id))
             elif info == "recall":
@@ -249,7 +259,7 @@ def _info_reply(db, u, infos):
                     cards.append({"kind": "psychologists", "items": items})
         except Exception:
             continue
-    return "\n\n".join(t for t in texts if t), cards
+    return "\n\n".join(t for t in texts if t), cards, actions
 
 
 def _is_greeting(text: str) -> bool:
@@ -660,7 +670,7 @@ def chat(body: ChatIn, request: Request,
                  else scope_router.info_intents(text))
         if infos and safety_gate._heuristic(text).get("triage_level") \
                 not in ("L0", "L1"):
-            reply, cards = _info_reply(db, u, infos)
+            reply, cards, info_actions = _info_reply(db, u, infos)
             if reply:
                 tech = "info_" + "_".join(infos)
                 sess = models.Session(
@@ -684,6 +694,7 @@ def chat(body: ChatIn, request: Request,
                     "drafts": [{"idx": 0, "technique": tech[:60],
                                 "response": reply}],
                     "cards": cards,
+                    "actions": info_actions,
                     "mode": "info_gate",
                 }
 
