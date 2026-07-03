@@ -348,6 +348,14 @@ input, textarea, select { font-family: var(--font); }
   position: relative;
   text-align: center;
 }
+/* The nav grew (Journal) — on shorter screens shrink the companion card so
+   the plant never falls below the fold. */
+@media (max-height: 900px) {
+  .sidebar-companion-card { margin: 10px 14px; padding: 12px 12px 0; }
+  .sidebar-companion-title { font-size: 14px; }
+  .sidebar-companion-text { font-size: 12px; }
+  .sidebar-plant { width: 50px; height: 50px; }
+}
 .sidebar-companion-title {
   font-size: 14px;
   font-weight: 700;
