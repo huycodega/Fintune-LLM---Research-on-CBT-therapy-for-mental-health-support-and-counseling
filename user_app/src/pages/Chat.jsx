@@ -517,11 +517,11 @@ function ExpertBookingCard({ state, onPickExpert, onPickSlot, onBack, onCancel }
 }
 
 /* Empty / fresh-chat state: an animated mascot greeting shown before the
-   first user message, instead of a bare welcome bubble. */
+   first user message, instead of a bare welcome bubble.
+   NB: no data-reveal on the root — only the Landing page's observer adds
+   .reveal-in, so inside the app that attribute left this at opacity 0. */
 function EmptyState({ greeting }) {
   return (
-    {/* NB: no data-reveal here — only the Landing page's observer adds
-        .reveal-in, so inside the app the attribute left this at opacity 0. */}
     <div className="ai-empty">
       <div className="ai-empty-mascot">
         <span className="ai-empty-halo" aria-hidden="true" />
