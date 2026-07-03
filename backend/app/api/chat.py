@@ -97,15 +97,31 @@ def _sla_for(level: str) -> datetime:
 # already named their thoughts read as not-listening. The 7B produces them
 # stochastically, so across n drafts we rank the ones that ADVANCE the work
 # above the ones that ask again — deterministic, no extra model call.
-_REASK_PAT = re.compile(
-    r"what (specific )?(thoughts?|feelings?|emotions?)\b[^.?!]*\?|"
+# Scored per SENTENCE: a sentence only counts when it asks for the client's
+# EXISTING material (_REASK_CORE) and is not an advancing technique question
+# (_ADVANCE_OK: evidence, worst case, likelihood, hypotheticals, reframe,
+# friend-perspective, action step) — those are legitimate next steps.
+_REASK_CORE = re.compile(
+    r"what (specific )?(thoughts?|feelings?|emotions?)\b|"
+    r"what (goes|runs) through your (mind|head)|"
     r"\btell me more\b|\bshare more\b|"
     r"can you (tell|describe|share|identify|pick out|give me an example)|"
-    r"when (do|does|did) (it|they|these|those)\b[^.?!]*\?", re.I)
+    r"when (do|does|did)?\s?(it|they|these|those|that|the)\b"
+    r".{0,40}(come up|appear|happen|start)", re.I)
+_ADVANCE_OK = re.compile(
+    r"\bevidence\b|worst case|worst that could|how likely|\bimagine\b|"
+    r"what if\b|\binstead\b|balanced|alternative|reframe|"
+    r"a friend\b|someone you care|willing to|could you try|next step|"
+    r"for and against", re.I)
 
 
 def _reask_count(resp: str) -> int:
-    return len(_REASK_PAT.findall(resp or ""))
+    n = 0
+    for sent in re.split(r"(?<=[.!?])\s+", resp or ""):
+        s = sent.strip()
+        if s and _REASK_CORE.search(s) and not _ADVANCE_OK.search(s):
+            n += 1
+    return n
 
 
 # ── Greeting fast-path ───────────────────────────────────────────────────────
