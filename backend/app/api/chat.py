@@ -1056,7 +1056,16 @@ def chat(body: ChatIn, request: Request,
                           "preflight_pass": True, "preflight_reasons": [],
                           "grounding_score": post_process.grounding_score(
                               fixed, retrieved)}
-                analysis["delivery_rewrite"] = True
+                analysis["delivery_rewrite"] = "rewritten"
+        if _question_count(chosen.get("response") or "") > 0:
+            # Rewrite unavailable/failed → last resort: never ship a question
+            # on a delivery turn. Drop the question sentences, keep the
+            # declaratives (strip_questions falls back to the original when
+            # too little would remain).
+            stripped = post_process.strip_questions(chosen["response"])
+            if stripped != chosen["response"]:
+                chosen = {**chosen, "response": stripped}
+                analysis["delivery_rewrite"] = "stripped"
 
     # Anti-fabrication gate: never auto-send a reply that fails preflight (or
     # falls below the grounding floor, if enabled). Hold it for a clinician

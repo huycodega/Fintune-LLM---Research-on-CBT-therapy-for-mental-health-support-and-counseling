@@ -166,15 +166,18 @@ def strip_questions(text: str) -> str:
 _DELIVER_SYS = (
     "You revise a therapy reply. The client explicitly asked for a direct "
     "analysis with NO more questions. Rewrite the reply so it: keeps the warm, "
-    "first-person tone; contains ZERO question marks; directly delivers the "
-    "concrete breakdown the client asked for, using ONLY facts already present "
-    "in the client's message; ends with a supportive statement. Output ONLY "
-    "the revised reply, under 150 words.")
+    "first-person tone; NEVER uses the '?' character; asks the client for "
+    "NOTHING; directly delivers the concrete breakdown the client asked for "
+    "(e.g. evidence for and against the stated thought), using ONLY facts "
+    "already present in the client's message; ends with a supportive "
+    "statement. Output ONLY the revised reply, under 150 words.")
 
 
 def deliver_rewrite(text: str, client_msg: str) -> str:
     """Return a question-free revision of `text`, or "" when the model is
-    unavailable or the revision fails any guard (caller keeps the original)."""
+    unavailable or the revision fails any guard (caller keeps the original).
+    A revision that still slips in a question gets its question sentences
+    stripped before the guard, so a mostly-good rewrite is salvaged."""
     text = (text or "").strip()
     if not text:
         return ""
@@ -189,6 +192,8 @@ def deliver_rewrite(text: str, client_msg: str) -> str:
         if not gen or gen.get("degraded") or gen.get("mode") == "mock":
             return ""
         out = (gen.get("responses") or [""])[0].strip()
+        if "?" in out:                       # salvage: drop question sentences
+            out = strip_questions(out)
         if out and "?" not in out and 40 <= len(out) <= 1200:
             return out
         return ""
