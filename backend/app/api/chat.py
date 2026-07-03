@@ -177,10 +177,15 @@ def _info_reply(db, u, infos):
                 texts.append(self_data.mood(db, u.id))
             elif info == "screening":
                 texts.append(self_data.screening(db, u.id))
-                # No results yet → don't leave a dead end: invite them with a
-                # one-tap button straight to the Screening page.
+                # No PHQ-9/GAD-7 results yet → don't leave a dead end: invite
+                # them with a one-tap button straight to the Screening page.
+                # NB: mood-only rows (the "log my mood" action writes one) must
+                # NOT count as having results — filter on actual scores.
                 if not (db.query(models.Screening)
-                        .filter_by(user_id=u.id).first()):
+                        .filter(models.Screening.user_id == u.id,
+                                (models.Screening.phq9_score.isnot(None))
+                                | (models.Screening.gad7_score.isnot(None)))
+                        .first()):
                     texts.append(
                         "A quick check-in takes about 3 minutes and gives us "
                         "a baseline we can track together.")
