@@ -87,8 +87,13 @@ def emphasize_llm(text: str) -> str:
         if not gen or gen.get("degraded") or gen.get("mode") == "mock":
             return text
         out = (gen.get("responses") or [""])[0].strip()
-        # Guard: must have added bold and stayed the same reply (no rewrite).
-        if "**" in out and 0.7 <= len(out) / max(1, len(text)) <= 1.4:
+        # Guard: the ONLY permitted change is inserting ** markers. Strip them
+        # and the result must be the exact original text (whitespace-normalised)
+        # — anything else is a rewrite/instruction leak ("Failing the exam: the
+        # thought, belief, assumption, or feeling | …") and gets discarded.
+        def _norm(s: str) -> str:
+            return re.sub(r"\s+", " ", s).strip()
+        if "**" in out and _norm(out.replace("**", "")) == _norm(text):
             return out
         return text
     except Exception:
