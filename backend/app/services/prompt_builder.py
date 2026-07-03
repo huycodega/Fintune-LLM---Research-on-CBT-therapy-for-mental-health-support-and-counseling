@@ -248,6 +248,14 @@ def _format_intake(intake: Optional[Dict]) -> str:
     return "\n".join(parts)
 
 
+# Raw-scrape cruft that slipped into the KB (site navigation, GUID sitemaps).
+# Feeding it to the 7B invites verbatim echo — drop such chunks entirely.
+_JUNK_CHUNK = re.compile(
+    r"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-|"
+    r"Toggle navigation|Site map|Skip to (main )?content|"
+    r"Accessibility\s+Contact Us|Staff Profiles|cookie polic", re.I)
+
+
 def _format_retrieved(items: List[Dict]) -> str:
     if not items:
         return ""
@@ -256,10 +264,16 @@ def _format_retrieved(items: List[Dict]) -> str:
         "NOTE: Use the passages below as background clinical knowledge only.",
         "Do NOT treat them as descriptions of this client's situation.",
     ]
-    for i, it in enumerate(items, 1):
-        src = it.get("source_collection", "?")
+    n = 0
+    for it in items:
         text = it.get("text", "")[:600]
-        lines.append(f"({i}) [{src}] {text}")
+        if _JUNK_CHUNK.search(text):
+            continue                    # navigation/sitemap scrape — useless
+        n += 1
+        src = it.get("source_collection", "?")
+        lines.append(f"({n}) [{src}] {text}")
+    if n == 0:
+        return ""
     return "\n".join(lines)
 
 

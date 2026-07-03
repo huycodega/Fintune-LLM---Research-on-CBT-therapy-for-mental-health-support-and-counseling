@@ -102,6 +102,12 @@ _CRISIS_REQUIRED_HINTS = [
 ]
 
 
+# GUIDs / site-navigation tokens = the model echoed a raw KB scrape.
+_REF_ECHO = re.compile(
+    r"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-|"
+    r"Toggle navigation|Site map|Skip to (main )?content|cookie polic", re.I)
+
+
 def check_draft(draft: Dict, severity: str) -> Tuple[bool, List[str]]:
     """
     Args:
@@ -140,6 +146,11 @@ def check_draft(draft: Dict, severity: str) -> Tuple[bool, List[str]]:
         reasons.append(
             f"Non-standard technique name: '{draft.get('technique')}' "
             f"(not in the canonical CBT set)")
+
+    # Rule 6: reference-material echo — GUIDs / site-navigation cruft means the
+    # model dumped a raw KB scrape instead of answering. Never client-facing.
+    if _REF_ECHO.search(draft.get("response") or ""):
+        reasons.append("Reference-material echo (raw KB scrape in response)")
 
     return (len(reasons) == 0, reasons)
 
