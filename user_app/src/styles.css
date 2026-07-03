@@ -347,6 +347,10 @@ input, textarea, select { font-family: var(--font); }
   overflow: hidden;
   position: relative;
   text-align: center;
+  /* The sidebar is a flex column: without this the card gets COMPRESSED when
+     the nav grows and overflow:hidden clips the plant off the bottom. The
+     sidebar scrolls instead. */
+  flex-shrink: 0;
 }
 /* The nav grew (Journal) — on shorter screens shrink the companion card so
    the plant never falls below the fold. */
