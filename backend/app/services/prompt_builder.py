@@ -284,6 +284,14 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
     if plan:
         base += ("\n- Session plan — advance THIS step in your Plan/Response, "
                  "do not restart earlier steps: " + plan)
+    if analysis.get("delivery_request"):
+        base += (
+            "\n- THE CLIENT EXPLICITLY ASKED YOU TO DELIVER the analysis "
+            "('walk me through it', 'how likely', 'just tell me'). Do NOT ask "
+            "ANY question this turn — no clarifying, no 'can you walk me "
+            "through', no 'what makes you believe'. Give the concrete "
+            "breakdown/steps directly, using what they already told you, and "
+            "END WITH A STATEMENT.")
     facts = (analysis.get("user_facts") or "").strip()
     if facts:
         base += (

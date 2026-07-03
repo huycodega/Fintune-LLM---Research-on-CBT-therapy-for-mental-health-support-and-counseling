@@ -124,6 +124,20 @@ def _reask_count(resp: str) -> int:
     return n
 
 
+# The client explicitly asks for a delivered analysis — any question in the
+# reply is a dodge on such turns, so drafts are ranked by TOTAL question count.
+_DELIVERY_REQ = re.compile(
+    r"\b(walk me through|how likely|what are the odds|just tell me|"
+    r"tell me (straight|directly|honestly)|"
+    r"give me the (odds|evidence|breakdown|steps)|"
+    r"break (it|this|that) down( for me)?|lay it out)\b", re.I)
+
+
+def _question_count(resp: str) -> int:
+    return sum(1 for s in re.split(r"(?<=[.!?])\s+", resp or "")
+               if s.strip().endswith("?"))
+
+
 # ── Greeting fast-path ───────────────────────────────────────────────────────
 # A standalone greeting carries no risk content, so we answer it instantly with
 # a warm opener instead of spinning up the safety gate + agent. The whole
@@ -707,6 +721,13 @@ def chat(body: ChatIn, request: Request,
 
     # ---- L2 / L3: full pipeline ----
     analysis = analyzer.analyze(text, severity=triage["severity"])
+    # The client explicitly asked for a DELIVERED analysis ("walk me through
+    # it", "how likely") — pin a no-questions directive into the prompt and
+    # (below) rank question-y drafts last. The 7B otherwise bounces the request
+    # back ("can you walk me through it?").
+    delivery_req = bool(_DELIVERY_REQ.search(text))
+    if delivery_req:
+        analysis["delivery_request"] = True
 
     # session context: prior count + last technique + durable memory +
     # the running history of THIS conversation thread (multi-turn).
@@ -915,9 +936,17 @@ def chat(body: ChatIn, request: Request,
     # order is untouched.
     named_given = bool(prompt_builder._format_named_thoughts(
         session_ctx, scrubbed_text))
-    if drafts and named_given:
+
+    def _draft_penalty(d):
+        resp = d.get("response") or ""
+        pen = _reask_count(resp) if named_given else 0
+        if delivery_req:      # any question is a dodge on a delivery turn
+            pen += _question_count(resp)
+        return pen
+
+    if drafts and (named_given or delivery_req):
         drafts.sort(key=lambda d: (0 if d.get("preflight_pass") else 1,
-                                   _reask_count(d.get("response") or ""),
+                                   _draft_penalty(d),
                                    -(d.get("grounding_score") or 0.0)))
 
     # ---- L2 vent-release valve (default: clinician pre-approval) ----
@@ -1006,8 +1035,7 @@ def chat(body: ChatIn, request: Request,
     chosen = max(
         drafts,
         key=lambda d: (1 if d.get("preflight_pass") else 0,
-                       -_reask_count(d.get("response") or "")
-                       if named_given else 0,
+                       -_draft_penalty(d),
                        d.get("grounding_score", 0.0)),
     ) if drafts else None
 
