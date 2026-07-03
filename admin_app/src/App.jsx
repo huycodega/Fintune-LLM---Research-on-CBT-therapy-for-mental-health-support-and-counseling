@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
 import { getUser, clearSession } from "./api.js";
 import Login from "./pages/Login.jsx";
 import AppShell from "./admin/AppShell.jsx";
@@ -66,6 +66,28 @@ export default function App() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // Soft staggered reveal of the outermost cards on page change — the same
+  // feel as the user app, so the two dashboards read as one product.
+  useLayoutEffect(() => {
+    if (!user) return;
+    const sel = ".stat-card, .panel, .la-card, .dashboard-kpi, .detail-card";
+    const all = Array.from(document.querySelectorAll(sel));
+    const items = all.filter((el) => !all.some((o) => o !== el && o.contains(el)));
+    items.forEach((el, i) => {
+      el.classList.add("u-reveal");
+      el.style.setProperty("--rd", `${Math.min(i, 9) * 0.05}s`);
+    });
+    const raf = requestAnimationFrame(() =>
+      items.forEach((el) => el.classList.add("u-reveal-in")));
+    return () => {
+      cancelAnimationFrame(raf);
+      items.forEach((el) => {
+        el.classList.remove("u-reveal", "u-reveal-in");
+        el.style.removeProperty("--rd");
+      });
+    };
+  }, [page, user]);
 
   function logout() { clearSession(); setUser(null); }
   function nav(p, userId = null) { setSearch(""); setSelectedUserId(userId); go(PAGE_PATHS[p] || "/"); }

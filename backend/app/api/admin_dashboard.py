@@ -31,8 +31,18 @@ def _mask(email):
     return f"{(n[:2] if len(n) > 2 else n[:1])}***@{d}"
 
 
-def _metric(v, change=0.0):
+def _metric(v, change=None):
+    """change=None hides the trend badge in the UI — a badge only shows when a
+    REAL baseline exists (no more hardcoded "↑ 0%")."""
     return {"value": v, "change_percent": change}
+
+
+def _pct(now_v, prev_v):
+    """Real percent change vs a baseline; None when there is nothing honest to
+    compare against (baseline zero/unknown)."""
+    if prev_v <= 0:
+        return None
+    return round((now_v - prev_v) / prev_v * 100.0, 1)
 
 
 def _safe(fn, default):
@@ -61,11 +71,34 @@ def summary(_: dict = Depends(auth.require_admin), db: DbSession = Depends(get_d
     pub_res = _safe(lambda: db.query(models.Resource).filter_by(status="published").count(), 0)
     pub_les = _safe(lambda: db.query(models.Lesson).filter_by(status="published").count(), 0)
 
+    # Real trend baselines (week-over-week for user growth & high-risk flow;
+    # yesterday for screenings). Point-in-time gauges (open cases, pending
+    # moderation, published content) get no badge — there is no honest delta.
+    now = datetime.now(timezone.utc)
+    week_ago, two_weeks_ago = now - timedelta(days=7), now - timedelta(days=14)
+    users_week_ago = _safe(lambda: db.query(models.User)
+                           .filter(models.User.role == "user",
+                                   models.User.created_at < week_ago).count(), 0)
+    risk_this_week = _safe(lambda: db.query(models.Session.user_id)
+                           .filter(models.Session.triage_level.in_(("L0", "L1")),
+                                   models.Session.created_at >= week_ago)
+                           .distinct().count(), 0)
+    risk_prev_week = _safe(lambda: db.query(models.Session.user_id)
+                           .filter(models.Session.triage_level.in_(("L0", "L1")),
+                                   models.Session.created_at >= two_weeks_ago,
+                                   models.Session.created_at < week_ago)
+                           .distinct().count(), 0)
+    yest_screen = _safe(lambda: db.query(models.Screening)
+                        .filter(func.date(models.Screening.created_at)
+                                == today - timedelta(days=1)).count(), 0)
+
     return {
-        "total_users": _metric(total_users),
+        "total_users": _metric(total_users, _pct(total_users, users_week_ago)),
         "active_users": _metric(active_users),
-        "high_risk_users": _metric(high_risk),
-        "today_screenings": _metric(today_screen),
+        "high_risk_users": _metric(high_risk,
+                                   _pct(risk_this_week, risk_prev_week)),
+        "today_screenings": _metric(today_screen,
+                                    _pct(today_screen, yest_screen)),
         "pending_ai_moderations": _metric(pending_mod),
         "open_cases": _metric(open_cases),
         "published_resources": _metric(pub_res),
