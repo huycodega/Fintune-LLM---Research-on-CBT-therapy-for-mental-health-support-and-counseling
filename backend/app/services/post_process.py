@@ -146,16 +146,28 @@ def scrub_unknown_names(text: str, allowed: set) -> str:
     return _VOCATIVE_LEAD.sub(_lead, out)
 
 
+# Safety check-ins are the ONE kind of question that must survive every
+# question-stripping context (listen mode, delivery turns): a well-being probe
+# is never a dodge.
+_SAFETY_Q = re.compile(
+    r"are you (safe|okay|ok|alright)( right now)?|do you feel safe|"
+    r"is there (someone|anyone) (with you|around|you can (call|talk to|reach))|"
+    r"do you have (someone|anyone|support)|can you (stay|keep yourself) safe",
+    re.I)
+
+
 def strip_questions(text: str) -> str:
-    """Listen-only safety net: drop EVERY interrogative sentence so the reply
-    stays pure validation, keeping the declarative parts. Falls back to the
-    original when too little would remain, so we never return an empty or
-    butchered reply."""
+    """Listen-only / delivery-turn safety net: drop interrogative sentences so
+    the reply stays pure validation or delivered analysis — EXCEPT safety
+    check-ins, which always survive. Falls back to the original when too
+    little would remain, so we never return an empty or butchered reply."""
     t = (text or "").strip()
     if "?" not in t:
         return t
     parts = re.split(r"(?<=[.!?])\s+", t)
-    kept = " ".join(p for p in parts if not p.strip().endswith("?")).strip()
+    kept = " ".join(
+        p for p in parts
+        if not p.strip().endswith("?") or _SAFETY_Q.search(p)).strip()
     return kept if len(kept) >= 20 else t
 
 
