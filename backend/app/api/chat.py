@@ -102,7 +102,7 @@ def _sla_for(level: str) -> datetime:
 # (_ADVANCE_OK: evidence, worst case, likelihood, hypotheticals, reframe,
 # friend-perspective, action step) — those are legitimate next steps.
 _REASK_CORE = re.compile(
-    r"what (specific )?(thoughts?|feelings?|emotions?)\b|"
+    r"what (specific )?(thoughts?|feelings?|emotions?|fears?|worries|concerns?)\b|"
     r"what (goes|runs) through your (mind|head)|"
     r"\btell me more\b|\bshare more\b|"
     r"can you (tell|describe|share|identify|pick out|give me an example)|"
