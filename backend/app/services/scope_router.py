@@ -128,6 +128,20 @@ _RECO_VETO = re.compile(
     r"help me (choose|pick|find|decide)|based on (my|how i))\b", re.I)
 
 
+# Mid-work continuation markers — the client is resuming an exercise/thread
+# the AGENT started ("you said we'd look at the evidence", "let's continue").
+# These must never be intercepted by the info-gate (keyword OR semantic): a
+# memory recap in the middle of a thought record derails the work.
+_CONTINUATION_VETO = re.compile(
+    r"\b(you (said|mentioned|told me|suggested|promised)|"
+    r"we'?d\b|we were (going to|about to|doing|working)|"
+    r"let'?s (continue|keep going|get back|pick up)|"
+    r"(go|get|come) back to|pick up where|as we discussed|"
+    r"continue (the|our|with|where)|"
+    r"the (evidence|exercise|technique|thought record)|"
+    r"that (exercise|technique|thought record))\b", re.I)
+
+
 # Privacy / data-deletion requests. Checked FIRST and answered alone — a
 # "delete my screening" must NEVER dump the data as if it were a read request.
 _PRIVACY_PAT = re.compile(
@@ -269,6 +283,12 @@ def info_intents(text: str) -> list:
     low = (text or "").strip().lower()
     if not low:
         return []
+    # Mid-work continuation ("you said we'd look at the evidence", "let's
+    # continue the exercise") must reach the AGENT — an info-gate recap would
+    # hijack the thread right in the middle of a technique. A standalone
+    # "what did we talk about?" (no continuation markers) still recalls fast.
+    if _CONTINUATION_VETO.search(low):
+        return []
     # Privacy / deletion requests take precedence — never dump the data, and win
     # over the reco-veto ("delete ... based on ...").
     if _PRIVACY_PAT.search(low):
@@ -386,7 +406,7 @@ def info_intents_smart(text: str) -> list:
         return kw
     low = (text or "").strip().lower()
     if (not low or _DISTRESS_VETO.search(low) or _PERSONAL_PAT.search(low)
-            or _RECO_VETO.search(low)):
+            or _RECO_VETO.search(low) or _CONTINUATION_VETO.search(low)):
         return []
     if not _INFO_LOOKS.search(low):
         return []
