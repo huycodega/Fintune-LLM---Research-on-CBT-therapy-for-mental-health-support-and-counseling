@@ -105,7 +105,8 @@ _REASK_CORE = re.compile(
     r"what (specific )?(thoughts?|feelings?|emotions?|fears?|worries|concerns?)\b|"
     r"what (goes|runs) through your (mind|head)|"
     r"\btell me more\b|\bshare more\b|"
-    r"can you (tell|describe|share|identify|pick out|give me an example)|"
+    r"can you (tell|describe|share|identify|pick out|give me an example|"
+    r"write down|note down|jot down|walk me through)|"
     r"when (do|does|did)?\s?(it|they|these|those|that|the)\b"
     r".{0,40}(come up|appear|happen|start)", re.I)
 _ADVANCE_OK = re.compile(
