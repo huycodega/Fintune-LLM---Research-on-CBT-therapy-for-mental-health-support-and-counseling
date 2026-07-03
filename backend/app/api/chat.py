@@ -1040,6 +1040,24 @@ def chat(body: ChatIn, request: Request,
                        d.get("grounding_score", 0.0)),
     ) if drafts else None
 
+    # Delivery turn but even the best draft still dodges with questions (the
+    # 7B's drafts correlate) → ONE guarded rewrite call. Must come back with
+    # zero question marks AND re-pass preflight, else the original stands.
+    if (chosen and delivery_req
+            and _question_count(chosen.get("response") or "") > 0):
+        fixed = post_process.deliver_rewrite(
+            chosen.get("response") or "", scrubbed_text)
+        if fixed:
+            fixed = post_process.scrub_unknown_names(fixed, _allowed_names)
+            ok, reasons = preflight.check_all(
+                [{**chosen, "response": fixed}], triage["severity"])[0]
+            if ok:
+                chosen = {**chosen, "response": fixed,
+                          "preflight_pass": True, "preflight_reasons": [],
+                          "grounding_score": post_process.grounding_score(
+                              fixed, retrieved)}
+                analysis["delivery_rewrite"] = True
+
     # Anti-fabrication gate: never auto-send a reply that fails preflight (or
     # falls below the grounding floor, if enabled). Hold it for a clinician
     # instead — safe by construction (routes to a human, never bypasses one).

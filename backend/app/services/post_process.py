@@ -159,6 +159,43 @@ def strip_questions(text: str) -> str:
     return kept if len(kept) >= 20 else t
 
 
+# Rewrite pass for delivery turns ("just lay it out for me") whose best draft
+# STILL dodges with questions — one bounded revision call. Strictly guarded:
+# the result must contain zero question marks and a sane length, and the
+# caller re-runs preflight; any failure keeps the original draft.
+_DELIVER_SYS = (
+    "You revise a therapy reply. The client explicitly asked for a direct "
+    "analysis with NO more questions. Rewrite the reply so it: keeps the warm, "
+    "first-person tone; contains ZERO question marks; directly delivers the "
+    "concrete breakdown the client asked for, using ONLY facts already present "
+    "in the client's message; ends with a supportive statement. Output ONLY "
+    "the revised reply, under 150 words.")
+
+
+def deliver_rewrite(text: str, client_msg: str) -> str:
+    """Return a question-free revision of `text`, or "" when the model is
+    unavailable or the revision fails any guard (caller keeps the original)."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    try:
+        from app.services import llm_client
+        gen = llm_client.generate(
+            [{"role": "system", "content": _DELIVER_SYS},
+             {"role": "user",
+              "content": f"[CLIENT'S REQUEST]\n{client_msg}\n\n"
+                         f"[REPLY TO REVISE]\n{text}"}],
+            n=1, temperature=0.2)
+        if not gen or gen.get("degraded") or gen.get("mode") == "mock":
+            return ""
+        out = (gen.get("responses") or [""])[0].strip()
+        if out and "?" not in out and 40 <= len(out) <= 1200:
+            return out
+        return ""
+    except Exception:
+        return ""
+
+
 def parse_all(raws: List[str]) -> List[Dict]:
     parsed = [parse_draft(r) for r in raws]
     seen, out = set(), []
