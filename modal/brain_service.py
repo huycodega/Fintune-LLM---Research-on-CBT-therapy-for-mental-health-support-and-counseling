@@ -80,6 +80,9 @@ MIN_CONTAINERS = int(os.environ.get("MIN_CONTAINERS", "0"))
 EMBEDDER_REPO = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-m3")
 RERANKER_REPO = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 EMBED_DIM = 1024
+# NLI grounding scorer (~184M) — ran on the Railway CPU before, where a single
+# turn's (sentences × chunks) batch took 10+ MINUTES; on this GPU it's <1s.
+NLI_MODEL_ID = os.environ.get("NLI_MODEL", "cross-encoder/nli-deberta-v3-base")
 
 hf_secret = modal.Secret.from_name("huggingface", required_keys=["HF_TOKEN"])
 model_cache = modal.Volume.from_name("cbt-model-cache", create_if_missing=True)
@@ -287,8 +290,18 @@ class CBTBrainService:
         self.embedder = SentenceTransformer(EMBEDDER_REPO, device="cuda")
         self.reranker = CrossEncoder(RERANKER_REPO, device="cuda",
                                      max_length=512)
-        print(f"RAG sidecars ready ({EMBEDDER_REPO}, {RERANKER_REPO}) "
-              f"in {time.time() - t0:.1f}s")
+        # NLI grounding scorer + entailment-index autodetect (same logic as
+        # backend/app/services/hallucination_nli.py).
+        self.nli = CrossEncoder(NLI_MODEL_ID, device="cuda", max_length=384)
+        try:
+            id2label = self.nli.model.config.id2label
+            self.nli_entail_idx = next(
+                i for i, label in id2label.items()
+                if str(label).lower().startswith("entail"))
+        except (AttributeError, StopIteration):
+            self.nli_entail_idx = 1
+        print(f"RAG sidecars ready ({EMBEDDER_REPO}, {RERANKER_REPO}, "
+              f"{NLI_MODEL_ID}) in {time.time() - t0:.1f}s")
 
         self.llm = LLM(
             model=HF_REPO,
@@ -382,6 +395,25 @@ class CBTBrainService:
             "scores": [float(s) for s in scores],   # same order as candidates
             "latency_ms": round((time.time() - t0) * 1000),
             "model": RERANKER_REPO,
+        }
+
+    # ── Role 6: NLI grounding scorer (raw logits; backend does the math) ────
+    @modal.method()
+    def score(self, pairs: list) -> dict:
+        t0 = time.time()
+        if not pairs:
+            return {"scores": [], "entail_idx": self.nli_entail_idx,
+                    "latency_ms": 0, "model": NLI_MODEL_ID}
+        tuples = [(p[0], p[1]) for p in pairs]
+        with self._gpu_lock:
+            logits = self.nli.predict(tuples, batch_size=32,
+                                      convert_to_numpy=True,
+                                      show_progress_bar=False)
+        return {
+            "scores": [[float(x) for x in row] for row in logits.tolist()],
+            "entail_idx": self.nli_entail_idx,
+            "latency_ms": round((time.time() - t0) * 1000),
+            "model": NLI_MODEL_ID,
         }
 
     # ── Role 3: agent orchestrator (cbt-agent /chat contract) ───────────────
@@ -488,16 +520,26 @@ def rerank(body: dict):
 
 
 @app.function(image=image)
+@modal.fastapi_endpoint(method="POST")
+def score(body: dict):
+    """POST /score — { pairs: [[premise, hypothesis], …] } → { scores,
+    entail_idx } (raw NLI logits; the backend keeps its own softmax/mean)."""
+    svc = CBTBrainService()
+    return svc.score.remote(pairs=body.get("pairs", []))
+
+
+@app.function(image=image)
 @modal.fastapi_endpoint(method="GET")
 def health():
-    """GET /health — shared by all five roles."""
+    """GET /health — shared by all six roles."""
     return {
         "status": "ok",
         "model": HF_REPO,
         "engine": "vllm",
         "gpu": GPU,
         "roles": ["primary_responder", "safety_crisis_gate",
-                  "agent_orchestrator", "embedder", "reranker"],
+                  "agent_orchestrator", "embedder", "reranker",
+                  "nli_grounding"],
     }
 
 

@@ -21,10 +21,12 @@ Why this model:
 If the model can't be loaded (offline / OOM / etc.), we fall back to
 the lexical-overlap baseline so the pipeline stays alive.
 """
+import json
 import logging
 import os
 import re
 import threading
+import urllib.request
 from typing import List, Optional, Tuple
 
 from app.core.config import settings
@@ -82,9 +84,36 @@ def _load() -> Optional[Tuple[object, int]]:
             return _model
 
 
+def _remote_predict(pairs: list):
+    """Score the NLI pairs on the Modal brain GPU (role 6). Returns
+    (scores, entail_idx) or None on ANY failure — the caller then uses the
+    lexical fallback, NEVER the local CPU model (a single turn's batch took
+    10+ minutes on the small Railway container; that path stays dead once a
+    remote scorer is configured)."""
+    url = getattr(settings, "modal_nli_endpoint", None)
+    if not url:
+        return None
+    try:
+        body = json.dumps({"pairs": [[p, h] for p, h in pairs]}).encode()
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            out = json.loads(r.read().decode())
+        scores = out.get("scores")
+        if isinstance(scores, list) and len(scores) == len(pairs):
+            return scores, int(out.get("entail_idx", 1))
+    except Exception as e:
+        log.warning("Remote NLI failed (%s) — lexical fallback", e)
+    return None
+
+
 def preload() -> None:
     """Load the NLI model at app startup so it never blocks the first chat
-    request mid-pipeline. Best-effort; safe to call when disabled (no-op)."""
+    request mid-pipeline. Best-effort; no-op when disabled OR when a remote
+    scorer is configured (the local model must never load then)."""
+    if getattr(settings, "modal_nli_endpoint", None):
+        return
     _load()
 
 
@@ -144,11 +173,6 @@ def grounding_nli(response: str, retrieved: List[dict],
     if not response or not retrieved:
         return 0.0
 
-    loaded = _load()
-    if loaded is None or loaded[0] is None:
-        return _lexical_fallback(response, retrieved)
-    model, entail_idx = loaded
-
     sentences = _split_sentences(response)
     if not sentences:
         return 0.0
@@ -164,13 +188,29 @@ def grounding_nli(response: str, retrieved: List[dict],
             return 1.0   # no factual claim to ground → not a hallucination
 
     pairs = [(chunk, sent) for sent in sentences for chunk in chunks]
-    try:
-        # CrossEncoder.predict returns shape (N, 3) for NLI heads.
-        scores = model.predict(pairs, batch_size=8,
-                                convert_to_numpy=True, show_progress_bar=False)
-    except Exception as e:
-        log.warning("NLI predict failed (%s) — lexical fallback", e)
+
+    # Prefer the Modal brain GPU scorer (role 6: /score). When it's configured
+    # but a call fails, drop straight to LEXICAL — the local CPU model is only
+    # for installs with no remote scorer at all (one turn's batch took 10+
+    # minutes on the small Railway container).
+    remote = _remote_predict(pairs)
+    if remote is not None:
+        scores, entail_idx = remote
+    elif getattr(settings, "modal_nli_endpoint", None):
         return _lexical_fallback(response, retrieved)
+    else:
+        loaded = _load()
+        if loaded is None or loaded[0] is None:
+            return _lexical_fallback(response, retrieved)
+        model, entail_idx = loaded
+        try:
+            # CrossEncoder.predict returns shape (N, 3) for NLI heads.
+            scores = model.predict(pairs, batch_size=8,
+                                    convert_to_numpy=True,
+                                    show_progress_bar=False)
+        except Exception as e:
+            log.warning("NLI predict failed (%s) — lexical fallback", e)
+            return _lexical_fallback(response, retrieved)
 
     # scores[i] = logits over 3 NLI classes for pair i.
     # We want entailment probability via softmax.

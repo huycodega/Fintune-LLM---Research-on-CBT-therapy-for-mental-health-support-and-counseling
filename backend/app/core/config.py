@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # explicit MODAL_*_ENDPOINT > MODAL_BRAIN_WORKSPACE > MODAL_WORKSPACE — so
     # deleting this one var falls the system back to the per-service apps.
     modal_brain_workspace: Optional[str] = None
+    # NLI grounding scorer endpoint (brain role 6). Derived from
+    # MODAL_BRAIN_WORKSPACE; when unset AND no local model, lexical fallback.
+    modal_nli_endpoint: Optional[str] = None
 
     # ---- safety gate — Huysun29/cbt-qwen2.5-7b-v2 (QWen2.5-7B fine-tuned v2) ----
     # When MODAL_SAFETY_ENDPOINT is set, calls the Modal-hosted QWen model.
@@ -305,6 +308,7 @@ class Settings(BaseSettings):
                 "modal_embedder_health_endpoint": b + "health.modal.run",
                 "modal_reranker_endpoint":        b + "rerank.modal.run",
                 "modal_reranker_health_endpoint": b + "health.modal.run",
+                "modal_nli_endpoint":             b + "score.modal.run",
             }
             for field, url in brain_derived.items():
                 if not getattr(self, field):
