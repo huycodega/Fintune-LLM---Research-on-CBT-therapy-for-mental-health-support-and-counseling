@@ -850,6 +850,10 @@ def _rec_footer(state: Dict) -> str:
         if ln not in seen:
             seen.add(ln)
             uniq.append(ln)
+    # A recommendation is a nudge, not a catalogue: cap at 3. (Explicit
+    # "what lessons are there?" list-alls are served by the info-gate with
+    # cards, so nothing is lost by trimming here.)
+    uniq = uniq[:3]
     return "\n\nFrom your library, these might help:\n" + "\n".join(uniq)
 
 

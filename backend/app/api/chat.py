@@ -131,7 +131,10 @@ _DELIVERY_REQ = re.compile(
     r"\b(walk me through|how likely|what are the odds|just tell me|"
     r"tell me (straight|directly|honestly)|"
     r"give me the (odds|evidence|breakdown|steps)|"
-    r"break (it|this|that) down( for me)?|lay it out)\b", re.I)
+    r"break (it|this|that) down( for me)?|lay it out|"
+    r"(what|which) (small |one |single |simple )?"
+    r"(habits?|steps?|changes?|things?|exercises?|techniques?) "
+    r"(could|can|would|might|should) (help|work|i try))\b", re.I)
 
 
 def _question_count(resp: str) -> int:
