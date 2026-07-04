@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Modal deploy names are fixed: cbt-{llm,safety,agent} with functions
     # generate/assess/chat + health.
     modal_workspace: Optional[str] = None
+    # ---- Consolidated "brain" (one vLLM container, all five AI roles) ----
+    # Set MODAL_BRAIN_WORKSPACE to the workspace running modal/brain_service.py
+    # and EVERY endpoint is derived from the single cbt-brain app. Precedence:
+    # explicit MODAL_*_ENDPOINT > MODAL_BRAIN_WORKSPACE > MODAL_WORKSPACE — so
+    # deleting this one var falls the system back to the per-service apps.
+    modal_brain_workspace: Optional[str] = None
 
     # ---- safety gate — Huysun29/cbt-qwen2.5-7b-v2 (QWen2.5-7B fine-tuned v2) ----
     # When MODAL_SAFETY_ENDPOINT is set, calls the Modal-hosted QWen model.
@@ -282,6 +288,28 @@ class Settings(BaseSettings):
         """When MODAL_WORKSPACE is set, fill any Modal endpoint that wasn't given
         explicitly. Switching Modal accounts then only needs one env var.
         Deploy names are fixed by the modal/*_service.py apps."""
+        # Consolidated brain first: one workspace name → every role served by
+        # the single cbt-brain app. Explicit endpoints (already set) still win;
+        # anything the brain fills is skipped by the per-service pass below.
+        brain = (self.modal_brain_workspace or "").strip()
+        if brain:
+            b = f"https://{brain}--cbt-brain-"
+            brain_derived = {
+                "modal_llm_endpoint":             b + "generate.modal.run",
+                "modal_health_endpoint":          b + "health.modal.run",
+                "modal_safety_endpoint":          b + "assess.modal.run",
+                "modal_safety_health_endpoint":   b + "health.modal.run",
+                "modal_agent_endpoint":           b + "chat.modal.run",
+                "modal_agent_health_endpoint":    b + "health.modal.run",
+                "modal_embedder_endpoint":        b + "embed.modal.run",
+                "modal_embedder_health_endpoint": b + "health.modal.run",
+                "modal_reranker_endpoint":        b + "rerank.modal.run",
+                "modal_reranker_health_endpoint": b + "health.modal.run",
+            }
+            for field, url in brain_derived.items():
+                if not getattr(self, field):
+                    setattr(self, field, url)
+
         ws = (self.modal_workspace or "").strip()
         if not ws:
             return self
