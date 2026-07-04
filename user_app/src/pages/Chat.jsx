@@ -95,7 +95,9 @@ function mapServerMessages(messages) {
       return { role: "ai", time: fmtTime(m.created_at), text: m.content };
     // system notice (crisis / pending_review / rejected)
     return { role: "ai", time: fmtTime(m.created_at), text: m.content,
-             crisis: m.status === "crisis" };
+             crisis: m.status === "crisis",
+             // keep the id so a reopened thread can RESUME the approval poll
+             pendingSid: m.status === "pending_review" ? m.session_id : undefined };
   });
 }
 
@@ -777,8 +779,18 @@ export default function Chat({ onNav }) {
       const r = await api.getConversation(cid);
       const mapped = mapServerMessages(r.messages);
       // The welcome greeting always leads the thread — reopened ones too.
-      setMessages(mapped.length ? [...WELCOME, ...mapped] : WELCOME);
+      const msgs = mapped.length ? [...WELCOME, ...mapped] : WELCOME;
+      setMessages(msgs);
       setActiveId(cid);
+      // RESUME watching an outstanding clinician review. The send-time poll
+      // dies with the page (F5 / thread switch), so an approval landing after
+      // that never appeared without a manual reload.
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+      pendingRef.current = null;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].pendingSid) { startPolling(msgs[i].pendingSid, i); break; }
+      }
       // Restore the 🎧 toggle from the SERVER (durable per-thread state) —
       // localStorage alone went stale whenever the backend changed the mode.
       if (typeof r.listen_active === "boolean") {
