@@ -44,6 +44,7 @@ affordable, unlike keeping three A100s hot).
 import json
 import os
 import re
+import threading
 import time
 
 import modal
@@ -262,8 +263,14 @@ def _parse_tool_calls(raw: str):
     scaledown_window=300,
     timeout=900,
     min_containers=MIN_CONTAINERS,
+    # ONE engine only. A chat turn is 5-15 SEQUENTIAL brain calls; without
+    # these two knobs Modal treats each call that lands while the container
+    # is busy as demand for a NEW container → every call waits on a ~2-min
+    # cold boot → 10-minute turns. Queue into the warm engine instead.
+    max_containers=1,
     volumes={"/root/.cache/huggingface": model_cache},
 )
+@modal.concurrent(max_inputs=16)
 class CBTBrainService:
     @modal.enter()
     def load(self):
@@ -291,6 +298,12 @@ class CBTBrainService:
             enforce_eager=ENFORCE_EAGER,
         )
         self.tokenizer = self.llm.get_tokenizer()
+        # The sync vLLM engine (and the sentence-transformers models) are not
+        # thread-safe: with @modal.concurrent the container ACCEPTS calls in
+        # parallel, and this lock lines them up on the GPU one by one. Each
+        # sub-call is 0.3-3 s, so the queue drains fast — far cheaper than a
+        # 2-minute cold boot per call.
+        self._gpu_lock = threading.Lock()
         print(f"cbt-brain ready ({HF_REPO}, gpu={GPU}, eager={ENFORCE_EAGER}) "
               f"in {time.time() - t0:.1f}s")
 
@@ -305,7 +318,8 @@ class CBTBrainService:
             stop=stop,
             truncate_prompt_tokens=truncate,
         )
-        outs = self.llm.generate([prompt], params)
+        with self._gpu_lock:
+            outs = self.llm.generate([prompt], params)
         return [o.text for o in outs[0].outputs]
 
     # ── Role 1: responder (cbt-llm /generate contract) ──────────────────────
@@ -345,8 +359,9 @@ class CBTBrainService:
         t0 = time.time()
         if not texts:
             return {"vectors": [], "dim": EMBED_DIM, "latency_ms": 0}
-        vecs = self.embedder.encode(
-            texts, normalize_embeddings=True, convert_to_numpy=True)
+        with self._gpu_lock:
+            vecs = self.embedder.encode(
+                texts, normalize_embeddings=True, convert_to_numpy=True)
         return {
             "vectors": [[float(x) for x in row] for row in vecs.tolist()],
             "dim": int(vecs.shape[1]),
@@ -361,7 +376,8 @@ class CBTBrainService:
         if not candidates:
             return {"scores": [], "latency_ms": 0}
         pairs = [(query, c) for c in candidates]
-        scores = self.reranker.predict(pairs)       # raw logits
+        with self._gpu_lock:
+            scores = self.reranker.predict(pairs)   # raw logits
         return {
             "scores": [float(s) for s in scores],   # same order as candidates
             "latency_ms": round((time.time() - t0) * 1000),
