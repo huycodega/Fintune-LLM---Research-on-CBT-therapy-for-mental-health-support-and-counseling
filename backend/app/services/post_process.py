@@ -106,6 +106,10 @@ def emphasize_llm(text: str) -> str:
 # words that look like vocatives but aren't names (discourse markers, days…).
 _VOCATIVE = re.compile(r",\s+([A-Z][a-z]{1,20})(?=[.!?,;:])")
 _VOCATIVE_LEAD = re.compile(r"(^|(?<=[.!?])\s)([A-Z][a-z]{1,20}),\s+(\w)")
+# Greeting form: "Hi Faith," / "Hello Ryan." — the name hides behind the
+# greeting word, so neither pattern above sees it.
+_VOCATIVE_GREET = re.compile(
+    r"\b(Hi|Hello|Hey|Dear)\s+([A-Z][a-z]{1,20})(?=[,.!?;:])")
 _NOT_NAMES = {
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
     "sunday", "january", "february", "march", "april", "may", "june", "july",
@@ -122,6 +126,11 @@ _NOT_NAMES = {
     "when", "whenever", "while", "once", "perhaps", "maybe", "today",
     "tonight", "tomorrow", "yesterday", "please", "granted", "look",
     "listen", "breathe", "notice", "start", "meantime", "great", "good",
+    # greeting-vocative non-names ("Hi There," / "Hello Everyone,")
+    "everyone", "friend", "friends", "all", "team", "folks", "again",
+    # greeting words themselves — "Hi, it sounds tough." must keep its Hi
+    "hi", "hello", "hey", "dear", "thanks", "welcome", "sorry", "sure",
+    "right", "absolutely", "understood",
 }
 
 
@@ -143,7 +152,14 @@ def scrub_unknown_names(text: str, allowed: set) -> str:
             return m.group(0)
         # drop the name, keep the sentence boundary, re-capitalise what follows
         return m.group(1) + m.group(3).upper()
-    return _VOCATIVE_LEAD.sub(_lead, out)
+    out = _VOCATIVE_LEAD.sub(_lead, out)
+
+    def _greet(m):
+        name = m.group(2).lower()
+        if name in allowed or name in _NOT_NAMES:
+            return m.group(0)
+        return m.group(1)          # "Hi Faith," → "Hi,"
+    return _VOCATIVE_GREET.sub(_greet, out)
 
 
 # Safety check-ins are the ONE kind of question that must survive every
