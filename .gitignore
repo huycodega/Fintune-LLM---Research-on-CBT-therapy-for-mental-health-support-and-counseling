@@ -71,3 +71,4 @@ backend/app/**/__pycache__/
 # Agent eval artifacts
 backend/agent_eval*.jsonl
 backend/_eval*.log
+backend/scripts/dpo_data/
