@@ -50,6 +50,11 @@ def parse_draft(raw: str) -> Dict:
     well = bool(tech and resp)
     if not resp:
         resp = raw.strip()
+    # Unwrap a fully-quoted reply ("...") — a generation artifact that reads
+    # oddly to users AND let trailing ?" evade the question counters.
+    if len(resp) >= 2 and resp[0] == '"' and resp[-1] == '"' \
+            and '"' not in resp[1:-1]:
+        resp = resp[1:-1].strip()
     return {
         "technique": tech or "(unparsed)",
         "rationale": rat,
@@ -183,7 +188,8 @@ def strip_questions(text: str) -> str:
     parts = re.split(r"(?<=[.!?])\s+", t)
     kept = " ".join(
         p for p in parts
-        if not p.strip().endswith("?") or _SAFETY_Q.search(p)).strip()
+        if not p.strip().rstrip('"\'”’»)]').endswith("?")
+        or _SAFETY_Q.search(p)).strip()
     return kept if len(kept) >= 20 else t
 
 

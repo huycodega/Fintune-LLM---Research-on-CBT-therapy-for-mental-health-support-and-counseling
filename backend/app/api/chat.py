@@ -143,8 +143,10 @@ _DELIVERY_REQ = re.compile(
 
 
 def _question_count(resp: str) -> int:
+    # rstrip closing quotes/brackets first — the model sometimes wraps the
+    # whole reply in quotes and a trailing ?" evaded the counter
     return sum(1 for s in re.split(r"(?<=[.!?])\s+", resp or "")
-               if s.strip().endswith("?"))
+               if s.strip().rstrip('"\'”’»)]').endswith("?"))
 
 
 # ── Greeting fast-path ───────────────────────────────────────────────────────
