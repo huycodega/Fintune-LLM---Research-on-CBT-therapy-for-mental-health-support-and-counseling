@@ -134,6 +134,9 @@ _DELIVERY_REQ = re.compile(
     r"break (it|this|that) down( for me)?|lay it out|"
     r"help me (choose|pick|decide|narrow (it |this )?down)|"
     r"(choose|pick|decide) (one |it |that )?for me|"
+    r"no sugar\s?coating|be honest with me|level with me|"
+    r"cut to the chase|(a )?straight answer|skip the questions|"
+    r"no more questions|"
     r"(what|which) (small |one |single |simple )?"
     r"(habits?|steps?|changes?|things?|exercises?|techniques?) "
     r"(could|can|would|might|should) (help|work|i try))\b", re.I)

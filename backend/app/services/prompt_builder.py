@@ -408,11 +408,19 @@ _QUOTED_THOUGHT = re.compile(r'["“]([^"”]{3,80})["”]')
 # won't make it into the top tier" IS the named thought, quotes or not (the
 # quoted-only rule let a six-turn re-ask loop through in live testing).
 _STATED_THOUGHT = re.compile(
-    r"\bi\s*(?:'m|am|’m)?\s*(?:really\s+|so\s+|just\s+|quite\s+|very\s+)?"
-    r"(?:afraid|scared|worried|terrified|stressed|anxious)\s+"
+    r"\bi\s*(?:'m|am|’m|'ve| have)?\s*(?:really\s+|so\s+|just\s+|quite\s+|"
+    r"very\s+|started\s+|been\s+)?"
+    r"(?:afraid|scared|worried|terrified|stressed|anxious|convinced|certain|"
+    r"sure|believing)\s+"
     r"(?:that\s+|because\s+|about\s+)?([^.?!;\n]{5,90})"
-    r"|\bi keep thinking\s+(?:that\s+)?([^.?!;\n]{5,90})"
+    r"|\bi (?:keep thinking|believe)\s+(?:that\s+)?([^.?!;\n]{5,90})"
     r"|\bmy (?:biggest |main )?(?:fear|worry|concern) is\s+(?:that\s+)?"
+    r"([^.?!;\n]{5,90})"
+    r"|\bmy mind keeps? (?:saying|telling me)\s+(?:that\s+)?([^.?!;\n]{5,90})"
+    r"|\b(?:part of me|something in me) (?:is |keeps )?"
+    r"(?:convinced|certain|sure|saying|believing)\s*(?:that\s+)?"
+    r"([^.?!;\n]{5,90})"
+    r"|\bmade me (?:certain|sure|believe|think|feel like)\s*(?:that\s+)?"
     r"([^.?!;\n]{5,90})"
     r"|\bi feel like\s+([^.?!;\n]{5,90})", re.I)
 
