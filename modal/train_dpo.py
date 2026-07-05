@@ -84,11 +84,15 @@ def train(pairs: list, smoke: bool = False, run_name: str = "v3",
         tok.pad_token = tok.eos_token
 
     # Same chat template the brain serves with — behaviour must transfer.
+    # prompt_messages (full production build_messages output, system+user)
+    # beats a bare user block: v3.1 trained on short blocks and the learned
+    # preference under-fired at eval time under the full production prompt.
     def fmt(p):
+        msgs = (p.get("prompt_messages")
+                or [{"role": "user", "content": p["prompt"]}])
         return {
             "prompt": tok.apply_chat_template(
-                [{"role": "user", "content": p["prompt"]}],
-                tokenize=False, add_generation_prompt=True),
+                msgs, tokenize=False, add_generation_prompt=True),
             "chosen": p["chosen"],
             "rejected": p["rejected"],
         }
@@ -120,8 +124,8 @@ def train(pairs: list, smoke: bool = False, run_name: str = "v3",
         # (batch 16 x 2 epochs would be only ~18 optimizer steps)
         gradient_accumulation_steps=4,
         gradient_checkpointing=True,
-        max_length=2048,
-        max_prompt_length=1536,
+        max_length=2816,
+        max_prompt_length=2304,     # full production prompt is longer
         bf16=True,
         logging_steps=10,
         save_steps=50,
@@ -185,7 +189,9 @@ def main(data: str = "", smoke: bool = False,
             if line.strip():
                 row = json.loads(line)
                 assert {"prompt", "chosen", "rejected"} <= set(row), row.keys()
-                pairs.append({k: row[k] for k in ("prompt", "chosen", "rejected")})
+                pairs.append({k: row[k] for k in
+                              ("prompt", "chosen", "rejected",
+                               "prompt_messages") if k in row})
     name = train.remote(pairs, smoke=smoke, run_name=run_name,
                         beta=beta, lr=lr, epochs=epochs)
     if smoke:
