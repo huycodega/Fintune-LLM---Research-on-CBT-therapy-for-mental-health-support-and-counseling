@@ -67,7 +67,8 @@ out_vol = modal.Volume.from_name("cbt-dpo-out", create_if_missing=True)
     gpu=GPU, image=image, secrets=[hf_secret], timeout=3 * 3600,
     volumes={"/root/.cache/huggingface": cache_vol, "/out": out_vol},
 )
-def train(pairs: list, smoke: bool = False, run_name: str = "v3") -> str:
+def train(pairs: list, smoke: bool = False, run_name: str = "v3",
+          beta: float = 0.1, lr: float = 5e-6, epochs: int = 2) -> str:
     import torch
     from datasets import Dataset
     from peft import LoraConfig
@@ -105,13 +106,14 @@ def train(pairs: list, smoke: bool = False, run_name: str = "v3") -> str:
     model.config.use_cache = False
 
     out_dir = f"/out/{run_name}"
+    print(f"[dpo] beta={beta} lr={lr} epochs={epochs}")
     args = DPOConfig(
         output_dir=out_dir,
-        beta=0.1,
-        learning_rate=5e-6,
+        beta=beta,
+        learning_rate=lr,
         lr_scheduler_type="cosine",
         warmup_ratio=0.1,
-        num_train_epochs=2,                 # hard cap — small sets overfit fast
+        num_train_epochs=epochs,
         max_steps=30 if smoke else -1,
         per_device_train_batch_size=2,
         # effective batch 8: ~150-pair sets need the extra update steps
@@ -170,7 +172,8 @@ def merge_push(run_name: str = "v3") -> str:
 
 @app.local_entrypoint()
 def main(data: str = "", smoke: bool = False,
-         merge_only: bool = False, run_name: str = "v3"):
+         merge_only: bool = False, run_name: str = "v3",
+         beta: float = 0.1, lr: float = 5e-6, epochs: int = 2):
     if merge_only:
         print(merge_push.remote(run_name))
         return
@@ -183,7 +186,8 @@ def main(data: str = "", smoke: bool = False,
                 row = json.loads(line)
                 assert {"prompt", "chosen", "rejected"} <= set(row), row.keys()
                 pairs.append({k: row[k] for k in ("prompt", "chosen", "rejected")})
-    name = train.remote(pairs, smoke=smoke, run_name=run_name)
+    name = train.remote(pairs, smoke=smoke, run_name=run_name,
+                        beta=beta, lr=lr, epochs=epochs)
     if smoke:
         print(f"[dpo] smoke OK (run={name}) — rerun WITHOUT --smoke to train")
     else:
