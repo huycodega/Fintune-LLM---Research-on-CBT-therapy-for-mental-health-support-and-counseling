@@ -45,11 +45,18 @@ image = (
         "huggingface-hub==0.24.6",
         "hf-transfer==0.1.8",
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1",
+          # bake deploy-time knobs into the container env — the module is
+          # re-imported remotely, where bare os.environ reads would fall
+          # back to defaults and silently ignore DPO_BASE/DPO_OUT_REPO
+          "DPO_BASE": BASE_MODEL,
+          "DPO_OUT_REPO": OUT_REPO})
 )
 
 hf_secret = modal.Secret.from_name("huggingface", required_keys=["HF_TOKEN"])
-cache_vol = modal.Volume.from_name("cbt-dpo-cache", create_if_missing=True)
+# Reuse the brain's HF cache volume — v2 weights are already sitting there
+# from the staging deploy, so training skips the 15GB re-download.
+cache_vol = modal.Volume.from_name("cbt-model-cache", create_if_missing=True)
 out_vol = modal.Volume.from_name("cbt-dpo-out", create_if_missing=True)
 
 

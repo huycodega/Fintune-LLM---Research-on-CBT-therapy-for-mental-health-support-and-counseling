@@ -60,7 +60,14 @@ image = (
         "huggingface-hub==0.33.0",
         "hf_transfer==0.1.9",
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1",
+          # Bake the DEPLOY-TIME model choice into the container env. The
+          # module is re-imported inside the container, where a bare
+          # os.environ.get would silently fall back to the default — so
+          # `HF_MODEL_REPO=...v3 modal deploy` wouldn't actually serve v3
+          # without this line (staging flip for the DPO gate relies on it).
+          "HF_MODEL_REPO": os.environ.get("HF_MODEL_REPO",
+                                          "Huysun29/cbt-qwen2.5-7b-v2")})
 )
 
 app = modal.App("cbt-brain")
