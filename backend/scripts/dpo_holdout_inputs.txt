@@ -1,0 +1,54 @@
+# HELD-OUT eval inputs — NEVER used in DPO training. Frozen before training.
+# Different topics AND different phrasings from dpo_probe_inputs.txt, so a
+# v2-vs-v3 gap here measures GENERALIZATION, not memorization.
+
+# --- new topics, named-thought style (train set never saw these domains) ---
+Deep down I believe I'll never manage money right, I overdrafted again this month.
+Part of me is convinced this headache means something is seriously wrong with me.
+My roommate leaves the kitchen a mess every day and I've started believing she has zero respect for me.
+Every time I scroll through my feed I end up believing everyone my age is ahead of me.
+Since moving to the dorms I've been convinced that home is slipping away from me.
+After sitting on the bench all season I've started believing I'm dead weight to the team.
+I failed my driving test twice and now I'm sure I'm just not capable of learning it.
+The internship rejection email made me certain that no company will ever want me.
+My best friend told my secret to someone else and now I believe I can't trust anyone again.
+I tripped walking on stage at the ceremony and I'm convinced it's all anyone remembers about me.
+My code review came back with forty comments and I'm certain the team regrets hiring me.
+Ever since my parents split up I've been sure it was partly because of the stress I caused them.
+My cat passed away last month and I still believe I should have noticed she was sick sooner.
+When I look in the mirror before class I'm convinced everyone notices exactly what I hate about myself.
+
+# --- delivery asks, phrasings unseen in training ---
+No sugarcoating — tell me why I keep abandoning every hobby I start.
+Be honest with me, is pulling all-nighters actually ruining my grades?
+Skip the questions and give me something practical for Sunday-night dread.
+I want a straight answer: how do I stop comparing myself to my older brother?
+Cut to the chase — what's one thing I can do tonight about my phone addiction?
+Level with me: does needing therapy mean something is wrong with me?
+
+# --- vague / fragments, different flavour from train set ---
+idk anymore honestly.
+rough patch lately.
+head's been loud this week.
+not myself these days.
+running on empty.
+
+# --- vent / listen flavour, new phrasings ---
+I don't need fixing right now, I just need somewhere to put this feeling.
+Let me just say it: today was humiliating and I hate that it got to me.
+Nobody at home asks how I'm actually doing, so I'm saying it here.
+I aced the interview prep and they still picked someone else, I'm gutted.
+
+# --- skeptic / meta, new phrasings ---
+Prove you're actually listening: summarize what's wrong before you say anything else.
+Last time we talked you just asked me questions, do better this time.
+I'll give this one more try but I need real substance, not therapy cliches.
+
+# --- multi-part (tests prioritisation, unseen in training) ---
+Three things: I can't sleep, my group hates my ideas, and I think I picked the wrong major. Start with whichever matters most.
+My scholarship requires a 3.5, I'm at a 3.2 with one term left, and my little sister keeps asking why I'm always stressed. Where do I even begin?
+
+# --- positive check-ins, new phrasings ---
+Small win: I actually raised my hand in lecture today after we talked about it.
+Week two of the sleep routine and I'm falling asleep before 1am now.
+I told my mom the truth about my grades and the world didn't end.

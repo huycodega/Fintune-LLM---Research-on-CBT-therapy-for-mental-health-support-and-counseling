@@ -159,7 +159,7 @@ def run_from_db():
           f"needs_chosen +{len(needs)}")
 
 
-def run_probe(path: str, n: int = 4):
+def run_probe(path: str, n: int = 4, temp: float = 0.7):
     url = settings.modal_llm_endpoint
     if not url:
         raise SystemExit("no LLM endpoint — set MODAL_BRAIN_WORKSPACE or "
@@ -171,8 +171,8 @@ def run_probe(path: str, n: int = 4):
     for i, text in enumerate(inputs):
         msgs = build_messages(text, intake=None, analysis=None,
                               session_ctx=None, retrieved=[])
-        body = json.dumps({"messages": msgs, "n": n,
-                           "temperature": 0.7}).encode()
+        body = json.dumps({"messages": msgs, "n_responses": n,
+                           "temperature": temp}).encode()
         req = urllib.request.Request(
             url, data=body, headers={"Content-Type": "application/json"},
             method="POST")
@@ -188,16 +188,17 @@ def run_probe(path: str, n: int = 4):
         pairs += p; needs += nd
         if (i + 1) % 10 == 0:
             print(f"  {i+1}/{len(inputs)} done — {len(pairs)} pairs so far")
-    _write("onpolicy_probe_pairs.jsonl", pairs)
+    fname = f"onpolicy_probe_pairs_t{str(temp).replace('.', '')}.jsonl"
+    _write(fname, pairs)
     _append("needs_chosen.jsonl", needs)
-    print(f"onpolicy_probe_pairs.jsonl : {len(pairs)} pairs | "
-          f"needs_chosen +{len(needs)}")
+    print(f"{fname} : {len(pairs)} pairs | needs_chosen +{len(needs)}")
 
 
 def run_combine():
-    files = ["seed_transcript_pairs.jsonl", "pairs.jsonl",
-             "onpolicy_db_pairs.jsonl", "onpolicy_probe_pairs.jsonl",
-             "needs_chosen_filled.jsonl"]
+    files = (["seed_transcript_pairs.jsonl", "pairs.jsonl",
+              "onpolicy_db_pairs.jsonl"]
+             + sorted(p.name for p in OUT_DIR.glob("onpolicy_probe_pairs*.jsonl"))
+             + ["needs_chosen_filled.jsonl"])
     all_rows, seen = [], set()
     for name in files:
         p = OUT_DIR / name
@@ -236,12 +237,13 @@ if __name__ == "__main__":
     ap.add_argument("--from-db", action="store_true")
     ap.add_argument("--probe", default="")
     ap.add_argument("--n", type=int, default=4)
+    ap.add_argument("--temp", type=float, default=0.7)
     ap.add_argument("--combine", action="store_true")
     a = ap.parse_args()
     if a.from_db:
         run_from_db()
     if a.probe:
-        run_probe(a.probe, a.n)
+        run_probe(a.probe, a.n, a.temp)
     if a.combine:
         run_combine()
     if not (a.from_db or a.probe or a.combine):
