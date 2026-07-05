@@ -1,0 +1,95 @@
+# Probe inputs for on-policy DPO generation — one user message per line.
+# Diverse REAL input styles, all in safe L2/L3 territory (crisis turns never
+# generate drafts). Goal: elicit the model's natural habits, good and bad.
+
+# --- vague openers (the model's re-ask reflex zone) ---
+I'm not doing great lately.
+Everything feels like too much right now.
+I don't really know why I'm here, I just feel off.
+Can I talk to you about something?
+It's been a rough week.
+I feel weird and I can't explain it.
+Things at school are getting to me.
+I'm tired all the time and I don't know why.
+Lately nothing feels fun anymore.
+I just need to get some stuff out of my head.
+
+# --- specific worry with a named thought (must NOT re-ask) ---
+I keep thinking that I'm going to fail my statistics final no matter how much I study.
+I'm afraid my group members think I'm the useless one on the team.
+I keep thinking I only got into this program by luck and someone will figure it out.
+I'm worried that my best friend is getting tired of me.
+I'm scared that choosing this major was a huge mistake.
+I keep thinking that everyone in the lecture understands except me.
+I'm afraid that if I take a gap semester everyone will leave me behind.
+My mind keeps saying I'm not smart enough for grad school.
+I keep thinking my roommate secretly hates living with me.
+I'm worried I peaked in high school and it's all downhill now.
+I'm afraid to check my exam results because I know they'll confirm I'm a failure.
+I keep thinking that asking for help means I'm weak.
+
+# --- explicit delivery asks (any question back = dodge) ---
+Just tell me straight: is it normal to feel this anxious before every single quiz?
+Walk me through how to stop overthinking at night.
+Give me the steps to deal with exam panic, please.
+What small habit could help with my morning dread?
+Break it down for me — why do I freeze during presentations?
+Help me decide whether to drop this elective or push through.
+Just tell me what to do about my procrastination, no more questions.
+How likely is it that one bad semester ruins a transcript? Be direct.
+Lay it out for me: what does a healthy study schedule actually look like?
+Help me choose between retaking the course or accepting the C.
+
+# --- venting / just-listen flavour ---
+I just need to vent about my day, it was awful from start to finish.
+Today my professor criticized my work in front of everyone and I'm still burning about it.
+I don't want advice right now, I just want to say this out loud.
+My parents called again about my grades and I'm so done with it.
+Sometimes I feel like I'm running on fumes and nobody notices.
+I bombed the quiz I actually studied for and I'm so frustrated.
+My sister got praised again at dinner and I just sat there feeling invisible.
+This week drained everything out of me.
+
+# --- decision / practical stress ---
+I can't decide if I should tell my advisor I'm struggling.
+Should I quit my part-time job to focus on finals?
+I don't know whether to confront my friend about what she said.
+I'm torn between two internship offers and the deadline is Friday.
+I can't decide if switching study groups would make things better or worse.
+Do I tell my parents about my failing grade now or after finals?
+
+# --- irritation / skepticism at the bot ---
+You keep asking me questions instead of helping.
+That's what I just said. Did you even read my message?
+I've told you my problem twice already.
+Honestly I don't think talking to an AI can help but here I am.
+Stop asking how I feel and tell me something useful.
+You sound like a script. Can you actually respond to what I wrote?
+
+# --- physical-symptom stress ---
+My chest gets tight every time I open my laptop to study.
+I've been grinding my teeth at night since midterms started.
+My stomach hurts every Sunday evening before the school week.
+I can't focus for more than ten minutes without my heart racing.
+Lately I get headaches whenever I think about my thesis.
+My hands shake a little before every presentation.
+
+# --- long / rambling ---
+Okay so basically what happened is my lab partner didn't show up again which meant I had to do the whole report myself and then my professor said it lacked depth and my mom asked why I looked tired and I snapped at her and now I feel guilty about that too and I still have two assignments due Thursday.
+I've been trying to keep up with lectures, the gym, my job at the cafe, and calling home every week, and somewhere in all of that I stopped sleeping properly, and now everything is slipping and I can't tell which thing to fix first.
+So there's this person in my friend group who always makes little comments about my grades, like jokes but not really jokes, and everyone laughs and I laugh too but it's been building up for months and yesterday I almost said something and didn't and now I keep replaying it.
+Honestly this semester started fine, I had a schedule and I was ahead for like two weeks, but then I got sick, missed a few classes, never caught up, and now opening my backlog gives me this wave of dread so I avoid it, which makes the backlog worse, and I know exactly what the cycle is but knowing doesn't seem to stop it.
+
+# --- short fragments ---
+bad day.
+can't focus.
+stressed about tomorrow.
+me again. still anxious.
+ugh. exams.
+
+# --- positive progress check-ins (footer/technique-theater zone) ---
+The breathing thing you suggested actually helped last night.
+I finished my essay two days early for once and it feels strange.
+I talked to my professor like we discussed and it went okay.
+My anxiety was lower this week, I want to keep it that way.
+I used the 10-minute timer trick and actually started my assignment.
