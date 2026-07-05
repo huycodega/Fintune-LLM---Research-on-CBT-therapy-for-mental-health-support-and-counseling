@@ -132,6 +132,8 @@ _DELIVERY_REQ = re.compile(
     r"tell me (straight|directly|honestly)|"
     r"give me the (odds|evidence|breakdown|steps)|"
     r"break (it|this|that) down( for me)?|lay it out|"
+    r"help me (choose|pick|decide|narrow (it |this )?down)|"
+    r"(choose|pick|decide) (one |it |that )?for me|"
     r"(what|which) (small |one |single |simple )?"
     r"(habits?|steps?|changes?|things?|exercises?|techniques?) "
     r"(could|can|would|might|should) (help|work|i try))\b", re.I)
@@ -769,6 +771,22 @@ def chat(body: ChatIn, request: Request,
         "style_prefs": sorted(set(rc.chat_prefs_get(str(convo.id)))
                               | ({"just_listen"} if convo.listen_mode else set())),
     }
+
+    # Question-streak breaker: when our last TWO replies in this thread both
+    # ended by asking the client something, a third question reads as a loop
+    # ("tell me more about the thoughts…" ×6 in live testing). Force a
+    # delivery turn — the model must give substance now. Phrasing-independent,
+    # so it catches every wording _DELIVERY_REQ can't enumerate. Skipped in
+    # listen mode (listen replies are validation, not delivered analysis).
+    if not delivery_req and not convo.listen_mode:
+        prior_replies = [h["reply"].strip()
+                         for h in session_ctx["history"]
+                         if (h.get("reply") or "").strip()]
+        if (len(prior_replies) >= 2
+                and all(r.endswith("?") for r in prior_replies[-2:])):
+            delivery_req = True
+            analysis["delivery_request"] = True
+            analysis["question_streak_break"] = True
 
     # intake snapshot for prompt — None when the user skipped intake; the
     # prompt builder omits the block and memory fills the gap over time.

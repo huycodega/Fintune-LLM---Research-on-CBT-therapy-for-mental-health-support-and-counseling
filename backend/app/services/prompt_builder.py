@@ -213,6 +213,11 @@ SYSTEM_PROMPT = (
     "those down\") does NOT mean they did it — never say \"the thought record "
     "you filled out\" or \"what you wrote\" unless the client reported doing "
     "it. If unsure, invite: \"if you'd like, we can fill one out now\".\n"
+    "  • NEVER imply a prior exercise or discussion happened unless it is in "
+    "the conversation history — no \"again\", \"as we discussed\", \"let's "
+    "continue the thought record\" on a first pass. Name a technique ONLY "
+    "when you actually do it in THIS reply, step by step — naming it and "
+    "then asking another question instead is a failure.\n"
     "  • NEVER ask the client to share something they already told you. If "
     "they named a thought, feeling, or belief (e.g. \"I'm never enough\"), "
     "quote it back and work on THAT directly — asking \"what thoughts come "
@@ -399,6 +404,17 @@ def _format_style_prefs(prefs) -> str:
 # never claim it doesn't know them — the 7B otherwise keeps re-asking "what
 # thoughts come up?" even after the client answered.
 _QUOTED_THOUGHT = re.compile(r'["“]([^"”]{3,80})["”]')
+# Unquoted but explicit first-person statements count too — "I'm afraid I
+# won't make it into the top tier" IS the named thought, quotes or not (the
+# quoted-only rule let a six-turn re-ask loop through in live testing).
+_STATED_THOUGHT = re.compile(
+    r"\bi\s*(?:'m|am|’m)?\s*(?:really\s+|so\s+|just\s+|quite\s+|very\s+)?"
+    r"(?:afraid|scared|worried|terrified|stressed|anxious)\s+"
+    r"(?:that\s+|because\s+|about\s+)?([^.?!;\n]{5,90})"
+    r"|\bi keep thinking\s+(?:that\s+)?([^.?!;\n]{5,90})"
+    r"|\bmy (?:biggest |main )?(?:fear|worry|concern) is\s+(?:that\s+)?"
+    r"([^.?!;\n]{5,90})"
+    r"|\bi feel like\s+([^.?!;\n]{5,90})", re.I)
 
 
 def _format_named_thoughts(session_ctx, user_input: str) -> str:
@@ -411,6 +427,14 @@ def _format_named_thoughts(session_ctx, user_input: str) -> str:
         for m in _QUOTED_THOUGHT.findall(t):
             k = m.strip().lower()
             if k and k not in seen:
+                seen.add(k)
+                found.append(m.strip())
+        for groups in _STATED_THOUGHT.findall(t):
+            m = next((g for g in groups if g), "")
+            # drop leading conjunction noise ("again and I can't…")
+            m = re.sub(r"^(?:again|and|but|then|,|\s)+", "", m, flags=re.I)
+            k = m.strip().lower()
+            if len(k) >= 5 and k not in seen:
                 seen.add(k)
                 found.append(m.strip())
     if not found:
