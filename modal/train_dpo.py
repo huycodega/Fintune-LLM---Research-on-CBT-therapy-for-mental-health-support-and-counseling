@@ -35,15 +35,18 @@ app = modal.App("cbt-dpo-train")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "torch==2.4.0",
-        "transformers==4.44.2",
-        "trl==0.9.6",
-        "peft==0.12.0",
-        "bitsandbytes==0.43.3",
-        "datasets==2.20.0",
-        "accelerate==0.33.0",
-        "huggingface-hub==0.24.6",
-        "hf-transfer==0.1.8",
+        # Modern stack — the v2 repo's tokenizer.json is serialized by a new
+        # `tokenizers` and the 4.44-era stack can't parse it ("untagged enum
+        # ModelWrapper"). These match the era the brain image resolves to.
+        "torch==2.7.0",
+        "transformers==4.52.4",
+        "trl==0.19.0",
+        "peft==0.15.2",
+        "bitsandbytes==0.46.0",
+        "datasets==3.6.0",
+        "accelerate==1.7.0",
+        "huggingface-hub==0.33.0",
+        "hf-transfer==0.1.9",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1",
           # bake deploy-time knobs into the container env — the module is
@@ -111,7 +114,9 @@ def train(pairs: list, smoke: bool = False, run_name: str = "v3") -> str:
         num_train_epochs=2,                 # hard cap — small sets overfit fast
         max_steps=30 if smoke else -1,
         per_device_train_batch_size=2,
-        gradient_accumulation_steps=8,
+        # effective batch 8: ~150-pair sets need the extra update steps
+        # (batch 16 x 2 epochs would be only ~18 optimizer steps)
+        gradient_accumulation_steps=4,
         gradient_checkpointing=True,
         max_length=2048,
         max_prompt_length=1536,
@@ -126,7 +131,7 @@ def train(pairs: list, smoke: bool = False, run_name: str = "v3") -> str:
         ref_model=None,                     # PEFT → implicit frozen reference
         args=args,
         train_dataset=ds,
-        tokenizer=tok,
+        processing_class=tok,               # trl>=0.12 renamed `tokenizer`
         peft_config=LoraConfig(
             r=16, lora_alpha=32, lora_dropout=0.05, bias="none",
             task_type="CAUSAL_LM",

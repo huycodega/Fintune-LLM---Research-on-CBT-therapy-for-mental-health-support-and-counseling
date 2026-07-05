@@ -21,8 +21,16 @@ identical for both models, which is why model-only is the fair A/B.)
 """
 import argparse
 import json
+import sys
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# The PRODUCTION triage prompt — /assess does NOT add its own system prompt;
+# the caller supplies it. Bare text gets a chat reply instead of a triage
+# JSON (measured recall 1/147 before this fix — a harness bug, not a model
+# regression).
+from app.services.safety_gate import _build_messages  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_SET = ROOT / "eval-model/eval_model_finetune_rag_agent/cbt_test.jsonl"
@@ -53,7 +61,7 @@ def run(workspace: str, tag: str):
     results, errors = {}, 0
     for i, (idx, text) in enumerate(rows):
         body = json.dumps(
-            {"messages": [{"role": "user", "content": text}]}).encode()
+            {"messages": _build_messages(text, None)}).encode()
         req = urllib.request.Request(
             url, data=body, headers={"Content-Type": "application/json"},
             method="POST")
