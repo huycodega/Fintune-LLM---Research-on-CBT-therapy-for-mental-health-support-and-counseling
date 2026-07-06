@@ -103,7 +103,8 @@ def _sla_for(level: str) -> datetime:
 # friend-perspective, action step) — those are legitimate next steps.
 _REASK_CORE = re.compile(
     r"what (specific )?(thoughts?|feelings?|emotions?|fears?|worries|concerns?)\b|"
-    r"what (goes|runs|is going|are going) through your (mind|head)|"
+    r"what('s| is| has| are)?( been)? (go(es|ing)|run(s|ning)|went) "
+    r"through your (mind|head)|"
     r"what('s| is) (causing|behind|driving|bringing up)\b|"
     r"\btell me more\b|\bshare more\b|"
     r"can you (tell|describe|share|identify|pick out|give me an example|"
@@ -149,6 +150,20 @@ def _question_count(resp: str) -> int:
     # whole reply in quotes and a trailing ?" evaded the counter
     return sum(1 for s in re.split(r"(?<=[.!?])\s+", resp or "")
                if s.strip().rstrip('"\'”’»)]').endswith("?"))
+
+
+_DUP_WORD = re.compile(r"[a-z']+")
+
+
+def _near_dup(a: str, b: str) -> bool:
+    """Token-set similarity — the model can get stuck and re-send its previous
+    reply verbatim (observed live: two identical turns in a row). Jaccard on
+    word sets is cheap and catches verbatim + light paraphrase."""
+    wa = set(_DUP_WORD.findall((a or "").lower()))
+    wb = set(_DUP_WORD.findall((b or "").lower()))
+    if not wa or not wb:
+        return False
+    return len(wa & wb) / len(wa | wb) >= 0.75
 
 
 # ── Greeting fast-path ───────────────────────────────────────────────────────
@@ -981,15 +996,22 @@ def chat(body: ChatIn, request: Request,
     # order is untouched.
     named_given = bool(prompt_builder._format_named_thoughts(
         session_ctx, scrubbed_text))
+    # Anti-repeat: the model can converge and re-send its previous reply
+    # verbatim (observed live). Any draft near-identical to one of the last
+    # two replies in this thread ranks below everything fresh.
+    recent_replies = [h["reply"] for h in (session_ctx.get("history") or [])[-2:]
+                      if (h.get("reply") or "").strip()]
 
     def _draft_penalty(d):
         resp = d.get("response") or ""
         pen = _reask_count(resp) if named_given else 0
         if delivery_req:      # any question is a dodge on a delivery turn
             pen += _question_count(resp)
+        if any(_near_dup(resp, prev) for prev in recent_replies):
+            pen += 8          # repetition outranks every other flaw
         return pen
 
-    if drafts and (named_given or delivery_req):
+    if drafts and (named_given or delivery_req or recent_replies):
         drafts.sort(key=lambda d: (0 if d.get("preflight_pass") else 1,
                                    _draft_penalty(d),
                                    -(d.get("grounding_score") or 0.0)))

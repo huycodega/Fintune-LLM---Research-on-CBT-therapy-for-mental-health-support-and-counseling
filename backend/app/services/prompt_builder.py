@@ -218,6 +218,10 @@ SYSTEM_PROMPT = (
     "continue the thought record\" on a first pass. Name a technique ONLY "
     "when you actually do it in THIS reply, step by step — naming it and "
     "then asking another question instead is a failure.\n"
+    "  • NEVER repeat or closely paraphrase your own previous reply (see the "
+    "conversation history). Every turn must ADD something new: the next step "
+    "of the exercise, a new angle, or a response to what the client just "
+    "added. If the client answered your question, USE the answer.\n"
     "  • NEVER ask the client to share something they already told you. If "
     "they named a thought, feeling, or belief (e.g. \"I'm never enough\"), "
     "quote it back and work on THAT directly — asking \"what thoughts come "
@@ -411,9 +415,10 @@ _STATED_THOUGHT = re.compile(
     r"\bi\s*(?:'m|am|’m|'ve| have)?\s*(?:really\s+|so\s+|just\s+|quite\s+|"
     r"very\s+|started\s+|been\s+)?"
     r"(?:afraid|scared|worried|terrified|stressed|anxious|convinced|certain|"
-    r"sure|believing)\s+"
+    r"sure|believing|doubting|questioning)\s+"
     r"(?:that\s+|because\s+|about\s+)?([^.?!;\n]{5,90})"
-    r"|\bi (?:keep thinking|believe)\s+(?:that\s+)?([^.?!;\n]{5,90})"
+    r"|\bi(?:'m| am)?\s*(?:keep\s+)?thinking\s+(?:that\s+)?([^.?!;\n]{5,90})"
+    r"|\bi believe\s+(?:that\s+)?((?!in you\b)[^.?!;\n]{8,90})"
     r"|\bmy (?:biggest |main )?(?:fear|worry|concern) is\s+(?:that\s+)?"
     r"([^.?!;\n]{5,90})"
     r"|\bmy mind keeps? (?:saying|telling me)\s+(?:that\s+)?([^.?!;\n]{5,90})"
@@ -447,10 +452,16 @@ def _format_named_thoughts(session_ctx, user_input: str) -> str:
                 found.append(m.strip())
     if not found:
         return ""
+    # Newest FIRST — the client updates their thought as the conversation
+    # deepens ("won't win a prize" → "everyone will be disappointed in me"),
+    # and the model was observed clinging to the oldest pinned one.
+    newest_first = list(reversed(found[-4:]))
     return ("[CLIENT'S OWN NAMED THOUGHTS — they already told you these. "
-            "NEVER ask what their thoughts are; pick ONE and work on it "
-            "directly (evidence, reframe, or a small step).]\n"
-            + "\n".join(f'- "{t}"' for t in found[-4:]))
+            "NEVER ask what their thoughts are. Work on the FIRST one below "
+            "(their most recent); only revisit an older one if the client "
+            "brings it back. Never re-quote a thought you already worked on "
+            "in a previous reply — move it forward instead.]\n"
+            + "\n".join(f'- "{t}"' for t in newest_first))
 
 
 def build_messages(user_input_scrubbed: str,
