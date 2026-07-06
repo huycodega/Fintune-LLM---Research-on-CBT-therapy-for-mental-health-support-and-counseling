@@ -332,7 +332,11 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
             "Instead: (1) reflect the strongest point they gave on EACH side "
             "in their own words; (2) offer ONE balanced alternative thought "
             "built from that evidence; (3) give one small concrete step for "
-            "before the event. END WITH A STATEMENT.")
+            "before the event. END WITH A STATEMENT. If the client says they "
+            "have NO evidence on a side (first attempt, no wins yet), do NOT "
+            "invent any for them — normalize it instead ('a first attempt "
+            "means no record of failure either') and reframe the goal toward "
+            "learning and completion.")
     facts = (analysis.get("user_facts") or "").strip()
     if facts:
         base += (

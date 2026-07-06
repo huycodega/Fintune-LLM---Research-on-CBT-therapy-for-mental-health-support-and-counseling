@@ -198,6 +198,53 @@ def strip_questions(text: str) -> str:
     return kept if len(kept) >= 20 else t
 
 
+# Second-person biography claims ("You've completed coding courses…") — the
+# model INVENTS client accomplishments when asked to reflect evidence the
+# client never gave (observed live: fabricated Python/JavaScript courses and
+# a weather app for a client who said "I haven't achieved any success yet").
+_CLAIM_PAT = re.compile(
+    r"\byou(?:'ve| have)(?: also)? (?:completed|built|created|made|done|"
+    r"achieved|earned|finished|shown|demonstrated|learned|studied|taken|"
+    r"passed|developed|gained|mastered|worked on)\b|"
+    r"\byour (?:experience|skills?|projects?|courses?|background|training|"
+    r"achievements?|accomplishments?|track record)\b", re.I)
+_DANGLING_PAT = re.compile(
+    r"^\s*(these|those|such) (achievements?|accomplishments?|successes|"
+    r"facts|experiences?|skills?|projects?)\b", re.I)
+_FACT_WORD = re.compile(r"\b[a-zA-Z][a-zA-Z\-']{3,}\b")
+_FACT_STOP = {
+    "have", "your", "this", "that", "with", "like", "also", "been", "will",
+    "youve", "sound", "sounds", "really", "these", "those", "show", "shows",
+    "which", "into", "from", "them", "they", "there", "were", "when", "what",
+}
+
+
+def scrub_unclaimed_facts(text: str, user_texts: list) -> str:
+    """Drop sentences that assert client accomplishments/biography whose
+    content words never appeared in anything the client actually wrote.
+    Reflections of things they DID say survive (their words overlap)."""
+    known = set()
+    for t in user_texts:
+        known |= {w.lower() for w in _FACT_WORD.findall(t or "")}
+    if not known:
+        return text
+    parts = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    kept, dropped_prev = [], False
+    for p in parts:
+        if dropped_prev and _DANGLING_PAT.search(p):
+            dropped_prev = True
+            continue
+        if _CLAIM_PAT.search(p):
+            words = {w.lower() for w in _FACT_WORD.findall(p)} - _FACT_STOP
+            if words and len(words & known) / len(words) < 0.3:
+                dropped_prev = True
+                continue
+        dropped_prev = False
+        kept.append(p)
+    out = " ".join(kept).strip()
+    return out if len(out) >= 40 else (text or "").strip()
+
+
 def dedupe_sentences(text: str) -> str:
     """Drop a sentence that near-duplicates an EARLIER sentence in the same
     reply — the model sometimes glues two takes of the same move ("Let's

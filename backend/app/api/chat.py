@@ -1007,10 +1007,13 @@ def chat(body: ChatIn, request: Request,
     _allowed_names.add((u.username or "").lower())
     _in_name = ((intake_dict or {}).get("demographics") or {}).get("name") or ""
     _allowed_names.update(w.lower() for w in str(_in_name).split())
+    _user_texts = [text] + (history or [])
     for d in drafts:
         d["response"] = post_process.dedupe_sentences(
-            post_process.scrub_unknown_names(
-                d.get("response") or "", _allowed_names))
+            post_process.scrub_unclaimed_facts(
+                post_process.scrub_unknown_names(
+                    d.get("response") or "", _allowed_names),
+                _user_texts))
 
     # Listen-only: guarantee no draft carries a probing question, REGARDLESS of
     # which path produced it. The agent already strips its own drafts, but the
