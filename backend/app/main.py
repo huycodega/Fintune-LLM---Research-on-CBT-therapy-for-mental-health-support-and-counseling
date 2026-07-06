@@ -172,6 +172,10 @@ def boot():
 def health():
     return {
         "api": "ok",
+        # which build is actually serving — Railway sets the SHA at build
+        # time; live tests were mis-read twice because the new deploy hadn't
+        # switched over yet and there was no way to tell.
+        "build": os.getenv("RAILWAY_GIT_COMMIT_SHA", "local")[:7],
         "mock_llm": settings.mock_llm,
         "primary_responder": settings.hf_model_repo,        # cbt-qwen2.5-7b-v2
         "safety_gate": settings.safety_hf_model_repo,       # cbt-qwen2.5-7b-v2
