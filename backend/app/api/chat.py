@@ -149,7 +149,7 @@ def _question_count(resp: str) -> int:
     # rstrip closing quotes/brackets first — the model sometimes wraps the
     # whole reply in quotes and a trailing ?" evaded the counter
     return sum(1 for s in re.split(r"(?<=[.!?])\s+", resp or "")
-               if s.strip().rstrip('"\'”’»)]').endswith("?"))
+               if s.strip().rstrip('"\'”’»)]*_`').endswith("?"))
 
 
 # The previous reply opened a CBT exercise (evidence gathering etc.) — when
@@ -826,7 +826,8 @@ def chat(body: ChatIn, request: Request,
                      if (h.get("reply") or "").strip()]
     if not delivery_req and not convo.listen_mode:
         if (len(prior_replies) >= 2
-                and all(r.endswith("?") for r in prior_replies[-2:])):
+                and all(r.rstrip('"\'”’»)]*_`').endswith("?")
+                        for r in prior_replies[-2:])):
             delivery_req = True
             analysis["delivery_request"] = True
             analysis["question_streak_break"] = True

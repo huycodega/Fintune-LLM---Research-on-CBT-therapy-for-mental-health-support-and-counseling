@@ -50,6 +50,11 @@ def parse_draft(raw: str) -> Dict:
     well = bool(tech and resp)
     if not resp:
         resp = raw.strip()
+    # The model sometimes emits its own markdown bold — often unbalanced
+    # ("…do well this time?**"), which renders as junk AND let a trailing
+    # ?** evade the question counters live. The emphasis pass is the only
+    # sanctioned bolder, so drafts are stripped of ** entirely.
+    resp = resp.replace("**", "").strip()
     # Unwrap a fully-quoted reply ("...") — a generation artifact that reads
     # oddly to users AND let trailing ?" evade the question counters.
     if len(resp) >= 2 and resp[0] == '"' and resp[-1] == '"' \
@@ -188,7 +193,7 @@ def strip_questions(text: str) -> str:
     parts = re.split(r"(?<=[.!?])\s+", t)
     kept = " ".join(
         p for p in parts
-        if not p.strip().rstrip('"\'”’»)]').endswith("?")
+        if not p.strip().rstrip('"\'”’»)]*_`').endswith("?")
         or _SAFETY_Q.search(p)).strip()
     return kept if len(kept) >= 20 else t
 
