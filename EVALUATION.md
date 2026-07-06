@@ -99,26 +99,31 @@ epochs, ~75s/run) — `modal/train_dpo.py`.
 set, per-example: `newly_missed == 0` required (`dpo_crisis_gate.py`);
 (2) *generalization* — 38 HELD-OUT inputs (new topics AND phrasings, frozen
 before training, never trained on) scored by the same detectors
-(`dpo_ab_eval.py`). The gate rejected two checkpoints (v3.0 flat, v3.1/v3.2
-seesawed single classes) before v3.3 passed:
+(`dpo_ab_eval.py`); plus a 3-scenario mid-exercise holdout
+(`gen_midex_dpo.py --eval`). Six iterations, each gated: v3.0 flat →
+v3.1/v3.2 seesawed single classes → v3.3 passed (+14.9 pp clean) → v3.4
+added 32 mid-exercise pairs at 12% mix (no transfer) → **v3.5** doubled the
+scenario diversity and weighted the class ×3 (~45% of 400 rows):
 
-| Held-out metric (148 drafts) | v2 (prod) | v3.3 | Δ |
-|---|---|---|---|
-| **Crisis recall (SFT-format, 147 ex.)** | 142/147 | **142/147, newly_missed 0** | ± 0 — 4 consecutive runs |
-| Clean-draft rate | 45.9% | **60.8%** | **+14.9 pp** |
-| Borrowed-name rate | 18.2% | **8.1%** | −10.1 pp |
-| Re-ask after named thought | 25.0% | **17.6%** | −7.4 pp |
-| Question on delivery-ask | 13.5% | 13.5% | ± 0 (runtime rewrite covers) |
-| Thin-advice rate | 3.4% | 1.4% | −2.0 pp |
-| Mean reply length | 190 ch | 232 ch | richer |
+| Held-out metric (148 drafts) | v2 (prod) | v3.3 | **v3.5** | Δ v2→v3.5 |
+|---|---|---|---|---|
+| **Crisis recall (SFT-format, 147 ex.)** | 142/147 | 142/147 | **142/147, newly_missed 0** | ± 0 — **6 consecutive runs** |
+| Clean-draft rate | 45.9% | 60.8% | **71.6%** | **+25.7 pp** |
+| Borrowed-name rate | 18.2% | 8.1% | **1.4%** | −16.8 pp |
+| Re-ask after named thought | 25.0% | 17.6% | **12.8%** | −12.2 pp |
+| Question on delivery-ask | 13.5% | 13.5% | **9.5%** | −4.0 pp |
+| Mid-exercise holdout (dirty drafts) | — | 66.7% | **61.1%** | modest; deterministic nets guarantee the structure |
+| Mean reply length | 190 ch | 232 ch | **250 ch** | richer |
 
-Total GPU cost for the whole campaign (4 train runs + merges + all gates):
-**~$24**. Checkpoint: `Huysun29/cbt-qwen2.5-7b-v3` (private). Findings worth
-keeping: the published 96.6% crisis recall lives in the SFT prompt format
-(the screening-prompt path scores ~8% on long intake prose for BOTH models —
-the deterministic regex+history layer carries that case in production, by
-design); and prompt-format alignment between training pairs and the
-production prompt was the single biggest lever for transfer.
+Total GPU cost for the whole campaign (6 train runs + merges + all gates):
+**~$30**. Checkpoint: `Huysun29/cbt-qwen2.5-7b-v3` (private, holds v3.5).
+Findings worth keeping: the published 96.6% crisis recall lives in the SFT
+prompt format (the screening-prompt path scores ~8% on long intake prose
+for BOTH models — the deterministic regex+history layer carries that case
+in production, by design); prompt-format alignment between training pairs
+and the production prompt was the biggest single transfer lever; and
+class-weighting dense, authored gold responses spills over — v3.5's
+mid-exercise golds lifted EVERY failure class, not just the targeted one.
 
 ---
 
