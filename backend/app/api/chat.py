@@ -161,9 +161,9 @@ _EXERCISE_OPEN = re.compile(
     r"thought record|reality[- ]testing|balanced (view|thought|perspective)",
     re.I)
 _EXERCISE_REOPEN = re.compile(
-    r"let'?s (start|begin) by|gather(ing)? (the )?evidence|"
-    r"can you think of any past experiences|"
-    r"what do you think supports your belief", re.I)
+    r"let'?s (start|begin) by|gather(ing)? (that |the |some |more )?evidence|"
+    r"can you think of any (past )?(experiences?|moments?|times?)|"
+    r"what (do you think supports your belief|are some experiences)", re.I)
 
 _DUP_WORD = re.compile(r"[a-z']+")
 
@@ -832,6 +832,12 @@ def chat(body: ChatIn, request: Request,
             and len(text.strip()) >= 150):
         exercise_continue = True
         analysis["exercise_continue"] = True
+        # Phrasing-independent enforcement (regex reopen-hunting kept
+        # missing variants: "gather THAT evidence", "any MOMENTS when"):
+        # the directive demands a statement turn, so ride the delivery
+        # machinery — every question is penalized in ranking, and the
+        # rewrite-on-dodge + strip floor apply if the best draft still asks.
+        delivery_req = True
 
     # intake snapshot for prompt — None when the user skipped intake; the
     # prompt builder omits the block and memory fills the gap over time.
