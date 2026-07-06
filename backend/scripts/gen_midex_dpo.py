@@ -163,6 +163,147 @@ S = [
         "reschedule she offered and lock a date, and maybe tell her the "
         "honest sentence — \"missed you lately\" — because closeness "
         "survives on being said.")),
+ dict(topic="gym progress", holdout=False,
+  history=[("When I look in the mirror before class I'm convinced everyone "
+            "notices exactly what I hate about myself.",
+            "Let's test that against the evidence — what supports it, and "
+            "what doesn't fit?")],
+  current=("Supports: someone once commented on my arms in high school and "
+           "I never forgot it. Doesn't fit: I've been training five months, "
+           "my lifts keep going up, my gym buddy asked ME for form advice "
+           "last week, and honestly nobody has said anything bad in years."),
+  gold=("Weigh what you brought: one comment from years ago, against five "
+        "months of rising lifts, a training partner who treats you as the "
+        "one to learn from, and years of nobody saying anything. The old "
+        "comment is a scar doing the talking, not the mirror. A truer line: "
+        "\"one person's remark years ago doesn't outvote who I've become "
+        "since.\" Next gym session, log the numbers that went up this month "
+        "and let the data argue with the mirror for you.")),
+ dict(topic="work mistake", holdout=False,
+  history=[("I sent the wrong file to a customer at my part-time job and I "
+            "keep thinking they're going to fire me.",
+            "Let's look at the evidence on both sides of that prediction "
+            "before treating it as fact.")],
+  current=("For: my manager sighed when I told her, and the customer was "
+           "annoyed. Against: she also said 'thanks for flagging it fast', "
+           "we fixed it within the hour, my last review was positive, and "
+           "the coworker who made a bigger mistake in spring still works "
+           "there."),
+  gold=("Put your evidence side by side: one sigh and one annoyed customer "
+        "— against a fast fix, a manager who thanked you for the honesty, "
+        "a positive review, and a precedent of bigger mistakes surviving. "
+        "Workplaces fire patterns, not single corrected errors. Steadier "
+        "thought: \"I made a mistake and handled it exactly right — that's "
+        "what reliability looks like.\" If the worry lingers this week, ask "
+        "your manager directly whether there's anything she'd like you to "
+        "do differently — and let her answer replace the sigh in your "
+        "head.")),
+ dict(topic="real programmer doubt", holdout=False,
+  history=[("My code review came back with forty comments and I'm certain "
+            "the team regrets hiring me.",
+            "Strong conclusion from one review — let's check it against the "
+            "evidence for and against.")],
+  current=("For: forty comments is way more than my teammate got, and two "
+           "were about really basic things. Against: my mentor said heavy "
+           "reviews are normal for first PRs here, half the comments were "
+           "style-bot nitpicks, and they already assigned me the next "
+           "feature."),
+  gold=("Read your own second column: heavy first reviews are house-normal, "
+        "half the comments came from a bot, and — the loudest fact — they "
+        "handed you the NEXT feature. Teams don't invest new work in "
+        "people they regret. The count measured the codebase's standards, "
+        "not your ceiling. Balanced version: \"forty comments is this "
+        "team's onboarding, and the next PR will have fewer.\" Track "
+        "exactly that — comment count per PR over your next three — and "
+        "watch the trend do the reassuring.")),
+ dict(topic="major choice vs parents", holdout=False,
+  history=[("I'm scared I picked the wrong major and that I only chose it "
+            "to make my parents proud.",
+            "Let's separate feeling from fact — what's the evidence each "
+            "way?")],
+  current=("For: I zone out in two of the required courses and my cousin "
+           "seems way happier in design school. Against: I genuinely enjoy "
+           "the lab work and my project groups, I chose this over my "
+           "parents' first suggestion actually, and my grades are solid."),
+  gold=("Your evidence already untangles it: you overruled your parents' "
+        "first choice — so this major was YOUR call — and you light up in "
+        "labs and group projects while two required courses bore you. "
+        "Every major has its dead courses; enjoying the doing is the "
+        "signal that matters. Fairer thought: \"I chose this, parts of it "
+        "fit me well, and boredom in two courses is data about courses, "
+        "not about my life.\" This month, pick one elective closer to the "
+        "lab side you love — steer the major instead of re-litigating it.")),
+ dict(topic="sleep relapse", holdout=False,
+  history=[("My sleep was finally improving but this week it fell apart "
+            "again — I feel like all that progress was fake.",
+            "Let's check that conclusion against the evidence from both "
+            "periods.")],
+  current=("For: three bad nights in a row this week, back to 2am. "
+           "Against: I had four solid weeks before this, the bad nights "
+           "started exactly when my project deadline landed, and even now "
+           "I'm falling asleep faster than I did two months ago."),
+  gold=("Set the weeks side by side: four solid weeks, then three rough "
+        "nights that arrived hand-in-hand with a deadline — and even the "
+        "rough nights are better than your old baseline. That's not fake "
+        "progress; that's real progress meeting real stress. Recovery "
+        "curves dip, they don't reset. Truer sentence: \"a stressful week "
+        "bent my sleep; it didn't break the skill I built.\" Tonight, "
+        "just re-run your wind-down routine exactly as in the good weeks — "
+        "same steps, no pressure — and let the pattern reassert itself.")),
+ dict(topic="apology after argument", holdout=False,
+  history=[("I snapped at my closest friend and I keep believing our "
+            "friendship is basically over.",
+            "Before we accept that, let's look at what supports it and "
+            "what contradicts it.")],
+  current=("Supports: she left on 'read' for two days, which she never "
+           "does. Contradicts: we've argued twice before and recovered "
+           "within a week both times, she still liked my story yesterday, "
+           "and honestly I haven't actually apologized yet."),
+  gold=("Your history says friendships like this bend and spring back — "
+        "two arguments, two recoveries — and the story-like shows the "
+        "door isn't closed, just cooler. The strongest item in your list "
+        "is the last one: the apology hasn't been sent yet, so the "
+        "outcome you fear hasn't even been tested. Grounded thought: "
+        "\"we've survived worse, and the next move is mine.\" Send the "
+        "simple version today — 'I was out of line, I'm sorry' — no "
+        "essays, and give her a day to meet you where you two always end "
+        "up.")),
+ dict(topic="scholarship pressure", holdout=False,
+  history=[("My scholarship needs a 3.5 and I keep thinking I'm going to "
+            "lose it and prove I never belonged here.",
+            "Let's examine the evidence for and against that fear.")],
+  current=("For: I'm at 3.4 after a rough organic chemistry midterm. "
+           "Against: I was at 3.6 both previous terms, the final is worth "
+           "double the midterm, my other four courses are all A-range, and "
+           "the scholarship office told me there's a one-term grace "
+           "policy anyway."),
+  gold=("Do the math you just laid out: one dip against two straight terms "
+        "above the bar, four A-range courses pulling upward, a "
+        "double-weighted final still ahead, and a grace term as the "
+        "safety net under all of it. The numbers describe a strong "
+        "student having one hard course — belonging was never the "
+        "variable. Steadier thought: \"a 3.4 mid-dip with this many "
+        "recovery paths is pressure, not a verdict.\" Concrete move: book "
+        "the ochem tutoring block this week and aim the effort at the "
+        "double-weighted final, where it pays twice.")),
+ dict(topic="team captain worry", holdout=False,
+  history=[("They made me captain this season and I keep thinking I'll "
+            "let the whole team down.",
+            "Let's put that thought against the evidence both ways.")],
+  current=("For: we lost our first friendly and I froze when the coach "
+           "asked for the lineup call. Against: the team voted for me "
+           "themselves, our two practices since ran smoother than last "
+           "season's, and the vice-captain said the lineup freeze happens "
+           "to everyone new."),
+  gold=("Look at the weight of each side: one lost friendly and one "
+        "frozen moment — versus a team that CHOSE you, practices already "
+        "running smoother under you, and a vice-captain normalizing "
+        "exactly the moment you're replaying. New captains are graded on "
+        "trajectory, not on week one. Balanced thought: \"the team picked "
+        "me for reasons that are already showing in practice; one freeze "
+        "is a rep, not a reveal.\" Prepare the next lineup call the night "
+        "before with the vice-captain — structure beats freeze every "
+        "time.")),
  # ---------------- HOLDOUT (never trained; transfer eval) ----------------
  dict(topic="driving test", holdout=True,
   history=[("I failed my driving test twice and now I'm sure I'm just not "
