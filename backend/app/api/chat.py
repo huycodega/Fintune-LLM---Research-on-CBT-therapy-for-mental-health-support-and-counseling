@@ -160,6 +160,14 @@ _EXERCISE_OPEN = re.compile(
     r"evidence (for (and|or) )?(and )?against|gather(ing)? (that )?evidence|"
     r"thought record|reality[- ]testing|balanced (view|thought|perspective)",
     re.I)
+# …and the client's message ITSELF can prove it's an evidence answer — the
+# robust signal, independent of what our previous reply looked like.
+_EVIDENCE_ANSWER = re.compile(
+    r"what makes me (believe|think|feel)|the evidence (for|against)|"
+    r"there (was|were|have been) (one |a |some )?(instance|time|moment)s?|"
+    r"i (recall|remember) (a few )?times|turned out (fine|better|well)|"
+    r"on the other hand|that said|even so|"
+    r"i know i('ve| have) prepared|i did (pass|manage|get through)", re.I)
 _EXERCISE_REOPEN = re.compile(
     r"let'?s (start|begin) by|gather(ing)? (that |the |some |more )?evidence|"
     r"can you think of any (past )?(experiences?|moments?|times?)|"
@@ -826,12 +834,18 @@ def chat(body: ChatIn, request: Request,
     # Exercise continuation: our last reply opened an exercise and the client
     # answered with substance — this turn must WEIGH their answer and move to
     # a balanced thought + step, never re-open evidence gathering.
+    # Two independent signals, either fires: (a) OUR last reply opened an
+    # exercise and the client answered at length; (b) the client's message
+    # ITSELF reads as an evidence answer (robust when (a)'s history view is
+    # off — a live turn slipped through on exactly that).
     exercise_continue = False
-    if (prior_replies and not convo.listen_mode
-            and _EXERCISE_OPEN.search(prior_replies[-1])
-            and len(text.strip()) >= 150):
-        exercise_continue = True
-        analysis["exercise_continue"] = True
+    if not convo.listen_mode and len(text.strip()) >= 100:
+        opened = bool(prior_replies
+                      and _EXERCISE_OPEN.search(prior_replies[-1]))
+        self_evident = bool(_EVIDENCE_ANSWER.search(text))
+        if opened or self_evident:
+            exercise_continue = True
+            analysis["exercise_continue"] = True
         # Phrasing-independent enforcement (regex reopen-hunting kept
         # missing variants: "gather THAT evidence", "any MOMENTS when"):
         # the directive demands a statement turn, so ride the delivery
