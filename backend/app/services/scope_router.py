@@ -26,6 +26,8 @@ _PERSONAL_PAT = re.compile(
     r"worried|worry|sad|depress\w*|unhappy|down|lonely|alone|tired|exhaust\w*|"
     r"overwhelm\w*|cope|coping|struggl\w*|upset|angry|scared|afraid|nervous|"
     r"panic|hopeless|insomnia|can'?t sleep|burn(ed|t)? ?out|emotional|cry\w*|"
+    r"concern\w*|(under |the )?pressure|"
+    r"my (only |main |biggest )?(concern|worry|fear|problem|issue|struggle)|"
     r"my (mind|head|thoughts|mood|feelings|emotions)|"
     r"help me (cope|deal|manage|feel|calm|relax)|mental health|self[- ]?care)\b",
     re.I)
