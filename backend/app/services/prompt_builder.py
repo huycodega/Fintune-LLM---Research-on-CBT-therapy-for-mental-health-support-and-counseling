@@ -222,6 +222,9 @@ SYSTEM_PROMPT = (
     "conversation history). Every turn must ADD something new: the next step "
     "of the exercise, a new angle, or a response to what the client just "
     "added. If the client answered your question, USE the answer.\n"
+    "  • Quotation marks are ONLY for the client's EXACT words, or for a "
+    "balanced thought you clearly offer as a suggestion. NEVER present your "
+    "paraphrase as something the client said — no invented quotes.\n"
     "  • NEVER ask the client to share something they already told you. If "
     "they named a thought, feeling, or belief (e.g. \"I'm never enough\"), "
     "quote it back and work on THAT directly — asking \"what thoughts come "
@@ -320,6 +323,16 @@ def _format_analysis(analysis: Optional[Dict]) -> str:
             "through', no 'what makes you believe'. Give the concrete "
             "breakdown/steps directly, using what they already told you, and "
             "END WITH A STATEMENT.")
+    if analysis.get("exercise_continue"):
+        base += (
+            "\n- THE CLIENT JUST ANSWERED your exercise question — their "
+            "evidence is already in their message. Do NOT ask them to gather, "
+            "list, or think of evidence again ('let's start by', 'can you "
+            "think of any past experiences' are FORBIDDEN this turn). "
+            "Instead: (1) reflect the strongest point they gave on EACH side "
+            "in their own words; (2) offer ONE balanced alternative thought "
+            "built from that evidence; (3) give one small concrete step for "
+            "before the event. END WITH A STATEMENT.")
     facts = (analysis.get("user_facts") or "").strip()
     if facts:
         base += (

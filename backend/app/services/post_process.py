@@ -193,6 +193,27 @@ def strip_questions(text: str) -> str:
     return kept if len(kept) >= 20 else t
 
 
+def dedupe_sentences(text: str) -> str:
+    """Drop a sentence that near-duplicates an EARLIER sentence in the same
+    reply — the model sometimes glues two takes of the same move ("Let's
+    start by looking at the evidence… Let's begin by gathering evidence…").
+    Only long sentences are compared (short empathic beats repeat licitly),
+    and the original wins if too little would remain."""
+    parts = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    kept, seen = [], []
+    for p in parts:
+        words = {w.lower() for w in _WORD.findall(p)}
+        if (len(words) >= 6
+                and any(len(words & s) / len(words | s) >= 0.55
+                        for s in seen)):
+            continue
+        if len(words) >= 6:
+            seen.append(words)
+        kept.append(p)
+    out = " ".join(kept).strip()
+    return out if len(out) >= 40 else (text or "").strip()
+
+
 # Rewrite pass for delivery turns ("just lay it out for me") whose best draft
 # STILL dodges with questions — one bounded revision call. Strictly guarded:
 # the result must contain zero question marks and a sane length, and the

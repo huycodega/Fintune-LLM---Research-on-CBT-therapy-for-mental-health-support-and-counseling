@@ -152,6 +152,19 @@ def _question_count(resp: str) -> int:
                if s.strip().rstrip('"\'”’»)]').endswith("?"))
 
 
+# The previous reply opened a CBT exercise (evidence gathering etc.) — when
+# the client then ANSWERS substantively, re-opening step 1 ("let's start by
+# gathering evidence") reads as not listening. Detect the state; the prompt
+# gets a synthesize-now directive and re-opening drafts sink in ranking.
+_EXERCISE_OPEN = re.compile(
+    r"evidence (for (and|or) )?(and )?against|gather(ing)? (that )?evidence|"
+    r"thought record|reality[- ]testing|balanced (view|thought|perspective)",
+    re.I)
+_EXERCISE_REOPEN = re.compile(
+    r"let'?s (start|begin) by|gather(ing)? (the )?evidence|"
+    r"can you think of any past experiences|"
+    r"what do you think supports your belief", re.I)
+
 _DUP_WORD = re.compile(r"[a-z']+")
 
 
@@ -800,15 +813,25 @@ def chat(body: ChatIn, request: Request,
     # delivery turn — the model must give substance now. Phrasing-independent,
     # so it catches every wording _DELIVERY_REQ can't enumerate. Skipped in
     # listen mode (listen replies are validation, not delivered analysis).
+    prior_replies = [h["reply"].strip()
+                     for h in session_ctx["history"]
+                     if (h.get("reply") or "").strip()]
     if not delivery_req and not convo.listen_mode:
-        prior_replies = [h["reply"].strip()
-                         for h in session_ctx["history"]
-                         if (h.get("reply") or "").strip()]
         if (len(prior_replies) >= 2
                 and all(r.endswith("?") for r in prior_replies[-2:])):
             delivery_req = True
             analysis["delivery_request"] = True
             analysis["question_streak_break"] = True
+
+    # Exercise continuation: our last reply opened an exercise and the client
+    # answered with substance — this turn must WEIGH their answer and move to
+    # a balanced thought + step, never re-open evidence gathering.
+    exercise_continue = False
+    if (prior_replies and not convo.listen_mode
+            and _EXERCISE_OPEN.search(prior_replies[-1])
+            and len(text.strip()) >= 150):
+        exercise_continue = True
+        analysis["exercise_continue"] = True
 
     # intake snapshot for prompt — None when the user skipped intake; the
     # prompt builder omits the block and memory fills the gap over time.
@@ -964,8 +987,9 @@ def chat(body: ChatIn, request: Request,
     _in_name = ((intake_dict or {}).get("demographics") or {}).get("name") or ""
     _allowed_names.update(w.lower() for w in str(_in_name).split())
     for d in drafts:
-        d["response"] = post_process.scrub_unknown_names(
-            d.get("response") or "", _allowed_names)
+        d["response"] = post_process.dedupe_sentences(
+            post_process.scrub_unknown_names(
+                d.get("response") or "", _allowed_names))
 
     # Listen-only: guarantee no draft carries a probing question, REGARDLESS of
     # which path produced it. The agent already strips its own drafts, but the
@@ -1007,11 +1031,14 @@ def chat(body: ChatIn, request: Request,
         pen = _reask_count(resp) if named_given else 0
         if delivery_req:      # any question is a dodge on a delivery turn
             pen += _question_count(resp)
+        if exercise_continue and _EXERCISE_REOPEN.search(resp):
+            pen += 4          # client answered — re-opening step 1 sinks
         if any(_near_dup(resp, prev) for prev in recent_replies):
             pen += 8          # repetition outranks every other flaw
         return pen
 
-    if drafts and (named_given or delivery_req or recent_replies):
+    if drafts and (named_given or delivery_req or exercise_continue
+                   or recent_replies):
         drafts.sort(key=lambda d: (0 if d.get("preflight_pass") else 1,
                                    _draft_penalty(d),
                                    -(d.get("grounding_score") or 0.0)))
