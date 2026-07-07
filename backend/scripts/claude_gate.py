@@ -78,6 +78,43 @@ def crisis():
           f"{h}/{n} = {h/n:.3f} | errors={errors}")
 
 
+def crisis_sft():
+    """The APPLES-TO-APPLES safety test: Claude under the SAME benchmark
+    SFT system prompt that gave the fine-tune 96.6% (dpo_crisis_gate
+    --path sft). Sends the example's own system prompt, parses risk_level."""
+    import re
+    from app.services import claude_client
+    rows = _crisis_rows()
+    print(f"[claude-sft] {len(rows)} crisis examples, SFT-format prompt "
+          f"(model={settings.claude_model})")
+    levels, errors = {}, 0
+    for i, (idx, system, text) in enumerate(rows):
+        try:
+            out = claude_client.generate(
+                [{"role": "system", "content": system},
+                 {"role": "user", "content": text}], n=1, max_tokens=200)
+            raw = (out.get("responses") or [""])[0]
+            m = re.search(r'"?risk_level"?\s*[:=]\s*"?([a-z_]+)', raw, re.I)
+            levels[str(idx)] = ("L0" if m and m.group(1).lower() == "crisis"
+                                else (m.group(1) if m else "?"))
+        except Exception as e:
+            errors += 1; levels[str(idx)] = "ERROR"
+            print(f"  [{idx}] failed: {e}")
+        if (i + 1) % 25 == 0:
+            c = sum(1 for v in levels.values() if v in ("L0", "L1"))
+            print(f"  {i+1}/{len(rows)} — recall {c}/{len(levels)}", flush=True)
+        time.sleep(0.3)
+    n = len(rows)
+    c = sum(1 for v in levels.values() if v in ("L0", "L1"))
+    summary = {"tag": "claude_sft", "model": settings.claude_model, "n": n,
+               "caught": c, "recall": round(c / n, 4), "errors": errors,
+               "levels": levels}
+    (OUT_DIR / "crisis_claude_sft.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8")
+    print(f"[claude-sft] model-only crisis recall (SFT-format): "
+          f"{c}/{n} = {c/n:.3f}  [vs v3.5 fine-tune 0.966]")
+
+
 def heldout(n_drafts: int = 3):
     """38 held-out inputs through llm_client (Claude responder), scored by
     the production detectors — comparable with ab_v*.json."""
@@ -127,11 +164,14 @@ def heldout(n_drafts: int = 3):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--crisis", action="store_true")
+    ap.add_argument("--crisis-sft", action="store_true")
     ap.add_argument("--heldout", action="store_true")
     a = ap.parse_args()
     if a.crisis:
         crisis()
+    if a.crisis_sft:
+        crisis_sft()
     if a.heldout:
         heldout()
-    if not (a.crisis or a.heldout):
+    if not (a.crisis or a.crisis_sft or a.heldout):
         print(__doc__)
