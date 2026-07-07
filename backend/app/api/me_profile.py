@@ -50,8 +50,20 @@ def list_roadmaps(user: dict = Depends(auth.current_user),
 def create_roadmap(body: RoadmapIn,
                    user: dict = Depends(auth.current_user),
                    db: Session = Depends(get_db)):
-    tf = (body.timeframe or "").strip() or roadmap_svc.parse_timeframe(body.goal)
-    rm = roadmap_svc.generate(body.goal, tf, [])
+    goal = (body.goal or "").strip()
+    # Safety: a goal like "suicidal" must NOT become a cheerful wellness plan.
+    # Route to the crisis resources instead of creating a roadmap.
+    from app.services import safety_gate
+    if safety_gate.has_acute_risk(goal):
+        return {
+            "crisis": True,
+            "message": ("What you wrote sounds really heavy, and a to-do list "
+                        "isn't what you need right now. Please reach out to one "
+                        "of these — real people are ready to listen, any time."),
+            "resources": safety_plan_svc.CRISIS_CONTACTS,
+        }
+    tf = (body.timeframe or "").strip() or roadmap_svc.parse_timeframe(goal)
+    rm = roadmap_svc.generate(goal, tf, [])
     rid = roadmap_svc.save(db, user["uid"], rm)
     audit_mod.audit(db, action="roadmap_created", actor=user,
                     resource_type="roadmap", resource_id=rid, detail={})

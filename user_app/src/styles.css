@@ -6970,6 +6970,11 @@ html, body, #root { overflow-x: hidden; }
 .rm-create-btn { padding: 11px 16px; border: none; border-radius: 10px; background: #2f8f6b;
   color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
 .rm-create-btn:disabled { opacity: .5; cursor: default; }
+.rm-crisis { margin: 0 0 16px; border: 1px solid rgba(192,57,43,.3); border-left: 4px solid #c0392b;
+  border-radius: 12px; background: rgba(192,57,43,.06); padding: 14px 16px; }
+.rm-crisis-msg { font-size: 14px; color: var(--ink, #26303c); margin-bottom: 8px; line-height: 1.5; }
+.rm-crisis ul { margin: 0; padding-left: 20px; }
+.rm-crisis li { font-size: 13px; color: var(--ink, #26303c); line-height: 1.6; }
 .rm-empty { padding: 40px 16px; text-align: center; color: var(--ink-soft, #6b7480); font-size: 14px; }
 .rm-empty em { color: var(--ink, #26303c); }
 .rm-arch-head { margin: 22px 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .04em;

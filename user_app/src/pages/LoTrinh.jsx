@@ -139,6 +139,7 @@ export default function LoTrinh() {
   const [goal, setGoal] = useState("");
   const [tf, setTf] = useState("2 weeks");
   const [busy, setBusy] = useState(false);
+  const [crisis, setCrisis] = useState(null);
 
   const load = () =>
     api.listRoadmaps().then((r) => setRoadmaps(r.roadmaps || [])).catch(() => setRoadmaps([]));
@@ -148,10 +149,15 @@ export default function LoTrinh() {
     const g = goal.trim();
     if (!g || busy) return;
     setBusy(true);
+    setCrisis(null);
     try {
-      await api.createRoadmap(g, tf);
-      setGoal("");
-      await load();
+      const r = await api.createRoadmap(g, tf);
+      if (r && r.crisis) {           // goal held acute-risk language → hotline
+        setCrisis(r);
+      } else {
+        setGoal("");
+        await load();
+      }
     } catch { /* keep the draft */ }
     setBusy(false);
   }
@@ -195,6 +201,13 @@ export default function LoTrinh() {
           {busy ? "Building…" : "Create roadmap"}
         </button>
       </div>
+
+      {crisis && (
+        <div className="rm-crisis">
+          <div className="rm-crisis-msg">{crisis.message}</div>
+          <ul>{(crisis.resources || []).map((r, i) => <li key={i}>{r}</li>)}</ul>
+        </div>
+      )}
 
       {roadmaps === null ? (
         <div className="rm-empty">Loading…</div>
