@@ -786,6 +786,11 @@ def chat(body: ChatIn, request: Request,
 
     # ---- L2 / L3: full pipeline ----
     analysis = analyzer.analyze(text, severity=triage["severity"])
+    # A frontier brain (LLM_PROVIDER=claude) doesn't dodge, loop, or re-ask, so
+    # the 7B-taming ENFORCEMENT (force-delivery, question-strip, deliver-rewrite)
+    # only mutilates good replies. We keep the analysis FLAGS (they feed gentle
+    # prompt directives) but skip the output-mutating machinery for Claude.
+    claude = getattr(settings, "llm_provider", "local") == "claude"
     # The client explicitly asked for a DELIVERED analysis ("walk me through
     # it", "how likely") — pin a no-questions directive into the prompt and
     # (below) rank question-y drafts last. The 7B otherwise bounces the request
@@ -824,7 +829,7 @@ def chat(body: ChatIn, request: Request,
     prior_replies = [h["reply"].strip()
                      for h in session_ctx["history"]
                      if (h.get("reply") or "").strip()]
-    if not delivery_req and not convo.listen_mode:
+    if not delivery_req and not convo.listen_mode and not claude:
         if (len(prior_replies) >= 2
                 and all(r.rstrip('"\'”’»)]*_`').endswith("?")
                         for r in prior_replies[-2:])):
@@ -847,12 +852,13 @@ def chat(body: ChatIn, request: Request,
         if opened or self_evident:
             exercise_continue = True
             analysis["exercise_continue"] = True
-        # Phrasing-independent enforcement (regex reopen-hunting kept
-        # missing variants: "gather THAT evidence", "any MOMENTS when"):
-        # the directive demands a statement turn, so ride the delivery
-        # machinery — every question is penalized in ranking, and the
-        # rewrite-on-dodge + strip floor apply if the best draft still asks.
-        delivery_req = True
+            # Phrasing-independent enforcement for the 7B (regex reopen-hunting
+            # kept missing variants): ride the delivery machinery so every
+            # question is penalized + the rewrite/strip floor applies. Claude
+            # synthesizes correctly on its own — the directive flag above is
+            # enough; forcing no-questions would strip its good closing prompt.
+            if not claude:
+                delivery_req = True
 
     # intake snapshot for prompt — None when the user skipped intake; the
     # prompt builder omits the block and memory fills the gap over time.
@@ -1009,11 +1015,17 @@ def chat(body: ChatIn, request: Request,
     _allowed_names.update(w.lower() for w in str(_in_name).split())
     _user_texts = [text] + (history or [])
     for d in drafts:
-        d["response"] = post_process.dedupe_sentences(
-            post_process.scrub_unclaimed_facts(
-                post_process.scrub_unknown_names(
-                    d.get("response") or "", _allowed_names),
-                _user_texts))
+        r = post_process.scrub_unknown_names(d.get("response") or "",
+                                             _allowed_names)
+        # scrub_unclaimed_facts drops "you've <verb> …" claims not grounded in
+        # the client's words — needed for the 7B (it invented client
+        # biographies), but it also false-positives on a frontier brain's
+        # legitimate encouragement ("you've taken a brave step by reaching
+        # out"). Claude's lean prompt already forbids invented facts, so skip
+        # it there and keep the warmth.
+        if not claude:
+            r = post_process.scrub_unclaimed_facts(r, _user_texts)
+        d["response"] = post_process.dedupe_sentences(r)
 
     # Listen-only: guarantee no draft carries a probing question, REGARDLESS of
     # which path produced it. The agent already strips its own drafts, but the
@@ -1160,7 +1172,9 @@ def chat(body: ChatIn, request: Request,
     # Delivery turn but even the best draft still dodges with questions (the
     # 7B's drafts correlate) → ONE guarded rewrite call. Must come back with
     # zero question marks AND re-pass preflight, else the original stands.
-    if (chosen and delivery_req
+    # Skipped for Claude: it honours the delivery directive without dodging,
+    # so a closing caring question is intended, not a dodge to be stripped.
+    if (chosen and delivery_req and not claude
             and _question_count(chosen.get("response") or "") > 0):
         fixed = post_process.deliver_rewrite(
             chosen.get("response") or "", scrubbed_text)
