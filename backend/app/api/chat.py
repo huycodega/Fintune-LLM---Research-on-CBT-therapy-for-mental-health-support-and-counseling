@@ -573,12 +573,15 @@ def chat(body: ChatIn, request: Request,
         db, convo, u, text, level)
 
     # ---- Safety plan (Stanley-Brown) ----
-    # A calm, explicit request to build a plan → co-draft one now. Fires only
-    # on L2/L3: a genuine crisis (L0/L1) falls through to the hotline/clinician
-    # branches below, so the plan never pre-empts a live crisis — and it always
-    # carries the hotlines itself.
+    # An explicit request to build a plan → co-draft one now. The real crisis
+    # gate is has_acute_risk (self-harm language), NOT the triage LEVEL: the
+    # word "safety plan" itself makes the model read L1, so gating on level
+    # would send every plan request to review instead of helping. So: never on
+    # L0 or on actual acute-risk language (those get the hotline below); on L1
+    # (possible elevated risk with no acute language) give the plan AND still
+    # notify a clinician. The plan always carries the hotlines itself.
     if (safety_plan.wants_plan(text)
-            and level not in ("L0", "L1")
+            and level != "L0"
             and not safety_gate.has_acute_risk(text)):
         plan = safety_plan.generate(history + [text])
         safety_plan.save(db, u.id, plan)
@@ -587,8 +590,14 @@ def chat(body: ChatIn, request: Request,
             final_technique="safety_plan",
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
+        if level == "L1":            # helped now, but a human still follows up
+            db.add(models.ReviewQueue(
+                session_id=sess.id, triage_level=level, priority=1,
+                sla_due_at=_sla_for(level)))
+            moderation_store.enqueue(db, convo, user_message, level)
         audit_mod.audit(db, action="safety_plan_built", actor=user, ip=ip,
-                         resource_type="session", resource_id=sess.id, detail={})
+                         resource_type="session", resource_id=sess.id,
+                         detail={"level": level})
         return {
             "session_id": str(sess.id),
             "conversation_id": str(convo.id),
