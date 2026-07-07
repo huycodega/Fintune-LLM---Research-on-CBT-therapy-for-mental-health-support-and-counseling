@@ -115,13 +115,48 @@ def crisis_sft():
           f"{c}/{n} = {c/n:.3f}  [vs v3.5 fine-tune 0.966]")
 
 
+# Self-contained copies of the production detectors (avoids importing
+# app.api.chat, which drags the whole auth/argon2 stack into this script).
+import re as _re                                        # noqa: E402
+_REASK = _re.compile(
+    r"what (specific )?(thoughts?|feelings?|emotions?|fears?|worries|concerns?)\b|"
+    r"\btell me more\b|can you (tell|describe|share|help me understand)", _re.I)
+_ADVANCE = _re.compile(r"\bevidence\b|worst case|how likely|balanced|reframe|"
+                       r"a friend\b|next step|for and against", _re.I)
+_DELIV = _re.compile(r"\b(just tell me|be honest|no sugar|walk me through|"
+                     r"how likely|straight answer|help me (choose|decide))\b", _re.I)
+_NAME = _re.compile(r"\b(Hi|Hello|Hey|Dear)\s+[A-Z][a-z]{1,20}|"
+                    r",\s+[A-Z][a-z]{1,20}[.!?]", )
+
+
+def _qn(r):
+    return sum(1 for s in _re.split(r"(?<=[.!?])\s+", r or "")
+              if s.strip().rstrip('"\'”’*_`').endswith("?"))
+
+
+def _local_score(resp, user):
+    named = bool(_re.search(r'["“]', user) or _re.search(
+        r"\bi (keep thinking|believe|feel|am|'m)\b", user, _re.I))
+    why = []
+    if named and any(_REASK.search(s) and not _ADVANCE.search(s)
+                     for s in _re.split(r"(?<=[.!?])\s+", resp or "")):
+        why.append("reask_after_named")
+    if _DELIV.search(user) and _qn(resp) > 0:
+        why.append("question_on_delivery_ask")
+    if _NAME.search(resp or ""):
+        why.append("borrowed_name")
+    if len(resp or "") < 120:
+        why.append("too_thin")
+    return {"fails": len(why), "why": why}
+
+
 def heldout(n_drafts: int = 3):
     """38 held-out inputs through llm_client (Claude responder), scored by
-    the production detectors — comparable with ab_v*.json."""
+    self-contained production-equivalent detectors."""
     from app.services.prompt_builder import build_messages
     from app.services.post_process import parse_draft
     from app.services import llm_client
-    from gen_onpolicy_dpo import _score
+    _score = _local_score
 
     inputs = [l.strip() for l in
               (Path(__file__).parent / "dpo_holdout_inputs.txt")
