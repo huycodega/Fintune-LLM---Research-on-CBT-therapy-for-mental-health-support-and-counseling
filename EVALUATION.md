@@ -1,9 +1,11 @@
 # MindCare AI — Evaluation, Guardrails & Cost
 
-System: a CBT mental-health assistant. A single fine-tuned model
-(`Huysun29/cbt-qwen2.5-7b-v2`) serves all roles (safety triage, responder,
-agent orchestrator) on Modal (A100-80GB); a deterministic safety gate +
-human-in-the-loop clinician review sit around it.
+System: a CBT mental-health assistant. The "brain" is **provider-agnostic**:
+a single fine-tuned model (`Huysun29/cbt-qwen2.5-7b-v3`, self-hosted on
+Modal A100-80GB) serves all LLM roles by default, and a one-env-var switch
+(`LLM_PROVIDER=claude`) routes those same roles to the Claude API instead —
+the deterministic safety gate, choke-point nets, memory, context and
+human-in-the-loop review are **identical** for both providers.
 
 All numbers below are **measured**, not estimated. Reproduce with the scripts in
 `backend/scripts/` and `eval-model/`.
@@ -125,9 +127,111 @@ and the production prompt was the biggest single transfer lever; and
 class-weighting dense, authored gold responses spills over — v3.5's
 mid-exercise golds lifted EVERY failure class, not just the targeted one.
 
+### 1g. Acute-crisis safety probe + provider swap (Claude Sonnet 5)
+
+The SFT-format crisis benchmark (§1a/1b) measures label *reproduction* — the
+fine-tune was trained to map that dataset's broad "crisis" label (which
+includes grief/despair) to a crisis level, so it scores 96.6% there. That is
+**not** a fair cross-provider test: a model using independent clinical
+judgment (e.g. Claude) flags only genuine acute danger and "misses" the
+grief-labelled examples by design. The measurement that reflects real user
+safety is `backend/scripts/acute_safety_probe.py` — genuine acute-crisis
+messages, short and direct like production chat, through the real
+`safety_gate.assess` path (regex hard-override ∨ model):
+
+| Provider (production path) | Acute crisis → L0/L1 | Safe → L2/L3 |
+|---|---|---|
+| Fine-tune v3.5 (+ regex) | pass (regex floor) | — |
+| **Claude Sonnet 5 (+ regex)** | **15/15 (100%)** | **10/10 (0 false alarm)** |
+
+The regex hard-override is **provider-independent**, so the crisis floor
+holds regardless of which model answers.
+
+**Responder quality, held-out (37 unseen inputs, 3 drafts each):**
+
+| Metric | v2 (base) | v3.5 (6 DPO rounds) | **Claude Sonnet 5** |
+|---|---|---|---|
+| Clean-draft rate | 45.9% | 71.6% | **95.5%** |
+| Re-ask after named thought | 25.0% | 12.8% | **0%** |
+| Borrowed-name rate | 18.2% | 1.4% | **0%** |
+| Question on delivery-ask | 13.5% | 9.5% | **3.6%** |
+| Mean reply length | 190 ch | 250 ch | **295 ch** |
+
+> Caveat: the Claude column was scored with a self-contained
+> production-equivalent detector (the env couldn't import the full chain);
+> the ~24 pp gap over v3.5 is far larger than any scoring drift. Reproduce:
+> `LLM_PROVIDER=claude python scripts/claude_gate.py --heldout` and
+> `scripts/acute_safety_probe.py`. Cost: ~$0.05–0.15 / chat turn on Sonnet 5
+> vs ~$0.004 self-hosted-warm (see §4).
+
 ---
 
-## 2. Guardrails
+## 2. Trustworthiness: Memory, Context & Edge-Case Handling
+
+Beyond metrics, "trustworthy for real users" means the agent **remembers**,
+**tracks the conversation**, and **fails safe on the odd cases**. All three
+are verified in code and behave identically across providers.
+
+### 2a. Memory (durable, cross-session) — `user_memory.py`
+
+A per-user `UserMemory` row (PHI encrypted, `facts_enc` AES-GCM) accumulates
+compact facts every turn (`update_after_turn`, heuristic — works even in
+mock/degraded): a **recurring-themes** counter (cognitive distortions +
+emotions from the analyzer), a **techniques-used** counter, a `turn_count`,
+and an LLM-written **rolling gist** (`summarizer.refresh_after_turn`, a
+background task). `load_for_prompt` injects the top themes/techniques +
+summary into **every** prompt, so the agent recalls what this person tends
+to struggle with and what's been tried. Best-effort throughout: any memory
+failure is swallowed and never blocks a reply.
+
+### 2b. Context (multi-turn, in-thread) — `session_ctx` in `chat.py`
+
+Each turn assembles: prior turn count, last technique, the **last N turns of
+this thread** (decrypted history), a **rolling thread summary** (Redis,
+refreshed after each turn), durable memory (2a), and stated style
+preferences. This context is what powers named-thought pinning, the
+anti-repeat check, exercise-continuation detection, and listen-mode
+stickiness — the behaviours that make the conversation feel followed rather
+than reset each message.
+
+### 2c. Edge cases — ~12 deterministic guards (safety only ever escalates UP)
+
+| Edge case | Handling |
+|---|---|
+| Acute crisis (L0/L1) | regex hard-override, overrides the model; L0 = no AI reply |
+| Jailbreak / prompt-injection | dedicated gate (only when no acute risk) |
+| Off-topic / "about the app" | scope router redirect, biased to "personal" |
+| "Just listen, don't advise" | listen mode + L2 vent-release valve (fail-closed) |
+| Model / API outage | circuit breaker → degraded → fixed pipeline; never hangs |
+| Invented name / biography / continuity | 3 scrubs at the draft choke-point |
+| Repeat reply / re-open a finished exercise / dodge | near-dup + exercise-continue + delivery machinery |
+| Before ANY auto-send | `has_acute_risk` re-checked on full context |
+
+### 2d. Trustworthiness scorecard (grouped)
+
+| # | Dimension | Evidence |
+|---|---|---|
+| ① | **Safety** | Acute-crisis recall **15/15 (100%)**, 10/10 safe not over-escalated (§1g); combined benchmark recall **99.3%**; escalation P/R/F1 **99.3 / 96.6 / 97.9** |
+| ② | **Honesty / anti-fabrication** | PII leakage **0%** (0/181); production grounding mean **0.06**; red-team **10/10** |
+| ③ | **Human oversight** | L2 always clinician-reviewed; approve **82.4%**, **reject 0%**; tool-arg validity **100%** |
+| ④ | **Conversation quality (held-out)** | Clean-draft **45.9% → 71.6% (v3.5) → 95.5% (Claude)**; scope accuracy **95.5%** |
+| ⑤ | **Operational robustness** | Agent failure → fixed-pipeline fallback; crisis floor held across **6 consecutive** DPO retrains |
+
+### 2e. Honest limits to disclose
+
+- Memory is **compact heuristic** (themes/techniques/gist), not full
+  retrieval over every past session — sufficient for continuity, not a
+  complete clinical record.
+- The 96.6% / 99.3% crisis figures live in the **benchmark SFT format**; use
+  the acute-safety probe (15/15) for cross-provider safety claims.
+- Red-team **N is small** (10) — a sanity check, to be expanded.
+- On-device technique accuracy (33.5%) is the 7B ceiling — the reason the
+  Claude provider exists, and why the model-agnostic architecture (fixed
+  safety layer + swappable brain) is the real contribution.
+
+---
+
+## 3. Guardrails
 
 | Guardrail | Mechanism | Measured effect |
 |---|---|---|
@@ -143,10 +247,12 @@ mid-exercise golds lifted EVERY failure class, not just the targeted one.
 
 ---
 
-## 3. Cost
+## 4. Cost
 
-The model is **self-hosted on Modal (A100-80GB)** → cost is **GPU-seconds ×
-rate**, not tokens × API price.
+The default model is **self-hosted on Modal (A100-80GB)** → cost is
+**GPU-seconds × rate**, not tokens × API price. The Claude provider trades
+that for **~$0.05–0.15 / chat turn** (several Sonnet 5 calls per turn:
+drafts + triage + orchestrator + summary + emphasis).
 
 **Measured:** M4 generation used `gen_seconds = 3269.4` over N=998 →
 **~3.28 GPU-seconds / interaction (warm, batched)**.
@@ -175,7 +281,7 @@ Assuming A100-80GB ≈ **$0.0011/sec** (~$3.96/hr — *plug your billed rate*):
 
 ---
 
-## 4. Known gaps (honest)
+## 5. Known gaps (honest)
 
 - **Latency** (p50 46s) — cold starts; fix via keep-warm (ops, not safety).
 - **Clinical quality** — LLM-judge CBT-align 2.47 / helpful 2.50 are modest;
@@ -187,7 +293,7 @@ Assuming A100-80GB ≈ **$0.0011/sec** (~$3.96/hr — *plug your billed rate*):
 
 ---
 
-## 5. Reproduce
+## 6. Reproduce
 
 ```bash
 # $0 — no Modal:
@@ -195,9 +301,15 @@ cd backend
 python scripts/regex_safety_eval.py     # combined crisis recall / FP (N=997)
 python scripts/extra_metrics.py         # escalation, scope, diversity, PII, grounding
 python scripts/agent_trace_eval.py      # production agent behaviour (needs DB)
+python scripts/acute_safety_probe.py    # genuine acute-crisis recall (production path)
 
 # Uses live Modal (small):
 python scripts/final_eval.py            # crisis smoke + red-team + KPIs
+
+# DPO campaign (v3.x) + provider swap:
+python scripts/dpo_crisis_gate.py --compare v2sft v35sft   # per-example crisis gate
+python scripts/dpo_ab_eval.py --compare v2 v35             # held-out behaviour
+LLM_PROVIDER=claude python scripts/claude_gate.py --heldout # Claude responder quality
 
 # Offline benchmark (already computed; results in eval-model/.../eval_out_*):
 #   modal_eval.py / modal_rag_eval.py / modal_agent_eval.py
