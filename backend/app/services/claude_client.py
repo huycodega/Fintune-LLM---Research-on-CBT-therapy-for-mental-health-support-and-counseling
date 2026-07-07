@@ -17,6 +17,7 @@ Design constraints honoured:
 import json
 import logging
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional
@@ -34,15 +35,36 @@ def enabled() -> bool:
             and bool(getattr(settings, "anthropic_api_key", None)))
 
 
-def _post(payload: dict, timeout: int = 120) -> dict:
-    req = urllib.request.Request(
-        _API, data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json",
-                 "x-api-key": settings.anthropic_api_key,
-                 "anthropic-version": _VERSION},
-        method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+def _post(payload: dict, timeout: int = 120, retries: int = 4) -> dict:
+    """POST with backoff on 429/529 — fresh keys sit in tier 1 (50 req/min)
+    and the 147-example crisis gate would trip the limiter without this."""
+    last = None
+    for attempt in range(retries + 1):
+        req = urllib.request.Request(
+            _API, data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json",
+                     "x-api-key": settings.anthropic_api_key,
+                     "anthropic-version": _VERSION},
+            method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 529) and attempt < retries:
+                wait = min(2 ** attempt * 2, 30)
+                retry_after = e.headers.get("retry-after")
+                if retry_after:
+                    try:
+                        wait = max(wait, float(retry_after))
+                    except ValueError:
+                        pass
+                log.warning("Claude %s — retry in %.0fs (%d/%d)",
+                            e.code, wait, attempt + 1, retries)
+                time.sleep(wait)
+                last = e
+                continue
+            raise
+    raise last
 
 
 def _split(messages: List[Dict]):
@@ -79,10 +101,13 @@ def generate(messages: List[Dict], n: int = 3,
     parallel. Raises on TOTAL failure (caller degrades like a Modal
     failure); partial success returns what came back."""
     system, turns = _split(messages)
+    # Claude 5 family: `temperature` is deprecated (API rejects it) and
+    # extended thinking is on by default — disable it: we want fast, cheap,
+    # text-only completions with natural sampling variety across n calls.
     payload = {
         "model": settings.claude_model,
         "max_tokens": max_tokens or settings.claude_max_tokens,
-        "temperature": min(max(temperature, 0.0), 1.0),
+        "thinking": {"type": "disabled"},
         "messages": turns,
     }
     if system:
@@ -117,7 +142,7 @@ def triage(messages: List[Dict]) -> Optional[str]:
     payload = {
         "model": settings.claude_model,
         "max_tokens": 200,
-        "temperature": 0.0,
+        "thinking": {"type": "disabled"},
         "messages": turns,
     }
     if system:
@@ -153,7 +178,7 @@ def chat(messages: List[Dict], tools: Optional[List[Dict]] = None,
     payload = {
         "model": settings.claude_model,
         "max_tokens": max_tokens,
-        "temperature": min(max(temperature, 0.0), 1.0),
+        "thinking": {"type": "disabled"},
         "messages": turns,
     }
     if system:
