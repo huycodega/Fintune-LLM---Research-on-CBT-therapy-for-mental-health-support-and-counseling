@@ -30,8 +30,13 @@ log = logging.getLogger(__name__)
 
 
 def available() -> bool:
-    """True only when the agent feature is on AND an endpoint is configured."""
-    return bool(settings.agent_enabled and settings.modal_agent_endpoint)
+    """True only when the agent feature is on AND a backend exists for it
+    (the Modal orchestrator endpoint, or the Claude provider)."""
+    if not settings.agent_enabled:
+        return False
+    if settings.llm_provider == "claude" and settings.anthropic_api_key:
+        return True
+    return bool(settings.modal_agent_endpoint)
 
 
 def health() -> Dict:
@@ -77,6 +82,19 @@ def chat(messages: List[Dict],
     if force_tool_call is None:
         force_tool_call = settings.agent_force_tool_call
     force_tool_call = bool(force_tool_call and tools)
+
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        out = claude_client.chat(
+            messages, tools=tools,
+            temperature=(settings.agent_temperature
+                         if temperature is None else temperature),
+            max_tokens=max_new_tokens, force_tool_call=force_tool_call)
+        if out is not None:
+            rc.circuit_record_success()
+        else:
+            rc.circuit_record_failure()
+        return out
 
     body = json.dumps({
         "messages": messages,

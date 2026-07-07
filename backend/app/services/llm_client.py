@@ -25,6 +25,9 @@ def health() -> Dict:
     if settings.mock_llm:
         return {"reachable": True, "mode": "mock",
                 "model": settings.hf_model_repo}
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        return claude_client.health()
     url = settings.modal_health_endpoint
     if not url:
         return {"reachable": False, "mode": "modal",
@@ -50,6 +53,26 @@ def generate(messages: List[Dict], n: int = None,
         out = _mock(messages, n)
         out["degraded"] = True
         return out
+
+    # Claude provider: same contract, same breaker, same degraded fallback —
+    # a Claude outage can never behave worse than a Modal outage.
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        t0 = time.time()
+        try:
+            data = claude_client.generate(
+                messages, n=n, temperature=temperature,
+                max_tokens=settings.max_new_tokens)
+            rc.circuit_record_success()
+            data["wall_time"] = time.time() - t0
+            return data
+        except Exception as e:
+            rc.circuit_record_failure()
+            log.exception("Claude LLM call failed: %s", e)
+            out = _mock(messages, n)
+            out["degraded"] = True
+            out["error"] = str(e)
+            return out
 
     body = json.dumps({
         "messages": messages,

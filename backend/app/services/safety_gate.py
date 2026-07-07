@@ -259,7 +259,33 @@ def _build_messages(text: str, history: Optional[list]) -> list:
 
 def _call_modal(text: str, history: Optional[list] = None,
                 timeout: int = 600) -> Optional[Dict]:
-    """Call Modal-hosted cbt-qwen2.5-7b-v2 safety endpoint. Returns None on failure."""
+    """Call the triage model. Provider 'claude' routes the SAME production
+    prompt to the Claude API; otherwise the Modal-hosted fine-tune. Returns
+    None on any failure — the regex heuristic (which hard-overrides L0/L1
+    regardless of provider) then carries the turn."""
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        t0 = time.time()
+        raw_text = claude_client.triage(_build_messages(text, history))
+        if not raw_text:
+            return None
+        m = re.search(r'"level"\s*:\s*"(L[0-3])"', raw_text)
+        if not m:
+            log.warning("Claude triage unparseable: %r", raw_text[:200])
+            return None
+        level = m.group(1)
+        sev = re.search(r'"severity"\s*:\s*"(\w+)"', raw_text)
+        rsn = re.search(r'"reason"\s*:\s*"([^"]{0,300})"', raw_text)
+        return {
+            "triage_level": level,
+            "severity": sev.group(1) if sev else _level_to_severity(level),
+            "confidence": 0.85,
+            "reason": rsn.group(1) if rsn else "claude triage",
+            "source": settings.claude_model,
+            "latency_ms": round((time.time() - t0) * 1000),
+            "raw_model": raw_text[:600],
+        }
+
     url = settings.modal_safety_endpoint
     if not url:
         return None

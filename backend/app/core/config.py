@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     # sessions (labelled L2) for retrospective review.
     l2_vent_release_enabled: bool = True
 
+    # ---- LLM provider switch ----
+    # "local" = the fine-tuned Qwen brain on Modal (default; nothing changes).
+    # "claude" = every LLM role (responder, triage model, orchestrator,
+    # vent-check, rewrite, emphasis, summaries, copilot) runs on the Claude
+    # API instead. Embeddings/rerank/NLI stay on the brain regardless — the
+    # Qdrant index is bge-m3 and Anthropic has no embeddings API. The regex
+    # crisis hard-override and every choke-point net apply identically to
+    # both providers. Rollback = set LLM_PROVIDER=local (one env var).
+    llm_provider: str = "local"
+    anthropic_api_key: Optional[str] = None
+    claude_model: str = "claude-sonnet-5"
+    claude_max_tokens: int = 700
+
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise
     # the conversation thread → session_ctx["summary"] (Redis), and (B) rewrite
