@@ -6959,6 +6959,84 @@ html, body, #root { overflow-x: hidden; }
 @media (prefers-color-scheme: dark) {
   .safety-plan-card { background: rgba(47,143,107,.10); border-color: rgba(255,255,255,.10); }
 }
+
+/* ── Journey / Roadmap page ─────────────────────────────────────── */
+.rm-page { max-width: 760px; margin: 0 auto; padding: 8px 4px 40px; }
+.rm-create { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
+.rm-input { flex: 1 1 260px; min-width: 0; padding: 11px 13px; border: 1px solid var(--line, #dde3ea);
+  border-radius: 10px; font-size: 14px; background: var(--card, #fff); color: var(--ink, #1c2430); }
+.rm-tf { padding: 11px 10px; border: 1px solid var(--line, #dde3ea); border-radius: 10px;
+  background: var(--card, #fff); color: var(--ink, #1c2430); font-size: 14px; }
+.rm-create-btn { padding: 11px 16px; border: none; border-radius: 10px; background: #2f8f6b;
+  color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.rm-create-btn:disabled { opacity: .5; cursor: default; }
+.rm-empty { padding: 40px 16px; text-align: center; color: var(--ink-soft, #6b7480); font-size: 14px; }
+.rm-empty em { color: var(--ink, #26303c); }
+.rm-arch-head { margin: 22px 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-soft, #8a93a0); }
+
+.rm-card { border: 1px solid var(--line, #e3e8ef); border-radius: 14px; margin-bottom: 12px;
+  background: var(--card, #fff); overflow: hidden; }
+.rm-card.rm-completed { border-left: 4px solid #2f8f6b; }
+.rm-card.rm-archived { opacity: .72; }
+.rm-card-head { display: flex; align-items: center; gap: 13px; width: 100%; padding: 13px 15px;
+  background: none; border: none; cursor: pointer; text-align: left; }
+.rm-card-meta { flex: 1; min-width: 0; }
+.rm-card-title { font-weight: 700; font-size: 15px; color: var(--ink, #1c2430); }
+.rm-card-sub { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.rm-chip { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+  background: rgba(47,143,107,.12); color: #2f8f6b; }
+.rm-chip-done { background: rgba(47,143,107,.18); }
+.rm-chip-arch { background: rgba(120,128,140,.15); color: var(--ink-soft, #6b7480); }
+.rm-caret { font-size: 22px; color: var(--ink-soft, #9aa3b0); transition: transform .15s; }
+.rm-caret.open { transform: rotate(90deg); }
+
+.rm-ring-track { stroke: rgba(47,143,107,.15); }
+.rm-ring-fill { stroke: #2f8f6b; transition: stroke-dashoffset .4s ease; }
+.rm-ring-label { font-size: 13px; font-weight: 800; fill: var(--ink, #26303c); }
+
+.rm-card-body { padding: 0 15px 15px; }
+.rm-goal { font-size: 13px; color: var(--ink-soft, #56606e); margin-bottom: 10px; }
+.rm-chart { margin: 4px 0 12px; }
+.rm-bar { height: 8px; border-radius: 5px; background: rgba(47,143,107,.14); overflow: hidden; }
+.rm-bar-fill { height: 100%; background: #2f8f6b; border-radius: 5px; transition: width .4s ease; }
+.rm-chart-cap { font-size: 11.5px; color: var(--ink-soft, #7a8390); margin-top: 5px; }
+.rm-line-area { fill: rgba(47,143,107,.14); }
+.rm-line-stroke { stroke: #2f8f6b; }
+.rm-line-dot { fill: #2f8f6b; }
+
+.rm-steps { list-style: none; margin: 0; padding: 0; }
+.rm-step { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0;
+  border-top: 1px solid var(--line, #eef2f6); }
+.rm-check { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; margin-top: 1px;
+  border: 1.5px solid var(--line, #cfd6df); background: var(--card, #fff); color: #2f8f6b;
+  font-weight: 800; cursor: pointer; line-height: 1; }
+.rm-step.done .rm-check { background: #2f8f6b; color: #fff; border-color: #2f8f6b; }
+.rm-step-text { font-size: 13.5px; color: var(--ink, #26303c); line-height: 1.45; }
+.rm-step.done .rm-step-text { text-decoration: line-through; color: var(--ink-soft, #96a0ac); }
+.rm-when { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 600;
+  color: #2f8f6b; background: rgba(47,143,107,.1); padding: 1px 7px; border-radius: 10px; }
+.rm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.rm-act { font-size: 12.5px; padding: 6px 11px; border: 1px solid var(--line, #dde3ea);
+  border-radius: 8px; background: var(--card, #fff); color: var(--ink-soft, #56606e); cursor: pointer; }
+.rm-act-del { color: #c0392b; border-color: rgba(192,57,43,.3); }
+
+/* Roadmap mini-card in chat */
+.rm-mini { margin-top: 12px; border: 1px solid var(--line, #e3e8ef); border-left: 4px solid #2f8f6b;
+  border-radius: 12px; background: var(--card, #f7fbf9); padding: 12px 14px; }
+.rm-mini-head { font-weight: 800; font-size: 14px; color: var(--ink, #1c2430); margin-bottom: 8px; }
+.rm-mini-tf { font-size: 11px; font-weight: 600; color: #2f8f6b; background: rgba(47,143,107,.12);
+  padding: 1px 8px; border-radius: 10px; margin-left: 8px; }
+.rm-mini-steps { list-style: none; margin: 0 0 8px; padding: 0; }
+.rm-mini-steps li { font-size: 13px; color: var(--ink, #26303c); padding: 3px 0; line-height: 1.4; }
+.rm-mini-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #2f8f6b; margin-right: 8px; vertical-align: middle; }
+.rm-mini-when { font-size: 10.5px; color: #2f8f6b; margin-left: 6px; }
+.rm-mini-more { color: var(--ink-soft, #7a8390); font-style: italic; }
+.rm-mini-open { font-size: 12.5px; font-weight: 700; color: #2f8f6b; background: none; border: none; cursor: pointer; padding: 0; }
+@media (prefers-color-scheme: dark) {
+  .rm-mini { background: rgba(47,143,107,.10); border-color: rgba(255,255,255,.10); }
+  .rm-card { background: rgba(255,255,255,.02); }
+}
 .ai-rec-chip {
   display: flex; align-items: center; gap: 9px; width: 100%;
   text-align: left; padding: 10px 12px; border-radius: 12px;

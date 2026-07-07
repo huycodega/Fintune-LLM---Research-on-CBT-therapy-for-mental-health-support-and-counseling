@@ -32,7 +32,7 @@ from app.services import (
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
     moderation_store, scope_router, self_data, summarizer, actions, warmup,
-    safety_plan,
+    safety_plan, roadmap,
 )
 
 
@@ -610,6 +610,38 @@ def chat(body: ChatIn, request: Request,
                 "edit, and you can come back to it anytime from your profile. "
                 "The crisis lines at the bottom are always there. Would you "
                 "like to adjust any part of it together?")},
+            "listen_active": bool(convo.listen_mode),
+        }
+
+    # ---- Wellness roadmap ----
+    # An explicit request for a time-bound plan/routine ("a 2-week plan to
+    # sleep better") → draft a structured roadmap now, save it, and return a
+    # card. L2/L3 only (safe, non-crisis); acute risk falls through below.
+    if (roadmap.wants_roadmap(text)
+            and level not in ("L0", "L1")
+            and not safety_gate.has_acute_risk(text)):
+        tf = roadmap.parse_timeframe(text)
+        rm = roadmap.generate(text, tf, history)
+        rid = roadmap.save(db, u.id, rm)
+        rm = roadmap.load_one(db, u.id, rid)
+        sess = models.Session(
+            **base, status="answered", analysis={"roadmap": True},
+            final_technique="roadmap",
+            completed_at=datetime.now(timezone.utc))
+        db.add(sess); db.flush()
+        audit_mod.audit(db, action="roadmap_built", actor=user, ip=ip,
+                         resource_type="roadmap", resource_id=rid, detail={})
+        return {
+            "session_id": str(sess.id),
+            "conversation_id": str(convo.id),
+            "outcome": "answered", "triage": triage,
+            "mode": "roadmap",
+            "roadmap": rm,
+            "final": {"technique": "roadmap", "response": (
+                f"Here's a {rm.get('timeframe','')} roadmap to work toward "
+                "that — small steps you can tick off as you go. It lives on "
+                "your Journey page, and I'll help you keep momentum. Want to "
+                "adjust any step?")},
             "listen_active": bool(convo.listen_mode),
         }
 

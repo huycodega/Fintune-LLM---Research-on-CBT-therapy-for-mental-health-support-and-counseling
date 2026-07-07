@@ -165,4 +165,15 @@ export const api = {
   savedResources: () => req("/me/saved-resources"),
   saveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "POST" }),
   unsaveResource: (rid) => req(`/me/saved-resources/${rid}`, { method: "DELETE" }),
+
+  // ---- wellness roadmaps (time-bound improvement journeys) ----
+  listRoadmaps: () => req("/me/roadmaps"),
+  createRoadmap: (goal, timeframe) =>
+    req("/me/roadmaps", { method: "POST", body: { goal, timeframe }, timeoutMs: 60000 }),
+  getRoadmap: (rid) => req(`/me/roadmaps/${rid}`),
+  toggleRoadmapStep: (rid, idx) =>
+    req(`/me/roadmaps/${rid}/step/${idx}`, { method: "PATCH" }),
+  setRoadmapStatus: (rid, status) =>
+    req(`/me/roadmaps/${rid}`, { method: "PATCH", body: { status } }),
+  deleteRoadmap: (rid) => req(`/me/roadmaps/${rid}`, { method: "DELETE" }),
 };

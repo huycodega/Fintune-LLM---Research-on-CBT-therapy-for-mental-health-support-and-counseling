@@ -188,6 +188,26 @@ function SafetyPlanCard({ plan }) {
   );
 }
 
+/* ── Roadmap mini-card (full management lives on the Journey page) ── */
+function RoadmapMini({ rm, onOpen }) {
+  if (!rm) return null;
+  const steps = rm.steps || [];
+  return (
+    <div className="rm-mini">
+      <div className="rm-mini-head">🧭 {rm.title}
+        <span className="rm-mini-tf">{rm.timeframe}</span></div>
+      <ul className="rm-mini-steps">
+        {steps.slice(0, 4).map((s, i) => (
+          <li key={i}><span className="rm-mini-dot" /> {s.text}
+            {s.when && <span className="rm-mini-when">{s.when}</span>}</li>
+        ))}
+        {steps.length > 4 && <li className="rm-mini-more">+{steps.length - 4} more steps</li>}
+      </ul>
+      <button className="rm-mini-open" onClick={onOpen}>Open in Journey ›</button>
+    </div>
+  );
+}
+
 /* ── In-chat psychologist booking helpers ─────────────────────────── */
 function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -328,6 +348,9 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
           )}
           {isAI && msg.safetyPlan && (
             <SafetyPlanCard plan={msg.safetyPlan} />
+          )}
+          {isAI && msg.roadmap && (
+            <RoadmapMini rm={msg.roadmap} onOpen={() => onNav && onNav("lotrinh")} />
           )}
           {recs.length > 0 && (
             <div className="ai-recs">
@@ -1132,7 +1155,7 @@ export default function Chat({ onNav }) {
       // so the user always has a real-person lifeline to reach for.
       const resources = r.crisis_resources || null;
       if (r.outcome === "answered") {
-        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards, actions: r.actions, safetyPlan: r.safety_plan || null });
+        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards, actions: r.actions, safetyPlan: r.safety_plan || null, roadmap: r.roadmap || null });
       } else if (r.outcome === "crisis") {
         show({ role: "ai", time: nowTime(), text: r.message || "I'm really glad you reached out. Your safety matters most right now.", crisis: true, resources });
       } else if (r.outcome === "pending_review") {

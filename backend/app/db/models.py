@@ -606,3 +606,22 @@ class SafetyPlan(Base):
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
     content_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class Roadmap(Base):
+    """A time-bound wellness improvement journey the client works through step
+    by step. Agent-drafted from a goal + timeframe, then owned/progressed by
+    the client. PHI-encrypted; many per user."""
+    __tablename__ = "roadmaps"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False)
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="active", server_default="active")
+    content_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+Index("idx_roadmaps_user", Roadmap.user_id, Roadmap.status)

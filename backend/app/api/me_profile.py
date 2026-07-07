@@ -28,9 +28,75 @@ from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models, models_admin
 from app.db.session import get_db
-from app.services import progress_stats, safety_plan as safety_plan_svc
+from app.services import (progress_stats, safety_plan as safety_plan_svc,
+                          roadmap as roadmap_svc)
 
 router = APIRouter(prefix="/api/me")
+
+
+# ── Wellness roadmaps ────────────────────────────────────────────────────────
+class RoadmapIn(BaseModel):
+    goal: str
+    timeframe: Optional[str] = None
+
+
+@router.get("/roadmaps")
+def list_roadmaps(user: dict = Depends(auth.current_user),
+                  db: Session = Depends(get_db)):
+    return {"roadmaps": roadmap_svc.load_all(db, user["uid"])}
+
+
+@router.post("/roadmaps")
+def create_roadmap(body: RoadmapIn,
+                   user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    tf = (body.timeframe or "").strip() or roadmap_svc.parse_timeframe(body.goal)
+    rm = roadmap_svc.generate(body.goal, tf, [])
+    rid = roadmap_svc.save(db, user["uid"], rm)
+    audit_mod.audit(db, action="roadmap_created", actor=user,
+                    resource_type="roadmap", resource_id=rid, detail={})
+    return roadmap_svc.load_one(db, user["uid"], rid)
+
+
+@router.get("/roadmaps/{rid}")
+def get_roadmap(rid: str, user: dict = Depends(auth.current_user),
+                db: Session = Depends(get_db)):
+    rm = roadmap_svc.load_one(db, user["uid"], rid)
+    if not rm:
+        raise HTTPException(404, "Roadmap not found")
+    return rm
+
+
+@router.patch("/roadmaps/{rid}/step/{idx}")
+def toggle_roadmap_step(rid: str, idx: int,
+                        user: dict = Depends(auth.current_user),
+                        db: Session = Depends(get_db)):
+    rm = roadmap_svc.toggle_step(db, user["uid"], rid, idx)
+    if not rm:
+        raise HTTPException(404, "Roadmap not found")
+    return rm
+
+
+class RoadmapStatusIn(BaseModel):
+    status: str
+
+
+@router.patch("/roadmaps/{rid}")
+def set_roadmap_status(rid: str, body: RoadmapStatusIn,
+                       user: dict = Depends(auth.current_user),
+                       db: Session = Depends(get_db)):
+    rm = roadmap_svc.set_status(db, user["uid"], rid, body.status)
+    if not rm:
+        raise HTTPException(400, "Invalid roadmap or status")
+    return rm
+
+
+@router.delete("/roadmaps/{rid}")
+def delete_roadmap(rid: str, user: dict = Depends(auth.current_user),
+                   db: Session = Depends(get_db)):
+    if not roadmap_svc.delete(db, user["uid"], rid):
+        raise HTTPException(404, "Roadmap not found")
+    return {"ok": True}
 
 
 # ── Safety plan (Stanley-Brown) ──────────────────────────────────────────────
@@ -560,6 +626,7 @@ def export_my_data(user: dict = Depends(auth.current_user),
             "shared_with_clinician": e.shared_with_clinician,
         } for e in journal],
         "safety_plan": safety_plan_svc.load(db, uid),
+        "roadmaps": roadmap_svc.load_all(db, uid),
     }
 
 

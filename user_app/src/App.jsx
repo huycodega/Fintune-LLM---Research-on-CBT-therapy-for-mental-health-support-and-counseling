@@ -10,6 +10,7 @@ import Chat from "./pages/Chat.jsx";
 import SangLoc from "./pages/SangLoc.jsx";
 import HoSo from "./pages/HoSo.jsx";
 import NhatKy from "./pages/NhatKy.jsx";
+import LoTrinh from "./pages/LoTrinh.jsx";
 import BaiHoc from "./pages/BaiHoc.jsx";
 import TaiNguyen from "./pages/TaiNguyen.jsx";
 import TuVan from "./pages/TuVan.jsx";
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { id: "tainguyen", icon: "folder", label: "Resources" },
   { id: "tuvan", icon: "expert", label: "Counselling" },
   { id: "nhatky", icon: "journal", label: "Journal" },
+  { id: "lotrinh", icon: "journey", label: "Journey" },
   { id: "hoso", icon: "user", label: "Profile" },
   { id: "caidat", icon: "settings", label: "Settings" },
 ];
@@ -41,7 +43,7 @@ const TOPBAR_TABS = [
 const PAGE_PATHS = {
   dashboard: "/dashboard", sangloc: "/screening", chat: "/chat",
   baihoc: "/lessons", tainguyen: "/resources", tuvan: "/counselling",
-  nhatky: "/journal", hoso: "/profile", caidat: "/settings",
+  nhatky: "/journal", lotrinh: "/journey", hoso: "/profile", caidat: "/settings",
 };
 const PATH_PAGES = Object.fromEntries(
   Object.entries(PAGE_PATHS).map(([id, p]) => [p, id]));
@@ -128,6 +130,16 @@ function NavSvgIcon({ name }) {
         <rect x="5" y="3.5" width="14" height="17" rx="2" />
         <path d="M9 3.5v17" />
         <path d="M12.5 8.5h3.5M12.5 12h3.5" />
+      </svg>
+    );
+  }
+  if (name === "journey") {
+    return (
+      <svg {...common} className="nav-svg-icon">
+        <path d="M6 20c0-3 2-4 4-4s4-1 4-4 2-4 4-4" />
+        <circle cx="6" cy="20" r="1.4" />
+        <circle cx="12" cy="12" r="1.4" />
+        <circle cx="18" cy="4" r="1.4" />
       </svg>
     );
   }
@@ -396,6 +408,7 @@ export default function App() {
     tainguyen: <TaiNguyen />,
     tuvan:     <TuVan />,
     nhatky:    <NhatKy />,
+    lotrinh:   <LoTrinh />,
     caidat:    <CaiDat user={user} onLogout={logout} />,
   };
 
