@@ -588,9 +588,17 @@ def chat(body: ChatIn, request: Request,
             and not safety_gate.has_acute_risk(text)):
         plan = safety_plan.generate(history + [text])
         safety_plan.save(db, u.id, plan)
+        sp_reply = (
+            "I've put together a starting safety plan for you below — a few "
+            "things to lean on if things get harder. It's yours to edit, and "
+            "you can come back to it anytime from your profile. The crisis "
+            "lines are always there, and if things feel urgent please reach "
+            "one of them right now. Would you like to adjust any part of it "
+            "together?")
         sess = models.Session(
             **base, status="answered", analysis={"safety_plan": True},
             final_technique="safety_plan",
+            final_reply_enc=encrypt_phi(sp_reply),
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
         elevated = level in ("L0", "L1")
@@ -611,13 +619,7 @@ def chat(body: ChatIn, request: Request,
             "safety_plan": plan,
             # surface hotlines prominently when the model flagged elevated risk
             "crisis_resources": CRISIS_RESOURCES if elevated else None,
-            "final": {"technique": "safety_plan", "response": (
-                "I've put together a starting safety plan for you below — a "
-                "few things to lean on if things get harder. It's yours to "
-                "edit, and you can come back to it anytime from your profile. "
-                "The crisis lines are always there, and if things feel urgent "
-                "please reach one of them right now. Would you like to adjust "
-                "any part of it together?")},
+            "final": {"technique": "safety_plan", "response": sp_reply},
             "listen_active": bool(convo.listen_mode),
         }
 
@@ -632,10 +634,15 @@ def chat(body: ChatIn, request: Request,
         rm = roadmap.generate(text, tf, history)
         rid = roadmap.save(db, u.id, rm)
         rm = roadmap.load_one(db, u.id, rid)
+        rm_reply = (
+            f"Here's a {rm.get('timeframe','')} roadmap to work toward that — "
+            "small steps you can tick off as you go. It lives on your Journey "
+            "page, and I'll help you keep momentum. Want to adjust any step?")
         sess = models.Session(
             **base, status="answered",
             analysis={"roadmap": True, "roadmap_id": rid},
             final_technique="roadmap",
+            final_reply_enc=encrypt_phi(rm_reply),
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
         audit_mod.audit(db, action="roadmap_built", actor=user, ip=ip,
@@ -646,11 +653,7 @@ def chat(body: ChatIn, request: Request,
             "outcome": "answered", "triage": triage,
             "mode": "roadmap",
             "roadmap": rm,
-            "final": {"technique": "roadmap", "response": (
-                f"Here's a {rm.get('timeframe','')} roadmap to work toward "
-                "that — small steps you can tick off as you go. It lives on "
-                "your Journey page, and I'll help you keep momentum. Want to "
-                "adjust any step?")},
+            "final": {"technique": "roadmap", "response": rm_reply},
             "listen_active": bool(convo.listen_mode),
         }
 
