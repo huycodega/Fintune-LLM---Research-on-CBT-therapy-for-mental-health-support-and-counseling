@@ -591,3 +591,18 @@ class JournalEntry(Base):
 
 
 Index("idx_journal_user", JournalEntry.user_id, JournalEntry.created_at.desc())
+
+
+class SafetyPlan(Base):
+    """A user's collaborative safety plan (Stanley-Brown structure). One per
+    user, PHI-encrypted. NOT a substitute for crisis resources — the plan
+    always carries the hotlines, and acute risk still routes to the crisis
+    gate + clinician regardless of whether a plan exists."""
+    __tablename__ = "safety_plans"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, unique=True)
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+    content_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

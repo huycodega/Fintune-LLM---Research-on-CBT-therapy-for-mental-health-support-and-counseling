@@ -32,6 +32,7 @@ from app.services import (
     post_process, preflight, pii_scrubber, redis_client as rc, calibration,
     metrics, session_memory, agent, agent_client, user_memory, triage_log,
     moderation_store, scope_router, self_data, summarizer, actions, warmup,
+    safety_plan,
 )
 
 
@@ -542,6 +543,38 @@ def chat(body: ChatIn, request: Request,
 
     level = triage["triage_level"]
     metrics.inc("cbt_triage_level_total", level=level)
+
+    # ---- Safety plan (Stanley-Brown) ----
+    # A calm, explicit request to build a plan → co-draft one now. Guarded by
+    # NOT has_acute_risk, so a message that is itself a crisis still falls
+    # through to the L0/L1 crisis handling below (hotline + clinician) — the
+    # plan never pre-empts a live crisis, and it always carries the hotlines.
+    if (safety_plan.wants_plan(text)
+            and not safety_gate.has_acute_risk(text)
+            and level != "L0"):
+        plan = safety_plan.generate(history + [text])
+        safety_plan.save(db, u.id, plan)
+        sess = models.Session(
+            **base, status="answered", analysis={"safety_plan": True},
+            final_technique="safety_plan",
+            completed_at=datetime.now(timezone.utc))
+        db.add(sess); db.flush()
+        audit_mod.audit(db, action="safety_plan_built", actor=user, ip=ip,
+                         resource_type="session", resource_id=sess.id, detail={})
+        return {
+            "session_id": str(sess.id),
+            "conversation_id": str(convo.id),
+            "outcome": "answered", "triage": triage,
+            "mode": "safety_plan",
+            "safety_plan": plan,
+            "final": {"technique": "safety_plan", "response": (
+                "I've put together a starting safety plan for you below — a "
+                "few things to lean on if things get harder. It's yours to "
+                "edit, and you can come back to it anytime from your profile. "
+                "The crisis lines at the bottom are always there. Would you "
+                "like to adjust any part of it together?")},
+            "listen_active": bool(convo.listen_mode),
+        }
 
     # ---- structured triage log (foundation for the eval set) ----
     # Logged for EVERY level — L0/L1 included, since those are exactly the

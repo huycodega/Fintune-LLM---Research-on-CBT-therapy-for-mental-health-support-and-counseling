@@ -156,6 +156,38 @@ function parseRecs(text, library) {
   return { body: body || text, recs };
 }
 
+/* ── Safety plan card (Stanley-Brown) ─────────────────────────────── */
+const SP_SECTIONS = [
+  ["warning_signs", "⚠️", "Warning signs I notice"],
+  ["coping_strategies", "🌿", "Things I can do on my own"],
+  ["distractions", "🚶", "People & places that help me settle"],
+  ["support_people", "💬", "People I can reach out to"],
+  ["safe_environment", "🏠", "Making my space safer"],
+  ["professionals", "🆘", "Professional & crisis support"],
+];
+function SafetyPlanCard({ plan }) {
+  if (!plan) return null;
+  return (
+    <div className="safety-plan-card">
+      <div className="safety-plan-head">🛟 Your Safety Plan</div>
+      {SP_SECTIONS.map(([key, emoji, label]) => {
+        const items = Array.isArray(plan[key]) ? plan[key] : [];
+        if (!items.length) return null;
+        return (
+          <div className="safety-plan-section" key={key}>
+            <div className="safety-plan-label">{emoji} {label}</div>
+            <ul>{items.map((it, i) => <li key={i}>{it}</li>)}</ul>
+          </div>
+        );
+      })}
+      <div className="safety-plan-foot">
+        You can edit this anytime from your profile. If you're in immediate
+        danger, contact 988 or your local emergency number now.
+      </div>
+    </div>
+  );
+}
+
 /* ── In-chat psychologist booking helpers ─────────────────────────── */
 function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -293,6 +325,9 @@ function ChatBubble({ msg, library, onOpenRec, onTalkExpert, onManageAppt,
                 <ConfirmAction key={k} action={a} onRun={onRunAction} />
               ))}
             </div>
+          )}
+          {isAI && msg.safetyPlan && (
+            <SafetyPlanCard plan={msg.safetyPlan} />
           )}
           {recs.length > 0 && (
             <div className="ai-recs">
@@ -1097,7 +1132,7 @@ export default function Chat({ onNav }) {
       // so the user always has a real-person lifeline to reach for.
       const resources = r.crisis_resources || null;
       if (r.outcome === "answered") {
-        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards, actions: r.actions });
+        show({ role: "ai", time: nowTime(), text: r.final?.response || "I'm here with you.", cards: r.cards, actions: r.actions, safetyPlan: r.safety_plan || null });
       } else if (r.outcome === "crisis") {
         show({ role: "ai", time: nowTime(), text: r.message || "I'm really glad you reached out. Your safety matters most right now.", crisis: true, resources });
       } else if (r.outcome === "pending_review") {

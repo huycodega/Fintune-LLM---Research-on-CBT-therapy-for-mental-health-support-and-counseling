@@ -6943,6 +6943,22 @@ html, body, #root { overflow-x: hidden; }
 /* ── Clickable "From your library" recommendations inside a chat bubble ── */
 .ai-recs { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .ai-recs-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 2px; }
+
+/* Safety plan card */
+.safety-plan-card {
+  margin-top: 12px; border: 1px solid var(--line, #e3e8ef);
+  border-left: 4px solid #2f8f6b; border-radius: 12px;
+  background: var(--card, #f7fbf9); padding: 14px 16px;
+}
+.safety-plan-head { font-weight: 800; font-size: 15px; margin-bottom: 10px; color: var(--ink, #1c2430); }
+.safety-plan-section { margin-bottom: 10px; }
+.safety-plan-label { font-size: 12.5px; font-weight: 700; color: var(--ink-soft, #56606e); margin-bottom: 3px; }
+.safety-plan-section ul { margin: 0; padding-left: 20px; }
+.safety-plan-section li { font-size: 13.5px; line-height: 1.5; color: var(--ink, #26303c); margin-bottom: 2px; }
+.safety-plan-foot { margin-top: 8px; font-size: 12px; color: var(--ink-soft, #6b7480); border-top: 1px dashed var(--line, #dbe2ea); padding-top: 8px; }
+@media (prefers-color-scheme: dark) {
+  .safety-plan-card { background: rgba(47,143,107,.10); border-color: rgba(255,255,255,.10); }
+}
 .ai-rec-chip {
   display: flex; align-items: center; gap: 9px; width: 100%;
   text-align: left; padding: 10px 12px; border-radius: 12px;

@@ -28,9 +28,45 @@ from app.core import auth, audit as audit_mod
 from app.core.crypto import encrypt_phi, decrypt_str
 from app.db import models, models_admin
 from app.db.session import get_db
-from app.services import progress_stats
+from app.services import progress_stats, safety_plan as safety_plan_svc
 
 router = APIRouter(prefix="/api/me")
+
+
+# ── Safety plan (Stanley-Brown) ──────────────────────────────────────────────
+class SafetyPlanIn(BaseModel):
+    warning_signs: Optional[list] = None
+    coping_strategies: Optional[list] = None
+    distractions: Optional[list] = None
+    support_people: Optional[list] = None
+    safe_environment: Optional[list] = None
+
+
+@router.get("/safety-plan")
+def get_safety_plan(user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    """The user's saved safety plan, or the always-present crisis contacts
+    when they haven't made one yet."""
+    plan = safety_plan_svc.load(db, user["uid"])
+    if plan is None:
+        return {"exists": False,
+                "professionals": list(safety_plan_svc.CRISIS_CONTACTS)}
+    return {"exists": True, **plan}
+
+
+@router.put("/safety-plan")
+def put_safety_plan(body: SafetyPlanIn,
+                    user: dict = Depends(auth.current_user),
+                    db: Session = Depends(get_db)):
+    """User edits/owns their plan. Crisis contacts are re-attached server-side
+    and can't be removed."""
+    plan = {k: [str(x).strip()[:200] for x in (v or []) if str(x).strip()]
+            for k, v in body.model_dump().items()}
+    safety_plan_svc.save(db, user["uid"], plan)
+    audit_mod.audit(db, action="safety_plan_saved", actor=user,
+                    resource_type="safety_plan", resource_id=user["uid"],
+                    detail={})
+    return {"ok": True, **(safety_plan_svc.load(db, user["uid"]) or {})}
 
 
 # ── Preference defaults ──────────────────────────────────────────────────────
@@ -523,6 +559,7 @@ def export_my_data(user: dict = Depends(auth.current_user),
             "mood": e.mood,
             "shared_with_clinician": e.shared_with_clinician,
         } for e in journal],
+        "safety_plan": safety_plan_svc.load(db, uid),
     }
 
 
