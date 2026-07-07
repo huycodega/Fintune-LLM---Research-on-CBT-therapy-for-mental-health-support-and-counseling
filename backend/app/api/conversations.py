@@ -16,7 +16,7 @@ from app.core.crypto import decrypt_str
 from app.db import models
 from app.db.session import get_db
 from app.schemas.api import ConversationRenameIn
-from app.services import user_memory
+from app.services import user_memory, safety_plan as safety_plan_svc, roadmap as roadmap_svc
 
 router = APIRouter(prefix="/api")
 
@@ -77,13 +77,22 @@ def get_conversation(cid: str, user: dict = Depends(auth.current_user),
             "session_id": str(s.id),
         })
         if s.status in ("answered", "auto_sent") and s.final_reply_enc:
-            messages.append({
+            msg = {
                 "role": "assistant",
                 "content": decrypt_str(s.final_reply_enc),
                 "technique": s.final_technique,
                 "created_at": (s.completed_at or s.created_at).isoformat(),
                 "session_id": str(s.id),
-            })
+            }
+            # Re-attach structured cards so a reopened thread looks identical
+            # to when it was first sent (otherwise only the text survives).
+            an = s.analysis or {}
+            if an.get("safety_plan"):
+                msg["safety_plan"] = safety_plan_svc.load(db, c.user_id)
+            if an.get("roadmap_id"):
+                msg["roadmap"] = roadmap_svc.load_one(db, c.user_id,
+                                                      an["roadmap_id"])
+            messages.append(msg)
         else:
             messages.append({
                 "role": "system",

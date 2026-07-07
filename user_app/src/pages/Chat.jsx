@@ -92,7 +92,8 @@ function mapServerMessages(messages) {
     if (m.role === "user")
       return { role: "user", time: fmtTime(m.created_at), read: true, text: m.content };
     if (m.role === "assistant")
-      return { role: "ai", time: fmtTime(m.created_at), text: m.content };
+      return { role: "ai", time: fmtTime(m.created_at), text: m.content,
+               safetyPlan: m.safety_plan || null, roadmap: m.roadmap || null };
     // system notice (crisis / pending_review / rejected)
     return { role: "ai", time: fmtTime(m.created_at), text: m.content,
              crisis: m.status === "crisis",

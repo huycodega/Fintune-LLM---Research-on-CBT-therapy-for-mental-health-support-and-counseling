@@ -573,15 +573,18 @@ def chat(body: ChatIn, request: Request,
         db, convo, u, text, level)
 
     # ---- Safety plan (Stanley-Brown) ----
-    # An explicit request to build a plan → co-draft one now. The real crisis
-    # gate is has_acute_risk (self-harm language), NOT the triage LEVEL: the
-    # word "safety plan" itself makes the model read L1, so gating on level
-    # would send every plan request to review instead of helping. So: never on
-    # L0 or on actual acute-risk language (those get the hotline below); on L1
-    # (possible elevated risk with no acute language) give the plan AND still
-    # notify a clinician. The plan always carries the hotlines itself.
+    # An explicit request to build a plan → co-draft one now. The REAL crisis
+    # gate is has_acute_risk (deterministic self-harm language), NOT the model
+    # triage level: the phrase "safety plan" + a distressed thread makes the
+    # model read this benign request as L0/L1, which would bury it under the
+    # crisis message instead of helping. The intent regex requires explicitly
+    # protective wording ("safety plan / stay safe / coping plan"), and the
+    # plan itself always carries the hotlines — so when there is NO acute-risk
+    # language we build the plan even at a model-flagged L0/L1, and ALSO attach
+    # the crisis resources + notify a clinician there (help now, human follows
+    # up). A message with actual self-harm language (has_acute_risk) still
+    # falls through to the hotline/crisis branch below.
     if (safety_plan.wants_plan(text)
-            and level != "L0"
             and not safety_gate.has_acute_risk(text)):
         plan = safety_plan.generate(history + [text])
         safety_plan.save(db, u.id, plan)
@@ -590,9 +593,11 @@ def chat(body: ChatIn, request: Request,
             final_technique="safety_plan",
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
-        if level == "L1":            # helped now, but a human still follows up
+        elevated = level in ("L0", "L1")
+        if elevated:                 # helped now, but a human still follows up
             db.add(models.ReviewQueue(
-                session_id=sess.id, triage_level=level, priority=1,
+                session_id=sess.id, triage_level=level,
+                priority=1 if level == "L1" else 0,
                 sla_due_at=_sla_for(level)))
             moderation_store.enqueue(db, convo, user_message, level)
         audit_mod.audit(db, action="safety_plan_built", actor=user, ip=ip,
@@ -604,12 +609,15 @@ def chat(body: ChatIn, request: Request,
             "outcome": "answered", "triage": triage,
             "mode": "safety_plan",
             "safety_plan": plan,
+            # surface hotlines prominently when the model flagged elevated risk
+            "crisis_resources": CRISIS_RESOURCES if elevated else None,
             "final": {"technique": "safety_plan", "response": (
                 "I've put together a starting safety plan for you below — a "
                 "few things to lean on if things get harder. It's yours to "
                 "edit, and you can come back to it anytime from your profile. "
-                "The crisis lines at the bottom are always there. Would you "
-                "like to adjust any part of it together?")},
+                "The crisis lines are always there, and if things feel urgent "
+                "please reach one of them right now. Would you like to adjust "
+                "any part of it together?")},
             "listen_active": bool(convo.listen_mode),
         }
 
@@ -625,7 +633,8 @@ def chat(body: ChatIn, request: Request,
         rid = roadmap.save(db, u.id, rm)
         rm = roadmap.load_one(db, u.id, rid)
         sess = models.Session(
-            **base, status="answered", analysis={"roadmap": True},
+            **base, status="answered",
+            analysis={"roadmap": True, "roadmap_id": rid},
             final_technique="roadmap",
             completed_at=datetime.now(timezone.utc))
         db.add(sess); db.flush()
