@@ -13,6 +13,7 @@ Post-processing for LLM output:
 import re
 from typing import Dict, List
 
+from app.core.config import settings
 from app.services import hallucination_nli
 
 
@@ -26,20 +27,41 @@ def _grab(field: str, text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+# A line that role-plays another speaker's turn — the runaway signature.
+_SIM_TURN = re.compile(
+    r"^\s*(client|patient|user|therapist|counsell?or|me|you|assistant|ai)\s*[:\-–]",
+    re.I)
+
+
 def _trim_runaway(resp: str) -> str:
-    """Cut a self-continued dialogue. The model sometimes answers, then keeps
-    going and SIMULATES the client's next turn(s) on new lines — fabricating
-    words the client never said. A client-facing CBT reply is one short
-    paragraph, so once the first line is a complete sentence and more text
-    follows, drop the remainder."""
+    """Cut a self-continued dialogue: the model answers, then SIMULATES the
+    client's (or its own) next turn(s), fabricating words never said.
+
+    The old rule "keep only the first line" butchered legitimate multi-
+    paragraph replies — fine for the terse 7B, but a frontier brain writes
+    proper paragraphs (validate, then a step), and chopping them to the first
+    sentence is exactly what made replies read as bare validation. So: for a
+    capable provider keep the whole reply, only cutting at an explicit
+    speaker-label line; for the 7B keep the original aggressive first-line cut."""
     resp = (resp or "").strip()
     if "\n" not in resp:
         return resp
-    first, rest = resp.split("\n", 1)
+    # Always cut at an explicit simulated-turn label, whatever the provider.
+    lines = resp.split("\n")
+    kept = []
+    for ln in lines:
+        if _SIM_TURN.match(ln):
+            break
+        kept.append(ln)
+    labelled = "\n".join(kept).strip()
+    if getattr(settings, "llm_provider", "local") == "claude":
+        return labelled if len(labelled) >= 20 else resp
+    # 7B: also apply the original first-line cut (it rambles without labels).
+    first, rest = labelled.split("\n", 1) if "\n" in labelled else (labelled, "")
     first = first.strip()
     if first and first[-1] in ".!?" and rest.strip():
         return first
-    return resp
+    return labelled or resp
 
 
 def parse_draft(raw: str) -> Dict:

@@ -19,6 +19,7 @@ import hashlib
 import re
 from typing import Dict, List, Optional
 
+from app.core.config import settings
 from app.services.preflight import CANONICAL_TECHNIQUES, canonical_technique
 
 _TECH_LIST = ", ".join(CANONICAL_TECHNIQUES)
@@ -244,6 +245,50 @@ SYSTEM_PROMPT = (
     "  • If any crisis signals appear: set Technique to CRISIS_REFERRAL and "
     "recommend immediate escalation — do NOT provide standard CBT\n"
     "  • Keep Response under 200 words — concise, human, therapeutic"
+)
+
+
+# ── Lean prompt for a frontier brain (LLM_PROVIDER=claude) ────────────────────
+# The big FAITHFULNESS/CONTINUITY rule-blocks above exist to tame the 7B's
+# habits (re-asking, fabricated continuity, self-repeat, invented quotes,
+# borrowed names). A frontier model does none of that, and those rules only
+# over-constrain it into thin, validation-only replies. This keeps ONLY what
+# is genuinely model-independent — the 4-field contract, the safety floor,
+# and a one-line faithfulness/name guard — and otherwise TRUSTS the model to
+# be a warm, engaged therapist. The runtime choke-point nets still run as a
+# backstop for both providers.
+SYSTEM_PROMPT_CLAUDE = (
+    "You are a warm, highly skilled CBT therapist supporting a client in a "
+    "private mental-health chat. Combine real clinical expertise with genuine "
+    "human warmth.\n\n"
+
+    "Output EXACTLY these four labeled fields, in order:\n"
+    "Technique: <choose EXACTLY ONE, verbatim, from this list — do not invent "
+    f"one>\n   Allowed techniques: {_TECH_LIST}\n"
+    "Rationale: <1-2 sentences of clinical reasoning>\n"
+    "Plan: <2-3 concrete micro-steps for this session>\n"
+    "Response: <your reply to the client — this is the ONLY part they see>\n\n"
+
+    "Every Response has TWO parts, both required:\n"
+    "  (1) VALIDATE — warmly reflect how they feel, in their own terms.\n"
+    "  (2) MOVE FORWARD — in the SAME reply, take one real therapeutic step: "
+    "reframe a thought, offer a small doable action, ask one caring question, "
+    "or give realistic hope. A reply that only validates and stops is "
+    "INCOMPLETE and feels dismissive — always do (2) as well. (Not permission "
+    "to interrogate: at most one question.)\n\n"
+
+    "Also in the Response:\n"
+    "  • Use ONLY facts the client actually gave you. Never invent symptoms, "
+    "events, a name, or a shared past. Retrieved knowledge is background — "
+    "never imply it describes this client.\n"
+    "  • Use the client's name only if they gave it; otherwise use none.\n"
+    "  • Plain language, no jargon, under ~180 words. Write only this single "
+    "reply — do not simulate the client's next turn.\n\n"
+
+    "SAFETY (non-negotiable): no diagnosis, no medication advice, no self-harm "
+    "instructions. If any crisis or self-harm signal appears, set Technique to "
+    "CRISIS_REFERRAL and gently steer them to immediate professional/crisis "
+    "support instead of standard CBT."
 )
 
 
@@ -486,6 +531,33 @@ def build_messages(user_input_scrubbed: str,
                     analysis: Optional[Dict] = None,
                     session_ctx: Optional[Dict] = None,
                     retrieved: Optional[List[Dict]] = None) -> List[Dict]:
+    claude = getattr(settings, "llm_provider", "local") == "claude"
+    if claude:
+        # Frontier brain: give it the context and a short task, then trust it.
+        # No EMPHASIS/CONTINUITY nagging — those tamed the 7B and only flatten
+        # a capable model. (Bolding still comes from the separate emphasis pass.)
+        task = ("[CLINICAL TASK]\n"
+                "Reply as the CBT therapist in the four-field format. Validate "
+                "warmly, then move the work forward with a real CBT step. Use "
+                "only what the client actually told you.")
+    else:
+        task = ("[CLINICAL TASK]\n"
+                "As the CBT clinician:\n"
+                "1. Select the best-fit CBT technique based on distortion type and severity.\n"
+                "2. State your clinical rationale in 1-2 sentences.\n"
+                "3. Define 2-3 concrete micro-steps for this session.\n"
+                "4. Write the empathetic client-facing response (≤200 words).\n"
+                "EMPHASIS: In the Response, use markdown **bold** on the 1-2 words or "
+                "short phrases that carry the MOST meaning of YOUR reply — the insight, "
+                "the shift, or the next action — so they naturally stand out. Pick them "
+                "from the sentence itself; never bold filler or whole sentences. "
+                "Example: \"That thought — 'I'll definitely fail' — is a **prediction**, "
+                "not a fact. Let's look at the **evidence** for and against it.\"\n"
+                "CONTINUITY: Read CONVERSATION SO FAR. Do NOT repeat a question you "
+                "already asked or ask the client to 'share more' again if they just "
+                "did — build on what they already told you and ADVANCE to the next "
+                "step of the technique (e.g. move from naming the thought to examining "
+                "the evidence, then to a reframe or a concrete action).")
     blocks = [
         _format_intake(intake),
         _format_session_ctx(session_ctx),
@@ -493,27 +565,12 @@ def build_messages(user_input_scrubbed: str,
         _format_retrieved(retrieved or []),
         _format_named_thoughts(session_ctx, user_input_scrubbed),
         "[CURRENT CLIENT MESSAGE]\n" + user_input_scrubbed,
-        "[CLINICAL TASK]\n"
-        "As the CBT clinician:\n"
-        "1. Select the best-fit CBT technique based on distortion type and severity.\n"
-        "2. State your clinical rationale in 1-2 sentences.\n"
-        "3. Define 2-3 concrete micro-steps for this session.\n"
-        "4. Write the empathetic client-facing response (≤200 words).\n"
-        "EMPHASIS: In the Response, use markdown **bold** on the 1-2 words or "
-        "short phrases that carry the MOST meaning of YOUR reply — the insight, "
-        "the shift, or the next action — so they naturally stand out. Pick them "
-        "from the sentence itself; never bold filler or whole sentences. "
-        "Example: \"That thought — 'I'll definitely fail' — is a **prediction**, "
-        "not a fact. Let's look at the **evidence** for and against it.\"\n"
-        "CONTINUITY: Read CONVERSATION SO FAR. Do NOT repeat a question you "
-        "already asked or ask the client to 'share more' again if they just "
-        "did — build on what they already told you and ADVANCE to the next "
-        "step of the technique (e.g. move from naming the thought to examining "
-        "the evidence, then to a reframe or a concrete action).",
+        task,
     ]
     user_text = "\n\n".join(b for b in blocks if b).strip()
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system",
+         "content": SYSTEM_PROMPT_CLAUDE if claude else SYSTEM_PROMPT},
         {"role": "user", "content": user_text},
     ]
 
