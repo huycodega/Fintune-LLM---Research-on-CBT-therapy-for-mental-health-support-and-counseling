@@ -1257,8 +1257,20 @@ def chat(body: ChatIn, request: Request,
     # ---- L3: auto-send the gated-OK draft ----
     # Emphasis pass: let the model bold the naturally-important part of the reply
     # it's about to send (one short call, only on the auto-sent turn; best-effort).
+    # Only the THERAPEUTIC BODY is emphasized — never the structured footers
+    # ("From your library", screening CTA). Bolding a lesson title there
+    # ("**Reducing Avoidance**") breaks the exact-title match the UI uses to
+    # make the chip clickable. Split at the first footer marker, emphasize the
+    # head, re-attach the footer untouched.
     if getattr(settings, "emphasis_pass_enabled", True):
-        chosen["response"] = post_process.emphasize_llm(chosen["response"])
+        _full = chosen["response"]
+        _cut = len(_full)
+        for _mk in ("\n\nFrom your library", "\n\n💡", "\n\nWhat you told me"):
+            _i = _full.find(_mk)
+            if _i != -1:
+                _cut = min(_cut, _i)
+        _body, _tail = _full[:_cut], _full[_cut:]
+        chosen["response"] = post_process.emphasize_llm(_body) + _tail
     sess = models.Session(
         **base, status="auto_sent",
         analysis=analysis, retrieved_ids=retrieved_ids, prompt_hash=p_hash,

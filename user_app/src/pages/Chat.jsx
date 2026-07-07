@@ -140,7 +140,10 @@ function parseRecs(text, library) {
     const m = line.match(REC_LINE_RE);
     if (!m) continue;
     const kind = m[1].toLowerCase();
-    const title = m[2].trim();
+    // Strip markdown the model may have wrapped the title in (**bold**, *em*,
+    // `code`) — otherwise "**Reducing Avoidance**" never matches the real
+    // "Reducing Avoidance" and the chip renders un-clickable.
+    const title = m[2].replace(/[*_`]/g, "").trim();
     const meta = (m[3] || m[4] || "").trim();
     const found = lib.find((it) => it.kind === kind && it.title &&
       it.title.trim().toLowerCase() === title.toLowerCase());
