@@ -405,6 +405,9 @@ def health() -> Dict:
     if settings.mock_llm:
         return {"reachable": True, "mode": "heuristic",
                 "model": settings.safety_hf_model_repo}
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        return {**claude_client.health(), "role": "safety_triage"}
     url = settings.modal_safety_health_endpoint
     if not url:
         return {"reachable": True, "mode": "heuristic",

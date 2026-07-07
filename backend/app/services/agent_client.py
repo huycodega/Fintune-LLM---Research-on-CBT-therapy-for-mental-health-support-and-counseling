@@ -43,6 +43,9 @@ def health() -> Dict:
     if not settings.agent_enabled:
         return {"reachable": False, "mode": "disabled",
                 "note": "AGENT_ENABLED is false"}
+    if settings.llm_provider == "claude":
+        from app.services import claude_client
+        return {**claude_client.health(), "role": "orchestrator"}
     url = settings.modal_agent_health_endpoint
     if not url:
         return {"reachable": False, "mode": "agent",
