@@ -134,7 +134,10 @@ class Settings(BaseSettings):
     llm_provider: str = "local"
     anthropic_api_key: Optional[str] = None
     claude_model: str = "claude-sonnet-5"
-    claude_max_tokens: int = 700
+    # Budget for a FULL 4-field generation (Technique+Rationale+Plan+Response):
+    # the clinician fields consume tokens before the Response, so a tight cap
+    # truncates the client reply mid-sentence. 1024 comfortably fits all four.
+    claude_max_tokens: int = 1024
 
     # ---- LLM-backed rolling summaries (context + memory) ----
     # After each real L2/L3 turn, a BACKGROUND task asks the LLM to (A) summarise

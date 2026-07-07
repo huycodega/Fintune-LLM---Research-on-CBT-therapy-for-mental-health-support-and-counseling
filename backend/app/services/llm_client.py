@@ -62,7 +62,7 @@ def generate(messages: List[Dict], n: int = None,
         try:
             data = claude_client.generate(
                 messages, n=n, temperature=temperature,
-                max_tokens=settings.max_new_tokens)
+                max_tokens=settings.claude_max_tokens)
             rc.circuit_record_success()
             data["wall_time"] = time.time() - t0
             return data
